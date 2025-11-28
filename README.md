@@ -83,7 +83,4 @@ The application uses **SQLite**.
 - **Location**:
     - **Docker**: Persisted in a docker volume `backend_data` mounted at `/app/data/dev.db`.
     - **Local**: Stored as `dev.db` in the `backend` directory.
-
-## Troubleshooting
-- **Port Conflicts**: Ensure ports `5002` and `5003` are free.
-- **Database Issues**: If you encounter DB errors, try deleting `dev.db` (locally) or the docker volume to reset.
+- **Never delete the database** file as it will break the application.

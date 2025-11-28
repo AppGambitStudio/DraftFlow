@@ -174,6 +174,36 @@ export default function SettingsPage() {
                                 Required for AI features (Smart Writing). Get one at <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="underline hover:text-primary">openrouter.ai</a>.
                             </p>
                         </div>
+
+                        <div className="space-y-2 pt-4 border-t border-border">
+                            <h3 className="text-lg font-medium">Webhook Integration (n8n)</h3>
+                            <div className="rounded-md bg-muted p-4">
+                                <p className="text-sm font-medium mb-2">Endpoint URL</p>
+                                <code className="relative rounded bg-muted-foreground/20 px-[0.3rem] py-[0.2rem] font-mono text-sm">
+                                    {typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5002/api/webhooks/n8n/idea` : '/api/webhooks/n8n/idea'}
+                                </code>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Send a POST request with the following JSON body to automatically create an idea and draft post.
+                                </p>
+                                <pre className="mt-2 w-full rounded-md bg-slate-950 p-4 overflow-x-auto">
+                                    <code className="text-white text-xs">
+                                        {`{
+  "title": "Idea Title",
+  "summary": "Description...",
+  "tags": ["tag1", "tag2"],
+  "source": "n8n:source-name"
+}`}
+                                    </code>
+                                </pre>
+                                <div className="mt-4 rounded-md bg-blue-50 p-3 text-xs text-blue-700 border border-blue-200">
+                                    <strong>Running n8n in Docker?</strong>
+                                    <p className="mt-1">
+                                        If n8n is running in a container, <code>localhost</code> refers to the container itself.
+                                        Use <code>http://host.docker.internal:5002/...</code> (Mac/Windows) or your machine's LAN IP address instead.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                         <Button type="submit" disabled={loading}>
                             {loading ? "Saving..." : "Save Changes"}
                         </Button>

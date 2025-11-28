@@ -115,6 +115,8 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare description: string | null;
     declare tags: string; // JSON string
     declare status: string; // NEW, DRAFTED, ARCHIVED
+    declare source: string | null;
+    declare contentHash: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -140,6 +142,15 @@ Idea.init({
     status: {
         type: DataTypes.STRING,
         defaultValue: 'NEW',
+    },
+    source: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    contentHash: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        unique: true,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
