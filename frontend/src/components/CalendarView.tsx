@@ -34,9 +34,47 @@ interface CalendarViewProps {
 export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+    const [draggedPost, setDraggedPost] = useState<Post | null>(null);
 
     const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
     const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
+
+    const handleDragStart = (post: Post) => {
+        setDraggedPost(post);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault(); // Allow drop
+    };
+
+    const handleDrop = async (e: React.DragEvent, date: Date) => {
+        e.preventDefault();
+        if (!draggedPost) return;
+
+        // Don't do anything if dropped on the same day
+        if (isSameDay(new Date(draggedPost.scheduledTime), date)) {
+            setDraggedPost(null);
+            return;
+        }
+
+        try {
+            // Preserve the original time, just change the date
+            const originalDate = new Date(draggedPost.scheduledTime);
+            const newDate = new Date(date);
+            newDate.setHours(originalDate.getHours(), originalDate.getMinutes(), 0, 0);
+
+            await api.put(`/posts/${draggedPost.id}`, {
+                scheduledTime: newDate.toISOString()
+            });
+
+            toast.success("Post rescheduled");
+            onPostUpdated();
+        } catch (error) {
+            toast.error("Failed to reschedule post");
+        } finally {
+            setDraggedPost(null);
+        }
+    };
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
@@ -102,20 +140,29 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                 <div className="grid grid-cols-7 text-sm bg-background">
                     {days.map((day, dayIdx) => {
                         const dayPosts = getPostsForDay(day);
+                        const isToday = isSameDay(day, new Date());
+                        const isCurrentMonth = isSameMonth(day, monthStart);
+                        const isOverloaded = dayPosts.length > 3;
+                        const hasPosts = dayPosts.length > 0;
+
                         return (
                             <div
                                 key={day.toString()}
+                                onDragOver={handleDragOver}
+                                onDrop={(e) => handleDrop(e, day)}
                                 className={cn(
                                     "min-h-[120px] border-b border-r border-border p-2 transition-colors hover:bg-muted/30",
-                                    !isSameMonth(day, monthStart) && "bg-muted/10 text-muted-foreground",
-                                    dayIdx % 7 === 0 && "border-l border-border"
+                                    !isCurrentMonth && "bg-muted/10 text-muted-foreground",
+                                    dayIdx % 7 === 0 && "border-l border-border",
+                                    isCurrentMonth && isOverloaded && "bg-red-50/50 dark:bg-red-900/10",
+                                    isCurrentMonth && !isOverloaded && hasPosts && "bg-blue-50/30 dark:bg-blue-900/5"
                                 )}
                             >
                                 <div className="flex justify-end">
                                     <span
                                         className={cn(
                                             "flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium transition-colors",
-                                            isSameDay(day, new Date())
+                                            isToday
                                                 ? "bg-primary text-primary-foreground shadow-sm"
                                                 : "text-muted-foreground"
                                         )}
@@ -127,9 +174,11 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                                     {dayPosts.map((post) => (
                                         <div
                                             key={post.id}
+                                            draggable
+                                            onDragStart={() => handleDragStart(post)}
                                             onClick={() => setSelectedPost(post)}
                                             className={cn(
-                                                "group flex cursor-pointer items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-xs font-medium transition-all hover:border-border hover:bg-muted hover:shadow-sm",
+                                                "group flex cursor-grab active:cursor-grabbing items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-xs font-medium transition-all hover:border-border hover:bg-muted hover:shadow-sm",
                                                 post.status === "PUBLISHED" && "text-green-700 dark:text-green-400",
                                                 post.status === "FAILED" && "text-red-700 dark:text-red-400",
                                                 post.status === "DRAFT" && "text-slate-600 dark:text-slate-400",

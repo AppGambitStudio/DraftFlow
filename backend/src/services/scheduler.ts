@@ -132,6 +132,26 @@ const checkRecurringIdeas = async () => {
                 console.log(`Generating recurring post for idea: ${idea.title} (${idea.frequency})`);
 
                 try {
+                    // Optimistic locking: Update lastGeneratedAt BEFORE generation to prevent other workers from picking it up
+                    // We use a transaction or just check if the update affected any rows
+                    // Since we are using Sequelize, we can try to update with a where clause on the old timestamp
+
+                    const [affectedRows] = await Idea.update(
+                        { lastGeneratedAt: now },
+                        {
+                            where: {
+                                id: idea.id,
+                                // Ensure we only update if it hasn't changed since we read it
+                                lastGeneratedAt: idea.lastGeneratedAt
+                            }
+                        }
+                    );
+
+                    if (affectedRows === 0) {
+                        console.log(`Skipping idea ${idea.id} - already processed by another worker.`);
+                        continue;
+                    }
+
                     const prompt = `
                     Write a fresh, engaging LinkedIn post based on this core idea. 
                     Make it distinct from previous variations if possible.
@@ -156,14 +176,11 @@ const checkRecurringIdeas = async () => {
                         platforms: JSON.stringify(['LINKEDIN'])
                     });
 
-                    // Update lastGeneratedAt
-                    idea.lastGeneratedAt = now;
-                    await idea.save();
-
                     console.log(`Recurring post generated for idea ${idea.id}`);
 
                 } catch (error) {
                     console.error(`Failed to generate recurring post for idea ${idea.id}:`, error);
+                    // Optional: Revert lastGeneratedAt if failed, but maybe safer to just skip till next cycle
                 }
             }
         }
