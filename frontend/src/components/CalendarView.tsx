@@ -142,7 +142,7 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                         const dayPosts = getPostsForDay(day);
                         const isToday = isSameDay(day, new Date());
                         const isCurrentMonth = isSameMonth(day, monthStart);
-                        const isOverloaded = dayPosts.length > 3;
+                        const isOverloaded = dayPosts.length >= 3;
                         const hasPosts = dayPosts.length > 0;
 
                         return (
