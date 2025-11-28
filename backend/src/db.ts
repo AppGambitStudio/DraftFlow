@@ -27,6 +27,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare twitterRefreshToken: string | null;
     declare twitterExpiresAt: Date | null;
     declare openRouterApiKey: string | null;
+    declare openRouterModelId: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -48,6 +49,7 @@ Settings.init({
     twitterRefreshToken: DataTypes.STRING,
     twitterExpiresAt: DataTypes.DATE,
     openRouterApiKey: DataTypes.STRING,
+    openRouterModelId: DataTypes.STRING,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {

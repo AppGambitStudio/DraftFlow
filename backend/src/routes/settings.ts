@@ -18,7 +18,7 @@ router.post('/', async (req, res) => {
     const {
         linkedinClientId, linkedinClientSecret, linkedinAccessToken, linkedinRefreshToken, linkedinExpiresAt,
         twitterClientId, twitterClientSecret, twitterAccessToken, twitterRefreshToken, twitterExpiresAt,
-        openRouterApiKey
+        openRouterApiKey, openRouterModelId
     } = req.body;
     console.log('Received settings update:', { ...req.body, openRouterApiKey: '***' });
 
@@ -37,7 +37,8 @@ router.post('/', async (req, res) => {
                 twitterRefreshToken,
                 twitterExpiresAt: twitterExpiresAt ? new Date(twitterExpiresAt) : null,
                 openRouterApiKey,
-            }
+                openRouterModelId,
+            }, // Added missing comma and closing brace for defaults object
         });
 
         await setting.update({
@@ -52,6 +53,7 @@ router.post('/', async (req, res) => {
             twitterRefreshToken,
             twitterExpiresAt: twitterExpiresAt ? new Date(twitterExpiresAt) : null,
             openRouterApiKey,
+            openRouterModelId,
         });
 
         res.json(setting);

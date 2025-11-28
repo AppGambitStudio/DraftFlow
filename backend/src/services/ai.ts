@@ -2,13 +2,16 @@ import axios from 'axios';
 import { Settings } from '../db';
 
 export class AIService {
-    private static async getApiKey(): Promise<string | null> {
+    private static async getSettings(): Promise<{ apiKey: string | null, modelId: string | null }> {
         const settings = await Settings.findOne();
-        return settings?.openRouterApiKey || null;
+        return {
+            apiKey: settings?.openRouterApiKey || null,
+            modelId: settings?.openRouterModelId || null
+        };
     }
 
     static async improvise(content: string): Promise<string> {
-        const apiKey = await this.getApiKey();
+        const { apiKey, modelId } = await this.getSettings();
         if (!apiKey) {
             throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
         }
@@ -17,7 +20,7 @@ export class AIService {
             const response = await axios.post(
                 'https://openrouter.ai/api/v1/chat/completions',
                 {
-                    model: 'anthropic/claude-sonnet-4.5',
+                    model: modelId || 'anthropic/claude-sonnet-4.5',
                     messages: [
                         {
                             role: 'system',

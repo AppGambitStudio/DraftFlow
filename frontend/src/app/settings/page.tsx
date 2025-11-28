@@ -19,6 +19,7 @@ export default function SettingsPage() {
         twitterAccessToken: "",
         twitterRefreshToken: "",
         openRouterApiKey: "",
+        openRouterModelId: "",
     });
 
     useEffect(() => {
@@ -37,6 +38,7 @@ export default function SettingsPage() {
                 twitterAccessToken: res.data.twitterAccessToken || "",
                 twitterRefreshToken: res.data.twitterRefreshToken || "",
                 openRouterApiKey: res.data.openRouterApiKey || "",
+                openRouterModelId: res.data.openRouterModelId || "",
             });
         } catch (error) {
             toast.error("Failed to load settings");
@@ -172,6 +174,20 @@ export default function SettingsPage() {
                             />
                             <p className="text-xs text-muted-foreground">
                                 Required for AI features (Smart Writing). Get one at <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="underline hover:text-primary">openrouter.ai</a>.
+                            </p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="openRouterModelId">OpenRouter Model ID</Label>
+                            <Input
+                                id="openRouterModelId"
+                                name="openRouterModelId"
+                                value={formData.openRouterModelId}
+                                onChange={handleChange}
+                                placeholder="anthropic/claude-sonnet-4.5"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Optional. Defaults to <code>anthropic/claude-sonnet-4.5</code> if left empty.
                             </p>
                         </div>
 
