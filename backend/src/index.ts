@@ -1,0 +1,36 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import postRoutes from './routes/posts'; // Renamed from postsRouter
+import settingsRoutes from './routes/settings'; // Renamed from settingsRouter
+import aiRoutes from './routes/ai'; // New import
+import ideaRoutes from './routes/ideas';
+import { startScheduler } from './services/scheduler';
+import { initDB } from './db';
+
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 5002;
+
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.use('/api/posts', postRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/ai', aiRoutes); // New route
+app.use('/api/ideas', ideaRoutes); // New route
+
+// The /health endpoint was removed in the provided edit snippet.
+// app.get('/health', (req, res) => {
+//   res.json({ status: 'ok' });
+// });
+
+// Initialize DB and start server
+initDB().then(() => {
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    startScheduler();
+  });
+});
