@@ -13,7 +13,7 @@ import {
     addMonths,
     subMonths
 } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, FileText, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PostDetailsModal } from "./PostDetailsModal";
 import api from "@/lib/api";
@@ -23,7 +23,7 @@ interface Post {
     id: number;
     content: string;
     scheduledTime: string;
-    status: string;
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
 }
 
 interface CalendarViewProps {
@@ -129,17 +129,20 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                                             key={post.id}
                                             onClick={() => setSelectedPost(post)}
                                             className={cn(
-                                                "cursor-pointer truncate rounded-md px-2 py-1 text-xs font-medium shadow-sm transition-all hover:opacity-80 hover:shadow-md",
-                                                post.status === "PUBLISHED"
-                                                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                                    : post.status === "FAILED"
-                                                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                                        : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                                "group flex cursor-pointer items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-xs font-medium transition-all hover:border-border hover:bg-muted hover:shadow-sm",
+                                                post.status === "PUBLISHED" && "text-green-700 dark:text-green-400",
+                                                post.status === "FAILED" && "text-red-700 dark:text-red-400",
+                                                post.status === "DRAFT" && "text-slate-600 dark:text-slate-400",
+                                                post.status === "SCHEDULED" && "text-blue-700 dark:text-blue-400"
                                             )}
-                                            title={post.content}
+                                            title={`${post.status} - ${format(new Date(post.scheduledTime), "HH:mm")}: ${post.content}`}
                                         >
-                                            <span className="opacity-75 mr-1">{format(new Date(post.scheduledTime), "HH:mm")}</span>
-                                            {post.content}
+                                            {post.status === "PUBLISHED" && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
+                                            {post.status === "FAILED" && <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
+                                            {post.status === "DRAFT" && <FileText className="h-3.5 w-3.5 shrink-0" />}
+                                            {post.status === "SCHEDULED" && <Clock className="h-3.5 w-3.5 shrink-0" />}
+
+                                            <span className="truncate">{format(new Date(post.scheduledTime), "HH:mm")} {post.content}</span>
                                         </div>
                                     ))}
                                 </div>

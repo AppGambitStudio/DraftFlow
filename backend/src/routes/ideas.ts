@@ -22,7 +22,10 @@ router.post('/', async (req, res) => {
             title,
             description,
             tags: JSON.stringify(tags || []),
-            status: 'NEW'
+            status: 'NEW',
+            isRecurring: req.body.isRecurring || false,
+            frequency: req.body.frequency || null,
+            lastGeneratedAt: null
         });
         res.json(idea);
     } catch (error) {
@@ -34,19 +37,21 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, tags, status } = req.body;
+        const { title, description, tags, status, isRecurring, frequency } = req.body;
         const idea = await Idea.findByPk(id);
 
         if (!idea) {
             return res.status(404).json({ error: 'Idea not found' });
         }
 
-        await idea.update({
-            title,
-            description,
-            tags: tags ? JSON.stringify(tags) : idea.tags,
-            status
-        });
+        idea.title = title || idea.title;
+        idea.description = description || idea.description;
+        if (tags) idea.tags = JSON.stringify(tags);
+        if (status) idea.status = status;
+        if (isRecurring !== undefined) idea.isRecurring = isRecurring;
+        if (frequency) idea.frequency = frequency;
+
+        await idea.save();
 
         res.json(idea);
     } catch (error) {

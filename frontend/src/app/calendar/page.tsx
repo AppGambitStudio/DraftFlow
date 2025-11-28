@@ -5,8 +5,15 @@ import api from "@/lib/api";
 import { CalendarView } from "@/components/CalendarView";
 import toast, { Toaster } from "react-hot-toast";
 
+interface Post {
+    id: number;
+    content: string;
+    scheduledTime: string;
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+}
+
 export default function CalendarPage() {
-    const [posts, setPosts] = useState([]);
+    const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

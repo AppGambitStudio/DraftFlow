@@ -5,20 +5,26 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { PostDetailsModal } from "@/components/PostDetailsModal";
+import toast, { Toaster } from "react-hot-toast";
 
 interface Post {
     id: number;
     content: string;
     scheduledTime: string;
-    status: string;
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+    mediaUrls?: string;
+    platforms?: string;
 }
 
 export default function DashboardPage() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
     useEffect(() => {
         fetchPosts();
@@ -30,14 +36,43 @@ export default function DashboardPage() {
             setPosts(res.data);
         } catch (error) {
             console.error("Failed to load posts");
+            toast.error("Failed to load posts");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handlePostClick = (post: Post) => {
+        setSelectedPost(post);
+        setIsModalOpen(true);
+    };
+
+    const handleSavePost = async (id: number, data: { content: string; scheduledTime: string }) => {
+        try {
+            await api.put(`/posts/${id}`, data);
+            toast.success("Post updated");
+            fetchPosts();
+        } catch (error) {
+            toast.error("Failed to update post");
+            throw error;
+        }
+    };
+
+    const handleDeletePost = async (id: number) => {
+        try {
+            await api.delete(`/posts/${id}`);
+            toast.success("Post deleted");
+            fetchPosts();
+        } catch (error) {
+            toast.error("Failed to delete post");
+            throw error;
         }
     };
 
     const upcomingPosts = posts
         .filter((p) => p.status === "SCHEDULED" || p.status === "DRAFT")
         .filter((p) => new Date(p.scheduledTime) > new Date())
+        .sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())
         .slice(0, 5);
 
     const recentActivity = posts
@@ -47,6 +82,7 @@ export default function DashboardPage() {
 
     return (
         <div className="space-y-8">
+            <Toaster />
             <div className="flex items-center justify-between">
                 <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                 <Link href="/create">
@@ -56,13 +92,23 @@ export default function DashboardPage() {
                 </Link>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Posts</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{posts.length}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Drafts</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">
+                            {posts.filter((p) => p.status === "DRAFT").length}
+                        </div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -110,20 +156,25 @@ export default function DashboardPage() {
                                 upcomingPosts.map((post) => (
                                     <div
                                         key={post.id}
-                                        className="flex items-center justify-between rounded-lg border p-4"
+                                        className="flex items-center justify-between rounded-lg border p-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                                        onClick={() => handlePostClick(post)}
                                     >
                                         <div className="space-y-1">
-                                            <p className="text-sm font-medium leading-none">
-                                                {post.content.substring(0, 50)}...
+                                            <p className="text-sm font-medium leading-none line-clamp-1">
+                                                {post.content}
                                             </p>
                                             <p className="text-xs text-slate-500">
                                                 {format(new Date(post.scheduledTime), "PPP p")}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                                            <span className={cn(
+                                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                                post.status === 'SCHEDULED' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+                                            )}>
                                                 {post.status}
                                             </span>
+                                            <Pencil className="h-4 w-4 text-muted-foreground" />
                                         </div>
                                     </div>
                                 ))
@@ -146,8 +197,8 @@ export default function DashboardPage() {
                                         className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
                                     >
                                         <div className="space-y-1">
-                                            <p className="text-sm font-medium leading-none">
-                                                {post.content.substring(0, 30)}...
+                                            <p className="text-sm font-medium leading-none line-clamp-1">
+                                                {post.content}
                                             </p>
                                             <p className="text-xs text-slate-500">
                                                 {format(new Date(post.scheduledTime), "PPP p")}
@@ -170,6 +221,14 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <PostDetailsModal
+                isOpen={isModalOpen}
+                post={selectedPost}
+                onClose={() => setIsModalOpen(false)}
+                onSave={handleSavePost}
+                onDelete={handleDeletePost}
+            />
         </div>
     );
 }

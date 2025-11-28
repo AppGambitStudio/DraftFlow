@@ -34,7 +34,10 @@ router.post('/n8n/idea', async (req, res) => {
             tags: tags ? JSON.stringify(tags) : '[]',
             source: source || 'n8n',
             contentHash,
-            status: 'NEW'
+            status: 'NEW',
+            isRecurring: false,
+            frequency: null,
+            lastGeneratedAt: null
         });
 
         console.log(`Idea created via webhook: ${idea.id}`);

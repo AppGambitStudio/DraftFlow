@@ -117,6 +117,9 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare status: string; // NEW, DRAFTED, ARCHIVED
     declare source: string | null;
     declare contentHash: string | null;
+    declare isRecurring: boolean;
+    declare frequency: string | null;
+    declare lastGeneratedAt: Date | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -151,6 +154,18 @@ Idea.init({
         type: DataTypes.STRING,
         allowNull: true,
         unique: true,
+    },
+    isRecurring: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    frequency: {
+        type: DataTypes.STRING, // DAILY, WEEKLY, MONTHLY
+        allowNull: true,
+    },
+    lastGeneratedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,

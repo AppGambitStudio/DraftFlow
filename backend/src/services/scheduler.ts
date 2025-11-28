@@ -93,5 +93,82 @@ export const startScheduler = () => {
         } catch (error) {
             console.error('Error in scheduler:', error);
         }
+
+        // Check for recurring ideas
+        await checkRecurringIdeas();
     });
+};
+
+const checkRecurringIdeas = async () => {
+    try {
+        const { Idea, Post } = require('../db'); // Lazy load to avoid circular deps if any
+        const { AIService } = require('./ai');
+
+        const recurringIdeas = await Idea.findAll({
+            where: {
+                isRecurring: true,
+                frequency: { [Op.not]: null }
+            }
+        });
+
+        const now = new Date();
+
+        for (const idea of recurringIdeas) {
+            let shouldGenerate = false;
+            const lastRun = idea.lastGeneratedAt ? new Date(idea.lastGeneratedAt) : null;
+
+            if (!lastRun) {
+                shouldGenerate = true;
+            } else {
+                const diffMs = now.getTime() - lastRun.getTime();
+                const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+                if (idea.frequency === 'DAILY' && diffDays >= 1) shouldGenerate = true;
+                if (idea.frequency === 'WEEKLY' && diffDays >= 7) shouldGenerate = true;
+                if (idea.frequency === 'MONTHLY' && diffDays >= 30) shouldGenerate = true;
+            }
+
+            if (shouldGenerate) {
+                console.log(`Generating recurring post for idea: ${idea.title} (${idea.frequency})`);
+
+                try {
+                    const prompt = `
+                    Write a fresh, engaging LinkedIn post based on this core idea. 
+                    Make it distinct from previous variations if possible.
+                    
+                    Title: ${idea.title}
+                    Core Concept: ${idea.description}
+                    Tags: ${idea.tags}
+                    `;
+
+                    const content = await AIService.improvise(prompt);
+
+                    // Schedule for tomorrow same time (or just draft without time?)
+                    // Let's set it to DRAFT with a tentative time of tomorrow 9am
+                    const scheduledTime = new Date();
+                    scheduledTime.setDate(scheduledTime.getDate() + 1);
+                    scheduledTime.setHours(9, 0, 0, 0);
+
+                    await Post.create({
+                        content,
+                        scheduledTime,
+                        status: 'DRAFT',
+                        platforms: JSON.stringify(['LINKEDIN'])
+                    });
+
+                    // Update lastGeneratedAt
+                    idea.lastGeneratedAt = now;
+                    await idea.save();
+
+                    console.log(`Recurring post generated for idea ${idea.id}`);
+
+                } catch (error) {
+                    console.error(`Failed to generate recurring post for idea ${idea.id}:`, error);
+                }
+            }
+        }
+
+    } catch (error) {
+        console.error('Error checking recurring ideas:', error);
+    }
 };

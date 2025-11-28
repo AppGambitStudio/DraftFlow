@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -18,6 +18,8 @@ interface Idea {
     tags: string;
     status: string;
     createdAt: string;
+    isRecurring?: boolean;
+    frequency?: string;
 }
 
 export default function IdeasPage() {
@@ -26,7 +28,12 @@ export default function IdeasPage() {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentIdea, setCurrentIdea] = useState<Idea | null>(null);
-    const [formData, setFormData] = useState({ title: "", description: "" });
+    const [formData, setFormData] = useState({
+        title: "",
+        description: "",
+        isRecurring: false,
+        frequency: "WEEKLY"
+    });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
 
     useEffect(() => {
@@ -47,10 +54,20 @@ export default function IdeasPage() {
     const handleOpenModal = (idea?: Idea) => {
         if (idea) {
             setCurrentIdea(idea);
-            setFormData({ title: idea.title, description: idea.description });
+            setFormData({
+                title: idea.title,
+                description: idea.description,
+                isRecurring: idea.isRecurring || false,
+                frequency: idea.frequency || "WEEKLY"
+            });
         } else {
             setCurrentIdea(null);
-            setFormData({ title: "", description: "" });
+            setFormData({
+                title: "",
+                description: "",
+                isRecurring: false,
+                frequency: "WEEKLY"
+            });
         }
         setIsModalOpen(true);
     };
@@ -132,7 +149,15 @@ export default function IdeasPage() {
                         <div key={idea.id} className="group relative flex flex-col justify-between rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md">
                             <div className="space-y-4">
                                 <div className="flex items-start justify-between">
-                                    <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
+                                    <div className="space-y-1">
+                                        <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
+                                        {idea.isRecurring && (
+                                            <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                                                <Repeat className="h-3 w-3" />
+                                                <span className="font-medium">{idea.frequency}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary">
                                             <Pencil className="h-4 w-4" />
@@ -188,6 +213,36 @@ export default function IdeasPage() {
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 />
                             </div>
+
+                            <div className="flex items-center space-x-2 pt-2">
+                                <input
+                                    type="checkbox"
+                                    id="isRecurring"
+                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                    checked={formData.isRecurring}
+                                    onChange={(e) => setFormData({ ...formData, isRecurring: e.target.checked })}
+                                />
+                                <Label htmlFor="isRecurring">Recurring Idea</Label>
+                            </div>
+
+                            {formData.isRecurring && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                                    <Label htmlFor="frequency">Frequency</Label>
+                                    <select
+                                        id="frequency"
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={formData.frequency}
+                                        onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                                    >
+                                        <option value="DAILY">Daily</option>
+                                        <option value="WEEKLY">Weekly</option>
+                                        <option value="MONTHLY">Monthly</option>
+                                    </select>
+                                    <p className="text-xs text-muted-foreground">
+                                        A new draft post will be automatically generated based on this frequency.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                         <div className="mt-6 flex justify-end gap-3">
                             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
