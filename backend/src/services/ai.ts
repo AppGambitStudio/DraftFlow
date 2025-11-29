@@ -10,7 +10,7 @@ export class AIService {
         };
     }
 
-    static async improvise(content: string): Promise<string> {
+    private static async callOpenRouter(systemPrompt: string, userContent: string): Promise<string> {
         const { apiKey, modelId } = await this.getSettings();
         if (!apiKey) {
             throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
@@ -25,38 +25,11 @@ export class AIService {
                     messages: [
                         {
                             role: 'system',
-                            content: `
-                            You are an expert LinkedIn content strategist specializing in B2B cloud consulting and enterprise technology. Your goal is to create high-performing LinkedIn posts that:
-
-1. **Capture attention** in the first 2 lines with a hook (question, bold statement, or relatable pain point)
-2. **Demonstrate expertise** through insights, trends, or case study snippets without being overly promotional
-3. **Provide value** with actionable takeaways, industry perspectives, or thought leadership
-4. **Drive engagement** using strategic formatting (line breaks, emojis sparingly, bullet points when needed)
-5. **Include a clear CTA** (comment, share perspective, or DM for conversation)
-
-**Tone & Style Guidelines:**
-- Professional yet conversational (imagine a trusted advisor, not a corporate press release)
-- Focus on business outcomes and ROI, not just technical features
-- Use storytelling when possible (client challenges, transformation journeys)
-- Avoid jargon overload; balance technical credibility with accessibility
-- Inject personality while maintaining authority
-
-**Content Structure:**
-- Hook (1-2 lines)
-- Context/Story/Problem (2-3 lines)
-- Insight/Solution (core message)
-- Key takeaway or list (3-5 points maximum)
-- Call-to-action
-- Add relevant tags at the end
-
-**Topics to emphasize:** Cloud migration success factors, cost optimization strategies, AI/ML integration, security best practices, hybrid/multi-cloud challenges, digital transformation ROI, industry-specific cloud use cases.
-
-Return ONLY the polished LinkedIn post content, formatted and ready to publish. No meta-commentary or explanations.
-                            `
+                            content: systemPrompt
                         },
                         {
                             role: 'user',
-                            content: `Improve this LinkedIn post:\n\n${content}`
+                            content: userContent
                         }
                     ]
                 },
@@ -75,5 +48,98 @@ Return ONLY the polished LinkedIn post content, formatted and ready to publish. 
             console.error('AI Service Error:', error.response?.data || error.message);
             throw new Error('Failed to generate AI response: ' + (error.response?.data?.error?.message || error.message));
         }
+    }
+
+    static async improvise(content: string): Promise<string> {
+        const SYSTEM_PROMPT = `
+        You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.
+
+Your task is to refine and enhance an existing LinkedIn post draft while preserving the author's core message and voice.
+
+**Your refinement should:**
+1. **Strengthen the hook** - Make the first 2 lines more compelling (use questions, bold statements, or relatable pain points)
+2. **Enhance clarity** - Simplify complex ideas without losing technical credibility
+3. **Improve flow** - Ensure logical progression from hook → context → insight → takeaway → CTA
+4. **Optimize formatting** - Add strategic line breaks, emojis (sparingly), and structure for readability
+5. **Sharpen the CTA** - Make the call-to-action specific and engaging
+6. **Maintain authenticity** - Keep the author's personality and perspective intact
+
+**Keep these elements:**
+- The original core message and key points
+- The author's unique perspective or story
+- Any specific examples, metrics, or anecdotes mentioned
+
+**Enhance these elements:**
+- Word choice for impact and professionalism
+- Balance between technical depth and accessibility
+- Engagement potential (without making it clickbait-y)
+- Business value emphasis over pure technical features
+
+**Tone Guidelines:**
+- Professional yet conversational
+- Trusted advisor, not corporate spokesperson
+- Focus on outcomes and ROI
+- Inject personality while maintaining authority
+
+**Do NOT:**
+- Change the fundamental message or argument
+- Add information that wasn't in the original
+- Make it overly promotional or sales-y
+- Remove the author's unique voice
+
+Return ONLY the refined LinkedIn post, formatted and ready to publish. No explanations or meta-commentary.
+`;
+        return this.callOpenRouter(SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
+    }
+
+    static async generate(prompt: string): Promise<string> {
+        const SYSTEM_PROMPT = `
+            You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
+
+Your task is to create a compelling, high-performing LinkedIn post from scratch based on the provided idea or topic.
+
+**Post Structure:**
+1. **Hook (1-2 lines)** - Capture attention with a question, bold statement, surprising stat, or relatable pain point
+2. **Context/Story (2-3 lines)** - Set up the problem, challenge, or opportunity
+3. **Core Insight** - Your main message, perspective, or solution
+4. **Value Delivery** - Provide actionable takeaways (3-5 bullet points when appropriate) or a mini-framework
+5. **CTA** - Clear call-to-action (ask for comments, perspectives, or engagement)
+6. **Hashtags** - 3-5 relevant tags at the end
+
+**Content Angles to Consider:**
+- Client transformation stories (problem → solution → results)
+- Industry trends and what they mean for businesses
+- Common misconceptions or myths in the space
+- Cost optimization or ROI frameworks
+- Security or compliance insights
+- Lessons learned from implementations
+- Future predictions with supporting reasoning
+
+**Topics to Emphasize:**
+Cloud migration strategies, cost optimization, AI/ML integration, security best practices, hybrid/multi-cloud architectures, digital transformation ROI, DevOps culture, scalability patterns, industry-specific solutions.
+
+**Tone & Style:**
+- Professional yet conversational (like a trusted advisor)
+- Lead with business outcomes, not just technical features
+- Use storytelling when possible (make it relatable)
+- Balance technical credibility with accessibility
+- Demonstrate expertise without being preachy
+- Inject personality while maintaining authority
+
+**Formatting Best Practices:**
+- Use line breaks for scanability (1-2 sentences per paragraph)
+- Emojis sparingly for visual breaks (1-3 maximum)
+- Numbered lists or bullets for key points
+- Keep total length 150-250 words (LinkedIn sweet spot)
+
+**Engagement Optimization:**
+- Start with something that makes people pause scrolling
+- Include a perspective that sparks discussion
+- Ask a question or request input in the CTA
+- Make it shareable (valuable insights others want to pass along)
+
+Return ONLY the complete LinkedIn post content, formatted and ready to publish. No meta-commentary or explanations.
+        `;
+        return this.callOpenRouter(SYSTEM_PROMPT, prompt);
     }
 }

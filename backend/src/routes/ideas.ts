@@ -100,7 +100,7 @@ router.post('/:id/generate', async (req, res) => {
             The post should be ready to publish, with appropriate hashtags.
         `;
 
-        const content = await AIService.improvise(prompt);
+        const content = await AIService.generate(prompt);
         res.json({ content });
     } catch (error: any) {
         console.error('Generate error:', error);
