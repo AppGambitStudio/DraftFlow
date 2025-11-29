@@ -25,7 +25,9 @@ router.post('/', async (req, res) => {
             status: 'NEW',
             isRecurring: req.body.isRecurring || false,
             frequency: req.body.frequency || null,
-            lastGeneratedAt: null
+            lastGeneratedAt: null,
+            authorUrn: req.body.authorUrn,
+            authorName: req.body.authorName,
         });
         res.json(idea);
     } catch (error) {
@@ -50,6 +52,8 @@ router.put('/:id', async (req, res) => {
         if (status) idea.status = status;
         if (isRecurring !== undefined) idea.isRecurring = isRecurring;
         if (frequency) idea.frequency = frequency;
+        if (req.body.authorUrn !== undefined) idea.authorUrn = req.body.authorUrn;
+        if (req.body.authorName !== undefined) idea.authorName = req.body.authorName;
 
         await idea.save();
 

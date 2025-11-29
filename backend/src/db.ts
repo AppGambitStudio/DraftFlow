@@ -69,6 +69,8 @@ export class Post extends Model<InferAttributes<Post>, InferCreationAttributes<P
     declare linkedinPostId: string | null;
     declare twitterPostId: string | null;
     declare error: string | null;
+    declare authorUrn: string | null;
+    declare authorName: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -102,6 +104,8 @@ Post.init({
     linkedinPostId: DataTypes.STRING,
     twitterPostId: DataTypes.STRING,
     error: DataTypes.TEXT,
+    authorUrn: DataTypes.STRING,
+    authorName: DataTypes.STRING,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -122,6 +126,8 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare isRecurring: boolean;
     declare frequency: string | null;
     declare lastGeneratedAt: Date | null;
+    declare authorUrn: string | null;
+    declare authorName: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -169,6 +175,8 @@ Idea.init({
         type: DataTypes.DATE,
         allowNull: true,
     },
+    authorUrn: DataTypes.STRING,
+    authorName: DataTypes.STRING,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -184,6 +192,13 @@ export const initDB = async () => {
         console.log('Connection has been established successfully.');
         await sequelize.sync({ alter: true }); // Automatically updates schema
         console.log('Database synced successfully.');
+
+        // Seed default settings if not exists
+        const settingsCount = await Settings.count();
+        if (settingsCount === 0) {
+            await Settings.create({});
+            console.log('Default settings created.');
+        }
     } catch (error) {
         console.error('Unable to connect to the database:', error);
     }

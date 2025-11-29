@@ -16,22 +16,28 @@ interface Post {
     status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
     mediaUrls?: string;
     platforms?: string;
+    authorUrn?: string;
+    authorName?: string;
 }
 
 interface PostDetailsModalProps {
     post: Post | null;
     isOpen: boolean;
     onClose: () => void;
-    onSave: (id: number, data: { content: string; scheduledTime: string }) => Promise<void>;
+    onSave: (id: number, data: { content: string; scheduledTime: string; authorUrn?: string; authorName?: string }) => Promise<void>;
     onDelete: (id: number) => Promise<void>;
 }
 
+import { useAuthors } from "@/contexts/AuthorsContext";
+
 export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: PostDetailsModalProps) {
+    const { authors, loading: authorsLoading } = useAuthors();
     const [content, setContent] = useState('');
     const [scheduledTime, setScheduledTime] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [selectedAuthorUrn, setSelectedAuthorUrn] = useState<string>('');
 
     useEffect(() => {
         if (post) {
@@ -44,9 +50,19 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                 console.error("Error formatting date:", e);
                 setScheduledTime(post.scheduledTime);
             }
+            setSelectedAuthorUrn(post.authorUrn || '');
             setShowDeleteConfirm(false);
         }
     }, [post]);
+
+    useEffect(() => {
+        if (isOpen) {
+            // If no author selected (new post or legacy), default to first one (Self)
+            if (!post?.authorUrn && authors.length > 0) {
+                setSelectedAuthorUrn(authors[0].urn);
+            }
+        }
+    }, [isOpen, authors, post]);
 
     if (!isOpen || !post) return null;
 
@@ -72,21 +88,22 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const handlePublishNow = async () => {
         setIsLoading(true);
         try {
+            const selectedAuthor = authors.find(a => a.urn === selectedAuthorUrn);
+
             // First save any changes
-            await api.put(`/posts/${post.id}`, { content, scheduledTime });
+            await api.put(`/posts/${post.id}`, {
+                content,
+                scheduledTime,
+                authorUrn: selectedAuthorUrn,
+                authorName: selectedAuthor?.name || ""
+            });
 
             // Then trigger publish
             await api.post(`/posts/${post.id}/publish`);
 
             toast.success("Post published successfully!");
             onClose();
-            // We need to refresh the parent list, but onSave/onClose triggers a refresh usually.
-            // Ideally we should have an onPublish callback or just rely on the refresh.
-            // Since onSave usually triggers a refresh in the parent, we can just close.
-            // But to be safe, we could call onSave with the updated status if the parent supports it,
-            // or just rely on the parent re-fetching.
-            // Let's assume the parent re-fetches on close or we can trigger a reload.
-            window.location.reload(); // Simple way to ensure state is fresh
+            window.location.reload();
         } catch (error: any) {
             console.error('Failed to publish:', error);
             toast.error(error.response?.data?.error || "Failed to publish post");
@@ -98,7 +115,13 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            await onSave(post.id, { content, scheduledTime });
+            const selectedAuthor = authors.find(a => a.urn === selectedAuthorUrn);
+            await onSave(post.id, {
+                content,
+                scheduledTime,
+                authorUrn: selectedAuthorUrn,
+                authorName: selectedAuthor?.name || ""
+            });
             onClose();
         } catch (error) {
             console.error('Failed to save:', error);
@@ -147,21 +170,40 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                     </div>
 
                     <div className="space-y-5">
-                        <div className="space-y-2">
-                            <Label className="text-muted-foreground">Status</Label>
-                            <div className="flex items-center gap-2">
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${post.status === 'PUBLISHED' ? 'bg-green-50 text-green-700 border-green-200' :
-                                    post.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                        post.status === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' :
-                                            'bg-gray-50 text-gray-700 border-gray-200'
-                                    }`}>
-                                    {post.status}
-                                </span>
-                                {post.platforms && JSON.parse(post.platforms).map((platform: string) => (
-                                    <span key={platform} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-slate-100 text-slate-700 border-slate-200">
-                                        {platform === 'LINKEDIN' ? 'LinkedIn' : 'Twitter'}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label className="text-muted-foreground">Status</Label>
+                                <div className="flex items-center gap-2">
+                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${post.status === 'PUBLISHED' ? 'bg-green-50 text-green-700 border-green-200' :
+                                        post.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            post.status === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                'bg-gray-50 text-gray-700 border-gray-200'
+                                        }`}>
+                                        {post.status}
                                     </span>
-                                ))}
+                                    {post.platforms && JSON.parse(post.platforms).map((platform: string) => (
+                                        <span key={platform} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-slate-100 text-slate-700 border-slate-200">
+                                            {platform === 'LINKEDIN' ? 'LinkedIn' : 'Twitter'}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="author">Post As</Label>
+                                <select
+                                    id="author"
+                                    value={selectedAuthorUrn}
+                                    onChange={(e) => setSelectedAuthorUrn(e.target.value)}
+                                    disabled={isPublished || isLoading || authorsLoading}
+                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {authors.map((author) => (
+                                        <option key={author.urn} value={author.urn}>
+                                            {author.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 
@@ -191,10 +233,10 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                             />
                             <div className="flex justify-end">
                                 <span className={`text-xs ${(() => {
-                                        const platforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
-                                        const limit = platforms.includes('TWITTER') ? 280 : 3000;
-                                        return content.length > limit ? 'text-red-500 font-medium' : 'text-muted-foreground';
-                                    })()
+                                    const platforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
+                                    const limit = platforms.includes('TWITTER') ? 280 : 3000;
+                                    return content.length > limit ? 'text-red-500 font-medium' : 'text-muted-foreground';
+                                })()
                                     }`}>
                                     {content.length} / {(() => {
                                         const platforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];

@@ -20,6 +20,8 @@ interface Idea {
     createdAt: string;
     isRecurring?: boolean;
     frequency?: string;
+    authorUrn?: string;
+    authorName?: string;
 }
 
 export default function IdeasPage() {
@@ -32,13 +34,26 @@ export default function IdeasPage() {
         title: "",
         description: "",
         isRecurring: false,
-        frequency: "WEEKLY"
+        frequency: "WEEKLY",
+        authorUrn: "",
+        authorName: ""
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
+    const [authors, setAuthors] = useState<{ urn: string; name: string }[]>([]);
 
     useEffect(() => {
         fetchIdeas();
+        fetchAuthors();
     }, []);
+
+    const fetchAuthors = async () => {
+        try {
+            const res = await api.get('/settings/linkedin/authors');
+            setAuthors(res.data);
+        } catch (error) {
+            console.error('Failed to fetch authors:', error);
+        }
+    };
 
     const fetchIdeas = async () => {
         try {
@@ -58,7 +73,9 @@ export default function IdeasPage() {
                 title: idea.title,
                 description: idea.description,
                 isRecurring: idea.isRecurring || false,
-                frequency: idea.frequency || "WEEKLY"
+                frequency: idea.frequency || "WEEKLY",
+                authorUrn: idea.authorUrn || (authors.length > 0 ? authors[0].urn : ""),
+                authorName: idea.authorName || (authors.length > 0 ? authors[0].name : "")
             });
         } else {
             setCurrentIdea(null);
@@ -66,7 +83,9 @@ export default function IdeasPage() {
                 title: "",
                 description: "",
                 isRecurring: false,
-                frequency: "WEEKLY"
+                frequency: "WEEKLY",
+                authorUrn: authors.length > 0 ? authors[0].urn : "",
+                authorName: authors.length > 0 ? authors[0].name : ""
             });
         }
         setIsModalOpen(true);
@@ -243,6 +262,29 @@ export default function IdeasPage() {
                                     </p>
                                 </div>
                             )}
+
+                            <div className="space-y-2">
+                                <Label htmlFor="author">Post As</Label>
+                                <select
+                                    id="author"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={formData.authorUrn}
+                                    onChange={(e) => {
+                                        const selectedAuthor = authors.find(a => a.urn === e.target.value);
+                                        setFormData({
+                                            ...formData,
+                                            authorUrn: e.target.value,
+                                            authorName: selectedAuthor?.name || ""
+                                        });
+                                    }}
+                                >
+                                    {authors.map((author) => (
+                                        <option key={author.urn} value={author.urn}>
+                                            {author.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                         <div className="mt-6 flex justify-end gap-3">
                             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>

@@ -12,13 +12,17 @@ import toast, { Toaster } from "react-hot-toast";
 
 import { Sparkles } from "lucide-react";
 
+import { useAuthors } from "@/contexts/AuthorsContext";
+
 export default function CreatePostPage() {
     const router = useRouter();
+    const { authors, loading: authorsLoading } = useAuthors();
     const [content, setContent] = useState("");
     const [scheduledTime, setScheduledTime] = useState("");
     const [platforms, setPlatforms] = useState<string[]>(["LINKEDIN"]);
     const [loading, setLoading] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
+    const [selectedAuthorUrn, setSelectedAuthorUrn] = useState<string>('');
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
@@ -31,6 +35,12 @@ export default function CreatePostPage() {
             }
         }
     }, []);
+
+    useEffect(() => {
+        if (authors.length > 0 && !selectedAuthorUrn) {
+            setSelectedAuthorUrn(authors[0].urn);
+        }
+    }, [authors]);
 
     const handleAIImprovise = async () => {
         if (!content) {
@@ -66,10 +76,13 @@ export default function CreatePostPage() {
 
         setLoading(true);
         try {
+            const selectedAuthor = authors.find(a => a.urn === selectedAuthorUrn);
             await api.post("/posts", {
                 content,
                 scheduledTime,
                 platforms,
+                authorUrn: selectedAuthorUrn,
+                authorName: selectedAuthor?.name || ""
             });
             toast.success("Post scheduled successfully!");
             setTimeout(() => router.push("/"), 1500);
@@ -116,6 +129,23 @@ export default function CreatePostPage() {
                                 {content.length} / {platforms.includes('TWITTER') ? 280 : 3000} characters
                             </span>
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="author">Post As</Label>
+                        <select
+                            id="author"
+                            value={selectedAuthorUrn}
+                            onChange={(e) => setSelectedAuthorUrn(e.target.value)}
+                            disabled={loading || authorsLoading}
+                            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {authors.map((author) => (
+                                <option key={author.urn} value={author.urn}>
+                                    {author.name}
+                                </option>
+                            ))}
+                        </select>
                     </div>
 
                     <div className="space-y-2">

@@ -46,7 +46,7 @@ export const startScheduler = () => {
                         // The original publishPost function is replaced here
                         // Convert Markdown to Unicode for LinkedIn
                         const contentToPublish = markdownToUnicode(post.content);
-                        const linkedinId = await linkedinService.publishPost(contentToPublish);
+                        const linkedinId = await linkedinService.publishPost(contentToPublish, post.authorUrn || undefined);
                         await post.update({ linkedinPostId: linkedinId });
                         results.push('LinkedIn');
                     } catch (error: any) {
@@ -173,7 +173,9 @@ const checkRecurringIdeas = async () => {
                         content,
                         scheduledTime,
                         status: 'DRAFT',
-                        platforms: JSON.stringify(['LINKEDIN'])
+                        platforms: JSON.stringify(['LINKEDIN']),
+                        authorUrn: idea.authorUrn,
+                        authorName: idea.authorName,
                     });
 
                     console.log(`Recurring post generated for idea ${idea.id}`);

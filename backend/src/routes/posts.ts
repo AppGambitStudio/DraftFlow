@@ -26,6 +26,8 @@ router.post('/', async (req, res) => {
             scheduledTime: new Date(scheduledTime),
             status: 'SCHEDULED',
             platforms: platforms ? JSON.stringify(platforms) : JSON.stringify(['LINKEDIN']),
+            authorUrn: req.body.authorUrn,
+            authorName: req.body.authorName,
         });
         res.json(post);
     } catch (error) {
@@ -46,13 +48,22 @@ router.put('/:id', async (req, res) => {
         post.content = content !== undefined ? content : post.content;
         post.scheduledTime = scheduledTime ? new Date(scheduledTime) : post.scheduledTime;
         post.mediaUrls = mediaUrls ? JSON.stringify(mediaUrls) : post.mediaUrls;
+        post.authorUrn = req.body.authorUrn !== undefined ? req.body.authorUrn : post.authorUrn;
+        post.authorName = req.body.authorName !== undefined ? req.body.authorName : post.authorName;
 
         // If status is provided, use it. Otherwise, if it was FAILED and we're updating, reset to SCHEDULED.
+        // If status is provided, use it.
         if (status !== undefined) {
             post.status = status;
-        } else if (post.status === 'FAILED' && (scheduledTime || content)) {
-            post.status = 'SCHEDULED';
-            post.error = null; // Clear error
+        } else {
+            // Auto-transition logic
+            if (post.status === 'FAILED' && (scheduledTime || content)) {
+                post.status = 'SCHEDULED';
+                post.error = null; // Clear error
+            } else if (post.status === 'DRAFT' && post.scheduledTime > new Date()) {
+                // If it's a draft and has a future time, automatically schedule it
+                post.status = 'SCHEDULED';
+            }
         }
 
         await post.save();
@@ -86,7 +97,7 @@ router.post('/:id/publish', async (req, res) => {
         }
 
         const contentToPublish = markdownToUnicode(post.content);
-        const linkedinId = await linkedinService.publishPost(contentToPublish);
+        const linkedinId = await linkedinService.publishPost(contentToPublish, post.authorUrn || undefined);
 
         post.linkedinPostId = linkedinId;
 

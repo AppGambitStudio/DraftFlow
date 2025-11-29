@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Settings } from '../db';
 
 class LinkedInService {
-    async publishPost(content: string) {
+    async publishPost(content: string, authorUrn?: string) {
         const setting = await Settings.findOne();
 
         if (!setting || !setting.linkedinAccessToken) {
@@ -15,24 +15,27 @@ class LinkedInService {
         }
 
         const accessToken = setting.linkedinAccessToken;
+        let finalAuthorUrn = authorUrn;
 
-        // Fetch user profile to get the URN (person ID)
-        let profileResponse;
-        try {
-            profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
-        } catch (error: any) {
-            console.error('LinkedIn Profile Error:', error.response?.data || error.message);
-            throw new Error(`Failed to fetch LinkedIn profile: ${error.response?.status || error.message}`);
+        // If no authorUrn provided, default to "Self"
+        if (!finalAuthorUrn) {
+            // Fetch user profile to get the URN (person ID)
+            let profileResponse;
+            try {
+                profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                });
+                finalAuthorUrn = `urn:li:person:${profileResponse.data.id}`;
+            } catch (error: any) {
+                console.error('LinkedIn Profile Error:', error.response?.data || error.message);
+                throw new Error(`Failed to fetch LinkedIn profile: ${error.response?.status || error.message}`);
+            }
         }
 
-        const personUrn = `urn:li:person:${profileResponse.data.id}`;
-
         const body = {
-            author: personUrn,
+            author: finalAuthorUrn,
             lifecycleState: 'PUBLISHED',
             specificContent: {
                 'com.linkedin.ugc.ShareContent': {
