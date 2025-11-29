@@ -21,6 +21,7 @@ export class AIService {
                 'https://openrouter.ai/api/v1/chat/completions',
                 {
                     model: modelId || 'anthropic/claude-sonnet-4.5',
+                    "plugins": [{ "id": "web" }],
                     messages: [
                         {
                             role: 'system',
@@ -46,6 +47,7 @@ export class AIService {
 - Insight/Solution (core message)
 - Key takeaway or list (3-5 points maximum)
 - Call-to-action
+- Add relevant tags at the end
 
 **Topics to emphasize:** Cloud migration success factors, cost optimization strategies, AI/ML integration, security best practices, hybrid/multi-cloud challenges, digital transformation ROI, industry-specific cloud use cases.
 
