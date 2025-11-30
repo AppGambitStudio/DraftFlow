@@ -29,15 +29,18 @@ interface PostDetailsModalProps {
 }
 
 import { useAuthors } from "@/contexts/AuthorsContext";
+import { useSettings } from "@/contexts/SettingsContext";
 
 export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: PostDetailsModalProps) {
     const { authors, loading: authorsLoading } = useAuthors();
+    const { settings } = useSettings();
     const [content, setContent] = useState('');
     const [scheduledTime, setScheduledTime] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [selectedAuthorUrn, setSelectedAuthorUrn] = useState<string>('');
+    const [selectedAudience, setSelectedAudience] = useState<string>('');
 
     useEffect(() => {
         if (post) {
@@ -75,7 +78,10 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         }
         setAiLoading(true);
         try {
-            const res = await api.post("/ai/improvise", { content });
+            const res = await api.post("/ai/improvise", {
+                content,
+                targetAudience: selectedAudience || undefined
+            });
             setContent(res.data.content);
             toast.success("Content improved by AI!");
         } catch (error: any) {
@@ -205,6 +211,26 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                     ))}
                                 </select>
                             </div>
+
+                            {settings.targetAudiences.length > 0 && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="audience">Target Audience (Optional)</Label>
+                                    <select
+                                        id="audience"
+                                        value={selectedAudience}
+                                        onChange={(e) => setSelectedAudience(e.target.value)}
+                                        disabled={isPublished || isLoading}
+                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <option value="">Select an audience...</option>
+                                        {settings.targetAudiences.map((audience, index) => (
+                                            <option key={index} value={audience}>
+                                                {audience}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-2">

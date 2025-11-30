@@ -50,12 +50,18 @@ export class AIService {
         }
     }
 
-    static async improvise(content: string): Promise<string> {
-        const SYSTEM_PROMPT = `
-        You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.
+    static async improvise(content: string, targetAudience?: string): Promise<string> {
+        let SYSTEM_PROMPT = `
+            You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.
 
 Your task is to refine and enhance an existing LinkedIn post draft while preserving the author's core message and voice.
+`;
 
+        if (targetAudience) {
+            SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the tone, complexity, and value proposition resonate specifically with this audience.\n`;
+        }
+
+        SYSTEM_PROMPT += `
 **Your refinement should:**
 1. **Strengthen the hook** - Make the first 2 lines more compelling (use questions, bold statements, or relatable pain points)
 2. **Enhance clarity** - Simplify complex ideas without losing technical credibility
@@ -92,12 +98,18 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         return this.callOpenRouter(SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
     }
 
-    static async generate(prompt: string): Promise<string> {
-        const SYSTEM_PROMPT = `
+    static async generate(prompt: string, targetAudience?: string): Promise<string> {
+        let SYSTEM_PROMPT = `
             You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
 
 Your task is to create a compelling, high-performing LinkedIn post from scratch based on the provided idea or topic.
+`;
 
+        if (targetAudience) {
+            SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;
+        }
+
+        SYSTEM_PROMPT += `
 **Post Structure:**
 1. **Hook (1-2 lines)** - Capture attention with a question, bold statement, surprising stat, or relatable pain point
 2. **Context/Story (2-3 lines)** - Set up the problem, challenge, or opportunity

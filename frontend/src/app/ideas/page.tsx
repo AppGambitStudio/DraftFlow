@@ -22,10 +22,14 @@ interface Idea {
     frequency?: string;
     authorUrn?: string;
     authorName?: string;
+    targetAudience?: string;
 }
+
+import { useSettings } from "@/contexts/SettingsContext";
 
 export default function IdeasPage() {
     const router = useRouter();
+    const { settings } = useSettings();
     const [ideas, setIdeas] = useState<Idea[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,7 +40,8 @@ export default function IdeasPage() {
         isRecurring: false,
         frequency: "WEEKLY",
         authorUrn: "",
-        authorName: ""
+        authorName: "",
+        targetAudience: ""
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [authors, setAuthors] = useState<{ urn: string; name: string }[]>([]);
@@ -75,7 +80,8 @@ export default function IdeasPage() {
                 isRecurring: idea.isRecurring || false,
                 frequency: idea.frequency || "WEEKLY",
                 authorUrn: idea.authorUrn || (authors.length > 0 ? authors[0].urn : ""),
-                authorName: idea.authorName || (authors.length > 0 ? authors[0].name : "")
+                authorName: idea.authorName || (authors.length > 0 ? authors[0].name : ""),
+                targetAudience: idea.targetAudience || ""
             });
         } else {
             setCurrentIdea(null);
@@ -85,7 +91,8 @@ export default function IdeasPage() {
                 isRecurring: false,
                 frequency: "WEEKLY",
                 authorUrn: authors.length > 0 ? authors[0].urn : "",
-                authorName: authors.length > 0 ? authors[0].name : ""
+                authorName: authors.length > 0 ? authors[0].name : "",
+                targetAudience: ""
             });
         }
         setIsModalOpen(true);
@@ -126,7 +133,10 @@ export default function IdeasPage() {
     const handleGeneratePost = async (idea: Idea) => {
         setGeneratingId(idea.id);
         try {
-            const res = await api.post(`/ideas/${idea.id}/generate`, { platform: 'LINKEDIN' });
+            const res = await api.post(`/ideas/${idea.id}/generate`, {
+                platform: 'LINKEDIN',
+                targetAudience: idea.targetAudience || undefined
+            });
             const content = res.data.content;
 
             // Redirect to create page with content
@@ -149,10 +159,12 @@ export default function IdeasPage() {
                     <h2 className="text-3xl font-bold tracking-tight">Idea Board</h2>
                     <p className="text-muted-foreground">Capture and organize your content ideas.</p>
                 </div>
-                <Button onClick={() => handleOpenModal()}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Idea
-                </Button>
+                <div className="flex gap-4 items-center">
+                    <Button onClick={() => handleOpenModal()}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        New Idea
+                    </Button>
+                </div>
             </div>
 
             {loading ? (
@@ -208,7 +220,7 @@ export default function IdeasPage() {
 
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="w-full max-w-lg rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                    <div className="w-full max-w-2xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
                         <div className="mb-6">
                             <h2 className="text-xl font-bold text-foreground">{currentIdea ? "Edit Idea" : "New Idea"}</h2>
                         </div>
@@ -285,6 +297,25 @@ export default function IdeasPage() {
                                     ))}
                                 </select>
                             </div>
+
+                            {settings.targetAudiences.length > 0 && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="idea-audience">Target Audience</Label>
+                                    <select
+                                        id="idea-audience"
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        value={formData.targetAudience}
+                                        onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
+                                    >
+                                        <option value="">No Target Audience</option>
+                                        {settings.targetAudiences.map((audience, index) => (
+                                            <option key={index} value={audience}>
+                                                {audience}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                         <div className="mt-6 flex justify-end gap-3">
                             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>

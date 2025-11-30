@@ -17,17 +17,18 @@ router.get('/', async (req, res) => {
 // Create new idea
 router.post('/', async (req, res) => {
     try {
-        const { title, description, tags } = req.body;
+        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience } = req.body;
         const idea = await Idea.create({
             title,
             description,
             tags: JSON.stringify(tags || []),
             status: 'NEW',
-            isRecurring: req.body.isRecurring || false,
-            frequency: req.body.frequency || null,
+            isRecurring: isRecurring || false,
+            frequency: frequency || null,
             lastGeneratedAt: null,
-            authorUrn: req.body.authorUrn,
-            authorName: req.body.authorName,
+            authorUrn: authorUrn,
+            authorName: authorName,
+            targetAudience: targetAudience || null,
         });
         res.json(idea);
     } catch (error) {
@@ -39,7 +40,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, tags, status, isRecurring, frequency } = req.body;
+        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience } = req.body;
         const idea = await Idea.findByPk(id);
 
         if (!idea) {
@@ -52,8 +53,9 @@ router.put('/:id', async (req, res) => {
         if (status) idea.status = status;
         if (isRecurring !== undefined) idea.isRecurring = isRecurring;
         if (frequency) idea.frequency = frequency;
-        if (req.body.authorUrn !== undefined) idea.authorUrn = req.body.authorUrn;
-        if (req.body.authorName !== undefined) idea.authorName = req.body.authorName;
+        if (authorUrn !== undefined) idea.authorUrn = authorUrn;
+        if (authorName !== undefined) idea.authorName = authorName;
+        if (targetAudience !== undefined) idea.targetAudience = targetAudience;
 
         await idea.save();
 
@@ -84,7 +86,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/generate', async (req, res) => {
     try {
         const { id } = req.params;
-        const { platform } = req.body; // 'LINKEDIN' or 'TWITTER'
+        const { platform, targetAudience } = req.body; // 'LINKEDIN' or 'TWITTER'
         const idea = await Idea.findByPk(id);
 
         if (!idea) {
@@ -100,7 +102,7 @@ router.post('/:id/generate', async (req, res) => {
             The post should be ready to publish, with appropriate hashtags.
         `;
 
-        const content = await AIService.generate(prompt);
+        const content = await AIService.generate(prompt, targetAudience);
         res.json({ content });
     } catch (error: any) {
         console.error('Generate error:', error);

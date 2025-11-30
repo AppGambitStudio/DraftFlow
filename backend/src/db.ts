@@ -28,6 +28,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare twitterExpiresAt: Date | null;
     declare openRouterApiKey: string | null;
     declare openRouterModelId: string | null;
+    declare targetAudiences: string | null; // Comma separated list
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -50,6 +51,7 @@ Settings.init({
     twitterExpiresAt: DataTypes.DATE,
     openRouterApiKey: DataTypes.STRING,
     openRouterModelId: DataTypes.STRING,
+    targetAudiences: DataTypes.TEXT,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -128,6 +130,7 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare lastGeneratedAt: Date | null;
     declare authorUrn: string | null;
     declare authorName: string | null;
+    declare targetAudience: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -177,6 +180,7 @@ Idea.init({
     },
     authorUrn: DataTypes.STRING,
     authorName: DataTypes.STRING,
+    targetAudience: DataTypes.STRING,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {

@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
     const {
         linkedinClientId, linkedinClientSecret, linkedinAccessToken, linkedinRefreshToken, linkedinExpiresAt,
         twitterClientId, twitterClientSecret, twitterAccessToken, twitterRefreshToken, twitterExpiresAt,
-        openRouterApiKey, openRouterModelId
+        openRouterApiKey, openRouterModelId, targetAudiences
     } = req.body;
     console.log('Received settings update:', { ...req.body, openRouterApiKey: '***' });
 
@@ -39,6 +39,7 @@ router.post('/', async (req, res) => {
                 twitterExpiresAt: twitterExpiresAt ? new Date(twitterExpiresAt) : null,
                 openRouterApiKey,
                 openRouterModelId,
+                targetAudiences,
             }, // Added missing comma and closing brace for defaults object
         });
 
@@ -55,6 +56,7 @@ router.post('/', async (req, res) => {
             twitterExpiresAt: twitterExpiresAt ? new Date(twitterExpiresAt) : null,
             openRouterApiKey,
             openRouterModelId,
+            targetAudiences,
         });
 
         res.json(setting);
@@ -101,30 +103,67 @@ router.get('/linkedin/authors', async (req, res) => {
                 }
             );
 
+            const missingDetailsIds: string[] = [];
+            const orgsMap = new Map<string, { urn: string, name: string }>();
+
             if (orgsResponse.data && orgsResponse.data.elements) {
                 orgsResponse.data.elements.forEach((element: any) => {
                     const target = element.organizationalTarget;
+                    if (!target) return;
 
-                    // Case 1: Projection succeeded, target is an object with details
-                    if (target && typeof target === 'object') {
+                    if (typeof target === 'object') {
+                        // Projection succeeded
                         authors.push({
                             urn: element.organizationalTargetUrn || `urn:li:organization:${target.id}`,
                             name: target.localizedName || "Unknown Organization",
                             image: null
                         });
-                    }
-                    // Case 2: Projection failed (e.g. 429 Rate Limit), target is the URN string
-                    else if (typeof target === 'string') {
-                        // target is likely "urn:li:organization:12345"
+                    } else if (typeof target === 'string') {
+                        // Projection failed, we have the URN
                         const parts = target.split(':');
-                        const id = parts[parts.length - 1];
-                        authors.push({
-                            urn: target,
-                            name: `Organization (${id})`, // Fallback name
-                            image: null
-                        });
+                        const id = parts[parts.length - 1] || '';
+                        if (id) {
+                            missingDetailsIds.push(id);
+                            // Placeholder, will be updated if fetch succeeds
+                            orgsMap.set(id, {
+                                urn: target,
+                                name: `Organization (${id})`
+                            });
+                        }
                     }
                 });
+            }
+
+            // Fetch missing details in batch
+            if (missingDetailsIds.length > 0) {
+                try {
+                    const idsParam = `List(${missingDetailsIds.join(',')})`;
+                    const detailsResponse = await axios.get(
+                        `https://api.linkedin.com/v2/organizations?ids=${idsParam}&projection=(results*(id,localizedName))`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'X-Restli-Protocol-Version': '2.0.0'
+                            }
+                        }
+                    );
+
+                    if (detailsResponse.data && detailsResponse.data.results) {
+                        Object.values(detailsResponse.data.results).forEach((org: any) => {
+                            if (orgsMap.has(String(org.id))) {
+                                const entry = orgsMap.get(String(org.id));
+                                if (entry) {
+                                    entry.name = org.localizedName;
+                                }
+                            }
+                        });
+                    }
+                } catch (batchError) {
+                    console.error('Error batch fetching organization details:', batchError);
+                }
+
+                // Add the (potentially updated) fallback entries to authors
+                orgsMap.forEach((value) => authors.push({ ...value, image: null }));
             }
         } catch (error) {
             console.error('Error fetching LinkedIn organizations:', error);

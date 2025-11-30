@@ -20,6 +20,7 @@ export default function SettingsPage() {
         twitterRefreshToken: "",
         openRouterApiKey: "",
         openRouterModelId: "",
+        targetAudiences: "",
     });
 
     useEffect(() => {
@@ -39,6 +40,7 @@ export default function SettingsPage() {
                 twitterRefreshToken: res.data.twitterRefreshToken || "",
                 openRouterApiKey: res.data.openRouterApiKey || "",
                 openRouterModelId: res.data.openRouterModelId || "",
+                targetAudiences: res.data.targetAudiences || "",
             });
         } catch (error) {
             toast.error("Failed to load settings");
@@ -231,6 +233,24 @@ export default function SettingsPage() {
 }`}
                                     </code>
                                 </pre>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-4 border-t border-border">
+                            <h3 className="text-lg font-medium">Audience Targeting</h3>
+                            <div className="space-y-2">
+                                <Label htmlFor="targetAudiences">Target Audiences (Comma Separated)</Label>
+                                <textarea
+                                    id="targetAudiences"
+                                    name="targetAudiences"
+                                    value={formData.targetAudiences}
+                                    onChange={(e) => setFormData({ ...formData, targetAudiences: e.target.value })}
+                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                    placeholder="e.g. CTOs, Startup Founders, Software Engineers, Marketing Managers"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Define your target audiences here. You can select one when creating a post to tailor the AI content generation.
+                                </p>
                             </div>
                         </div>
                         <Button type="submit" disabled={loading}>
