@@ -6,8 +6,8 @@ import { AIService } from '../services/ai';
 
 const router = express.Router();
 
-// POST /api/webhooks/n8n/idea
-router.post('/n8n/idea', async (req, res) => {
+// POST /api/webhooks/idea
+router.post('/idea', async (req, res) => {
     try {
         const { title, summary, tags, source } = req.body;
 
@@ -88,6 +88,45 @@ router.post('/n8n/idea', async (req, res) => {
 
     } catch (error: any) {
         console.error('Webhook Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// POST /schedule
+router.post('/schedule', async (req, res) => {
+    try {
+        const { content, scheduledTime, platforms, authorUrn, authorName } = req.body;
+
+        if (!content) {
+            return res.status(400).json({ error: 'Content is required' });
+        }
+
+        // Default to 24 hours from now if not provided
+        let time = new Date();
+        if (scheduledTime) {
+            time = new Date(scheduledTime);
+        } else {
+            time.setDate(time.getDate() + 1);
+        }
+
+        const post = await Post.create({
+            content,
+            scheduledTime: time,
+            status: 'SCHEDULED',
+            platforms: platforms ? JSON.stringify(platforms) : JSON.stringify(['LINKEDIN']),
+            authorUrn: authorUrn || null,
+            authorName: authorName || null,
+        });
+
+        console.log(`Post scheduled via webhook: ${post.id}`);
+
+        res.status(201).json({
+            message: 'Post scheduled successfully',
+            postId: post.id
+        });
+
+    } catch (error: any) {
+        console.error('Webhook Schedule Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
