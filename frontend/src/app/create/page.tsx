@@ -108,17 +108,33 @@ export default function CreatePostPage() {
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <Label htmlFor="content">Post Content</Label>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleAIImprovise}
-                                disabled={aiLoading || !content}
-                                className="text-primary hover:text-primary hover:bg-primary/10"
-                            >
-                                <Sparkles className="mr-2 h-4 w-4" />
-                                {aiLoading ? "Improvising..." : "AImprovise"}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                {settings.targetAudiences.length > 0 && (
+                                    <select
+                                        value={selectedAudience}
+                                        onChange={(e) => setSelectedAudience(e.target.value)}
+                                        className="h-8 w-[180px] rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <option value="">Target Audience (Optional)</option>
+                                        {settings.targetAudiences.map((audience, index) => (
+                                            <option key={index} value={audience}>
+                                                {audience}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleAIImprovise}
+                                    disabled={aiLoading || !content}
+                                    className="text-primary hover:text-primary hover:bg-primary/10"
+                                >
+                                    <Sparkles className="mr-2 h-4 w-4" />
+                                    {aiLoading ? "Improvising..." : "AImprovise"}
+                                </Button>
+                            </div>
                         </div>
                         <Textarea
                             id="content"
@@ -156,27 +172,7 @@ export default function CreatePostPage() {
                         </select>
                     </div>
 
-                    {settings.targetAudiences.length > 0 && (
-                        <div className="space-y-2">
-                            <Label htmlFor="audience">Target Audience (Optional)</Label>
-                            <select
-                                id="audience"
-                                value={selectedAudience}
-                                onChange={(e) => setSelectedAudience(e.target.value)}
-                                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <option value="">Select an audience...</option>
-                                {settings.targetAudiences.map((audience, index) => (
-                                    <option key={index} value={audience}>
-                                        {audience}
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-muted-foreground">
-                                Select an audience to tailor the AI improvisation.
-                            </p>
-                        </div>
-                    )}
+
 
                     <div className="space-y-2">
                         <Label>Publish to</Label>
