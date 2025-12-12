@@ -77,7 +77,7 @@ router.get('/linkedin/authors', async (req, res) => {
         const accessToken = setting.linkedinAccessToken;
         const authors = [];
 
-        // 1. Fetch "Self" Profile
+        // 1. Fetch "Self" Profile (Always fetch fresh for validity check, and it's fast)
         try {
             const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -85,13 +85,41 @@ router.get('/linkedin/authors', async (req, res) => {
             authors.push({
                 urn: `urn:li:person:${profileResponse.data.id}`,
                 name: `${profileResponse.data.localizedFirstName} ${profileResponse.data.localizedLastName} (Self)`,
-                image: null // Could fetch profile picture if needed
+                image: null
             });
         } catch (error) {
             console.error('Error fetching LinkedIn profile:', error);
+            // If self fetch fails, token might be invalid, but we can still try to return cached orgs if any
         }
 
-        // 2. Fetch Organizations (Administrator Role)
+        // 2. Use Cached Organizations
+        try {
+            const cachedOrgs = JSON.parse(setting.linkedinOrganizations || '[]');
+            cachedOrgs.forEach((org: any) => {
+                authors.push(org);
+            });
+        } catch (e) {
+            console.error('Error parsing cached organizations:', e);
+        }
+
+        res.json(authors);
+    } catch (error: any) {
+        console.error('Error fetching authors:', error);
+        res.status(500).json({ error: 'Failed to fetch authors' });
+    }
+});
+
+// Scan for LinkedIn Organizations
+router.post('/linkedin/scan', async (req, res) => {
+    try {
+        const setting = await Settings.findOne();
+        if (!setting || !setting.linkedinAccessToken) {
+            return res.status(401).json({ error: 'LinkedIn not connected' });
+        }
+
+        const accessToken = setting.linkedinAccessToken;
+        const organizations: { urn: string, name: string, image: null }[] = [];
+
         try {
             const orgsResponse = await axios.get(
                 'https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organizationalTarget~(id,localizedName)))',
@@ -113,7 +141,7 @@ router.get('/linkedin/authors', async (req, res) => {
 
                     if (typeof target === 'object') {
                         // Projection succeeded
-                        authors.push({
+                        organizations.push({
                             urn: element.organizationalTargetUrn || `urn:li:organization:${target.id}`,
                             name: target.localizedName || "Unknown Organization",
                             image: null
@@ -124,7 +152,6 @@ router.get('/linkedin/authors', async (req, res) => {
                         const id = parts[parts.length - 1] || '';
                         if (id) {
                             missingDetailsIds.push(id);
-                            // Placeholder, will be updated if fetch succeeds
                             orgsMap.set(id, {
                                 urn: target,
                                 name: `Organization (${id})`
@@ -162,17 +189,38 @@ router.get('/linkedin/authors', async (req, res) => {
                     console.error('Error batch fetching organization details:', batchError);
                 }
 
-                // Add the (potentially updated) fallback entries to authors
-                orgsMap.forEach((value) => authors.push({ ...value, image: null }));
+                orgsMap.forEach((value) => organizations.push({ ...value, image: null }));
             }
-        } catch (error) {
-            console.error('Error fetching LinkedIn organizations:', error);
-        }
 
-        res.json(authors);
-    } catch (error: any) {
-        console.error('Error fetching authors:', error);
-        res.status(500).json({ error: 'Failed to fetch authors' });
+            // Update settings with new cache
+            setting.linkedinOrganizations = JSON.stringify(organizations);
+            await setting.save();
+
+            // Fetch "Self" Profile for display
+            let selfProfile = null;
+            try {
+                const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                selfProfile = {
+                    urn: `urn:li:person:${profileResponse.data.id}`,
+                    name: `${profileResponse.data.localizedFirstName} ${profileResponse.data.localizedLastName} (Self)`,
+                    image: null
+                };
+            } catch (error) {
+                console.warn('Failed to fetch self profile during scan:', error);
+            }
+
+            const finalList = selfProfile ? [selfProfile, ...organizations] : organizations;
+
+            res.json({ message: 'Scan successful', count: finalList.length, organizations: finalList });
+
+        } catch (error: any) {
+            console.error('Error scanning LinkedIn organizations:', error?.response?.data || error);
+            res.status(500).json({ error: 'Failed to scan organizations from LinkedIn' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to scan organizations' });
     }
 });
 

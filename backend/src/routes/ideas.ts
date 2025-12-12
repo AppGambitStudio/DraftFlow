@@ -29,6 +29,7 @@ router.post('/', async (req, res) => {
             authorUrn: authorUrn,
             authorName: authorName,
             targetAudience: targetAudience || null,
+            generatedSummaries: '[]',
         });
         res.json(idea);
     } catch (error) {
@@ -102,7 +103,23 @@ router.post('/:id/generate', async (req, res) => {
             The post should be ready to publish, with appropriate hashtags.
         `;
 
-        const content = await AIService.generate(prompt, targetAudience);
+        let previousSummaries: string[] = [];
+        try {
+            previousSummaries = JSON.parse(idea.generatedSummaries || '[]');
+        } catch (e) {
+            previousSummaries = [];
+        }
+
+        const { content, summary } = await AIService.generate(prompt, targetAudience, previousSummaries);
+
+        // Update idea with new summary
+        if (summary) {
+            const newSummaries = [...previousSummaries, summary].slice(-5); // Keep last 5
+            idea.generatedSummaries = JSON.stringify(newSummaries);
+            idea.lastGeneratedAt = new Date();
+            await idea.save();
+        }
+
         res.json({ content });
     } catch (error: any) {
         console.error('Generate error:', error);

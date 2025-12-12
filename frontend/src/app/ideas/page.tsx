@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -23,6 +23,7 @@ interface Idea {
     authorUrn?: string;
     authorName?: string;
     targetAudience?: string;
+    generatedSummaries?: string; // JSON string
 }
 
 import { useSettings } from "@/contexts/SettingsContext";
@@ -45,6 +46,7 @@ export default function IdeasPage() {
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [authors, setAuthors] = useState<{ urn: string; name: string }[]>([]);
+    const [viewingHistoryId, setViewingHistoryId] = useState<number | null>(null);
 
     useEffect(() => {
         fetchIdeas();
@@ -190,10 +192,13 @@ export default function IdeasPage() {
                                         )}
                                     </div>
                                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary">
+                                        <button onClick={() => setViewingHistoryId(idea.id)} className="text-muted-foreground hover:text-blue-500" title="Previous Posts">
+                                            <BookOpen className="h-4 w-4" />
+                                        </button>
+                                        <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary" title="Edit Idea">
                                             <Pencil className="h-4 w-4" />
                                         </button>
-                                        <button onClick={() => handleDelete(idea.id)} className="text-muted-foreground hover:text-red-500">
+                                        <button onClick={() => handleDelete(idea.id)} className="text-muted-foreground hover:text-red-500" title="Delete Idea">
                                             <Trash2 className="h-4 w-4" />
                                         </button>
                                     </div>
@@ -324,6 +329,56 @@ export default function IdeasPage() {
                     </div>
                 </div>
             )}
+
+            {/* History Modal */}
+            {viewingHistoryId && (() => {
+                const idea = ideas.find(i => i.id === viewingHistoryId);
+                const summaries = idea ? JSON.parse(idea.generatedSummaries || '[]') : [];
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                        <div className="w-full max-w-2xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold text-foreground">Previous Posts History</h2>
+                                <button onClick={() => setViewingHistoryId(null)} className="text-muted-foreground hover:text-foreground">
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    These summaries are used by AI to avoid generating duplicate content.
+                                </p>
+
+                                {summaries.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                                        <p>No previous posts generated yet.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {summaries.map((summary: string, idx: number) => (
+                                            <div key={idx} className="p-4 rounded-lg bg-muted/50 border">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                                        Run #{summaries.length - idx}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-foreground/90 leading-relaxed">
+                                                    {summary}
+                                                </p>
+                                            </div>
+                                        )).reverse()}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mt-6 flex justify-end">
+                                <Button onClick={() => setViewingHistoryId(null)}>Close</Button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

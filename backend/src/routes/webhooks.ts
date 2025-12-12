@@ -37,7 +37,8 @@ router.post('/idea', async (req, res) => {
             status: 'NEW',
             isRecurring: false,
             frequency: null,
-            lastGeneratedAt: null
+            lastGeneratedAt: null,
+            generatedSummaries: '[]',
         });
 
         console.log(`Idea created via webhook: ${idea.id}`);

@@ -98,7 +98,7 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         return this.callOpenRouter(SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
     }
 
-    static async generate(prompt: string, targetAudience?: string): Promise<string> {
+    static async generate(prompt: string, targetAudience?: string, previousSummaries: string[] = []): Promise<{ content: string, summary: string }> {
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
 
@@ -107,6 +107,14 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
 
         if (targetAudience) {
             SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;
+        }
+
+        if (previousSummaries.length > 0) {
+            SYSTEM_PROMPT += `
+**Context to Avoid:**
+The following are summaries of posts already generated for this idea. Do NOT generate similar content. Find a fresh angle, a different takeaway, or a unique perspective.
+${previousSummaries.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+`;
         }
 
         SYSTEM_PROMPT += `
@@ -150,8 +158,33 @@ Cloud migration strategies, cost optimization, AI/ML integration, security best 
 - Ask a question or request input in the CTA
 - Make it shareable (valuable insights others want to pass along)
 
-Return ONLY the complete LinkedIn post content, formatted and ready to publish. No meta-commentary or explanations.
+**Response Format:**
+Return a JSON object with the following structure:
+{
+    "postContent": "The complete LinkedIn post content...",
+    "summary": "A 3-5 line summary of the post's core message and angle...",
+}
+RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
         `;
-        return this.callOpenRouter(SYSTEM_PROMPT, prompt);
+
+        const response = await this.callOpenRouter(SYSTEM_PROMPT, prompt);
+
+        try {
+            // Attempt to parse JSON response. 
+            // In case the model returns markdown code block, strip it.
+            const cleanResponse = response.replace(/```json/g, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanResponse);
+            return {
+                content: parsed.postContent || parsed.content, // Fallback just in case
+                summary: parsed.summary || "Summary not generated"
+            };
+        } catch (e) {
+            console.error("Failed to parse AI response as JSON", response);
+            // Fallback: assume the entire response is the post content
+            return {
+                content: response,
+                summary: "Summary parsing failed" // Not ideal but keeps the feature working
+            };
+        }
     }
 }

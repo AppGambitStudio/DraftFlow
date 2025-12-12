@@ -29,6 +29,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare openRouterApiKey: string | null;
     declare openRouterModelId: string | null;
     declare targetAudiences: string | null; // Comma separated list
+    declare linkedinOrganizations: string | null; // JSON string
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -52,6 +53,10 @@ Settings.init({
     openRouterApiKey: DataTypes.STRING,
     openRouterModelId: DataTypes.STRING,
     targetAudiences: DataTypes.TEXT,
+    linkedinOrganizations: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -131,6 +136,7 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare authorUrn: string | null;
     declare authorName: string | null;
     declare targetAudience: string | null;
+    declare generatedSummaries: string; // JSON string array of last 5 summaries
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -181,6 +187,10 @@ Idea.init({
     authorUrn: DataTypes.STRING,
     authorName: DataTypes.STRING,
     targetAudience: DataTypes.STRING,
+    generatedSummaries: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -200,7 +210,9 @@ export const initDB = async () => {
         // Seed default settings if not exists
         const settingsCount = await Settings.count();
         if (settingsCount === 0) {
-            await Settings.create({});
+            await Settings.create({
+                linkedinOrganizations: '[]',
+            });
             console.log('Default settings created.');
         }
     } catch (error) {

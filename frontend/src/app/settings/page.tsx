@@ -10,6 +10,7 @@ import toast, { Toaster } from "react-hot-toast";
 
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
+    const [scannedOrgs, setScannedOrgs] = useState<any[]>([]);
     const [formData, setFormData] = useState({
         linkedinClientId: "",
         linkedinClientSecret: "",
@@ -42,6 +43,13 @@ export default function SettingsPage() {
                 openRouterModelId: res.data.openRouterModelId || "",
                 targetAudiences: res.data.targetAudiences || "",
             });
+            if (res.data.linkedinOrganizations) {
+                try {
+                    setScannedOrgs(JSON.parse(res.data.linkedinOrganizations));
+                } catch (e) {
+                    console.error("Failed to parse existing organizations", e);
+                }
+            }
         } catch (error) {
             toast.error("Failed to load settings");
         }
@@ -59,6 +67,19 @@ export default function SettingsPage() {
             toast.success("Settings saved successfully");
         } catch (error) {
             toast.error("Failed to save settings");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleScanLinkedin = async () => {
+        setLoading(true);
+        try {
+            const res = await api.post("/settings/linkedin/scan");
+            toast.success(`Scan complete! Found ${res.data.count} organizations.`);
+            setScannedOrgs(res.data.organizations || []);
+        } catch (error) {
+            toast.error("Failed to scan organizations");
         } finally {
             setLoading(false);
         }
@@ -112,6 +133,36 @@ export default function SettingsPage() {
                             <p className="text-xs text-muted-foreground">
                                 For this MVP, please generate a long-lived access token from the LinkedIn Developer Portal and paste it here.
                             </p>
+
+                            <div className="pt-2">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={handleScanLinkedin}
+                                    disabled={loading || !formData.linkedinAccessToken}
+                                >
+                                    Scan for Accounts
+                                </Button>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Click this to fetch and cache the list of Organizations you manage.
+                                </p>
+
+                                {scannedOrgs.length > 0 && (
+                                    <div className="mt-4 p-4 bg-muted rounded-md">
+                                        <h4 className="text-sm font-medium mb-2">Found {scannedOrgs.length} Organizations:</h4>
+                                        <ul className="text-sm space-y-1">
+                                            {scannedOrgs.map((org: any) => {
+                                                const id = org.urn.split(':').pop();
+                                                return (
+                                                    <li key={org.urn} className="text-muted-foreground">
+                                                        {org.name} ({id})
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="space-y-2 pt-4 border-t border-border">
