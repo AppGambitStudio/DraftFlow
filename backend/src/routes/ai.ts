@@ -19,4 +19,20 @@ router.post('/improvise', async (req, res) => {
     }
 });
 
+router.post('/enhance-idea', async (req, res) => {
+    try {
+        const { title, description } = req.body;
+
+        if (!description) {
+            res.json({ content: '' });
+            return;
+        }
+
+        const enhancedDescription = await AIService.enhanceIdeaDescription(title || '', description);
+        res.json({ content: enhancedDescription });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -24,6 +24,7 @@ interface Idea {
     authorName?: string;
     targetAudience?: string;
     generatedSummaries?: string; // JSON string
+    sourceLinks?: string; // JSON string array
 }
 
 import { useSettings } from "@/contexts/SettingsContext";
@@ -42,9 +43,11 @@ export default function IdeasPage() {
         frequency: "WEEKLY",
         authorUrn: "",
         authorName: "",
-        targetAudience: ""
+        targetAudience: "",
+        sourceLinks: [] as string[]
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
+    const [isEnhancing, setIsEnhancing] = useState(false);
     const [authors, setAuthors] = useState<{ urn: string; name: string }[]>([]);
     const [viewingHistoryId, setViewingHistoryId] = useState<number | null>(null);
 
@@ -83,7 +86,8 @@ export default function IdeasPage() {
                 frequency: idea.frequency || "WEEKLY",
                 authorUrn: idea.authorUrn || (authors.length > 0 ? authors[0].urn : ""),
                 authorName: idea.authorName || (authors.length > 0 ? authors[0].name : ""),
-                targetAudience: idea.targetAudience || ""
+                targetAudience: idea.targetAudience || "",
+                sourceLinks: JSON.parse(idea.sourceLinks || '[]')
             });
         } else {
             setCurrentIdea(null);
@@ -94,7 +98,8 @@ export default function IdeasPage() {
                 frequency: "WEEKLY",
                 authorUrn: authors.length > 0 ? authors[0].urn : "",
                 authorName: authors.length > 0 ? authors[0].name : "",
-                targetAudience: ""
+                targetAudience: "",
+                sourceLinks: []
             });
         }
         setIsModalOpen(true);
@@ -129,6 +134,28 @@ export default function IdeasPage() {
             fetchIdeas();
         } catch (error) {
             toast.error("Failed to delete idea");
+        }
+    };
+
+    const handleEnhanceDescription = async () => {
+        if (!formData.description) return;
+
+        setIsEnhancing(true);
+        try {
+            const res = await api.post("/ai/enhance-idea", {
+                title: formData.title,
+                description: formData.description
+            });
+
+            if (res.data.content) {
+                setFormData(prev => ({ ...prev, description: res.data.content }));
+                toast.success("Description enhanced!");
+            }
+        } catch (error) {
+            console.error("Failed to enhance description", error);
+            toast.error("Failed to enhance description");
+        } finally {
+            setIsEnhancing(false);
         }
     };
 
@@ -225,11 +252,11 @@ export default function IdeasPage() {
 
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="w-full max-w-2xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
-                        <div className="mb-6">
+                    <div className="w-full max-w-2xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+                        <div className="mb-6 shrink-0">
                             <h2 className="text-xl font-bold text-foreground">{currentIdea ? "Edit Idea" : "New Idea"}</h2>
                         </div>
-                        <div className="space-y-4">
+                        <div className="space-y-4 flex-1 overflow-y-auto pr-2">
                             <div className="space-y-2">
                                 <Label htmlFor="title">Title</Label>
                                 <Input
@@ -240,7 +267,20 @@ export default function IdeasPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="description">Description / Raw Thoughts</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="description">Description / Raw Thoughts</Label>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-xs text-muted-foreground hover:text-primary"
+                                        onClick={handleEnhanceDescription}
+                                        disabled={isEnhancing || !formData.description}
+                                    >
+                                        <Wand2 className="mr-1 h-3 w-3" />
+                                        {isEnhancing ? "Improvising..." : "Improvise with AI"}
+                                    </Button>
+                                </div>
                                 <Textarea
                                     id="description"
                                     placeholder="Jot down your key points here..."
@@ -248,6 +288,19 @@ export default function IdeasPage() {
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Reference Links (One per line)</Label>
+                                <Textarea
+                                    placeholder="https://example.com/article&#10;https://another-source.com"
+                                    className="min-h-[80px]"
+                                    value={formData.sourceLinks.join('\n')}
+                                    onChange={(e) => setFormData({ ...formData, sourceLinks: e.target.value.split('\n').filter(l => l.trim()) })}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Content from these links will be fetched and used as context for AI generation.
+                                </p>
                             </div>
 
                             <div className="flex items-center space-x-2 pt-2">
@@ -322,7 +375,7 @@ export default function IdeasPage() {
                                 </div>
                             )}
                         </div>
-                        <div className="mt-6 flex justify-end gap-3">
+                        <div className="mt-6 flex justify-end gap-3 shrink-0 pt-2 border-t">
                             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
                             <Button onClick={handleSave}>Save Idea</Button>
                         </div>

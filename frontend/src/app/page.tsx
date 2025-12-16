@@ -159,7 +159,7 @@ export default function DashboardPage() {
                                         className="flex items-center justify-between rounded-lg border p-4 hover:bg-slate-50 cursor-pointer transition-colors"
                                         onClick={() => handlePostClick(post)}
                                     >
-                                        <div className="space-y-1">
+                                        <div className="space-y-1 min-w-0 flex-1 mr-4">
                                             <p className="text-sm font-medium leading-none line-clamp-1">
                                                 {post.content}
                                             </p>
@@ -167,14 +167,14 @@ export default function DashboardPage() {
                                                 {format(new Date(post.scheduledTime), "PPP p")}
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 shrink-0">
                                             <span className={cn(
                                                 "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
                                                 post.status === 'SCHEDULED' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
                                             )}>
                                                 {post.status}
                                             </span>
-                                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                                            <Pencil className="h-4 w-4 text-muted-foreground transition-colors hover:text-primary" />
                                         </div>
                                     </div>
                                 ))
@@ -196,7 +196,7 @@ export default function DashboardPage() {
                                         key={post.id}
                                         className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
                                     >
-                                        <div className="space-y-1">
+                                        <div className="space-y-1 min-w-0 flex-1 mr-4">
                                             <p className="text-sm font-medium leading-none line-clamp-1">
                                                 {post.content}
                                             </p>
@@ -206,7 +206,7 @@ export default function DashboardPage() {
                                         </div>
                                         <span
                                             className={cn(
-                                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                                "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0",
                                                 post.status === "PUBLISHED"
                                                     ? "bg-green-100 text-green-800"
                                                     : "bg-red-100 text-red-800"

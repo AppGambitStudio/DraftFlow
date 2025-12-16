@@ -39,6 +39,7 @@ router.post('/idea', async (req, res) => {
             frequency: null,
             lastGeneratedAt: null,
             generatedSummaries: '[]',
+            sourceLinks: '[]',
         });
 
         console.log(`Idea created via webhook: ${idea.id}`);

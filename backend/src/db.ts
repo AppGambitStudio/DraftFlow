@@ -137,6 +137,7 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare authorName: string | null;
     declare targetAudience: string | null;
     declare generatedSummaries: string; // JSON string array of last 5 summaries
+    declare sourceLinks: string; // JSON string array of reference links
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -188,6 +189,10 @@ Idea.init({
     authorName: DataTypes.STRING,
     targetAudience: DataTypes.STRING,
     generatedSummaries: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
+    sourceLinks: {
         type: DataTypes.TEXT,
         defaultValue: '[]',
     },

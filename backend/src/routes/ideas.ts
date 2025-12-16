@@ -30,6 +30,7 @@ router.post('/', async (req, res) => {
             authorName: authorName,
             targetAudience: targetAudience || null,
             generatedSummaries: '[]',
+            sourceLinks: JSON.stringify(req.body.sourceLinks || []),
         });
         res.json(idea);
     } catch (error) {
@@ -57,6 +58,7 @@ router.put('/:id', async (req, res) => {
         if (authorUrn !== undefined) idea.authorUrn = authorUrn;
         if (authorName !== undefined) idea.authorName = authorName;
         if (targetAudience !== undefined) idea.targetAudience = targetAudience;
+        if (req.body.sourceLinks !== undefined) idea.sourceLinks = JSON.stringify(req.body.sourceLinks);
 
         await idea.save();
 
@@ -103,6 +105,41 @@ router.post('/:id/generate', async (req, res) => {
             The post should be ready to publish, with appropriate hashtags.
         `;
 
+        let contextFromLinks = '';
+        try {
+            const links = JSON.parse(idea.sourceLinks || '[]');
+            if (links.length > 0) {
+                console.log('Fetching content from links:', links);
+                const axios = require('axios');
+
+                const linkContents = await Promise.all(links.map(async (link: string) => {
+                    if (!link) return '';
+                    try {
+                        const response = await axios.get(link, { timeout: 10000 });
+                        // Simple regex to strip HTML tags, script, and style
+                        let text = response.data;
+                        if (typeof text !== 'string') text = JSON.stringify(text); // Handle non-string responses
+
+                        text = text.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gm, "");
+                        text = text.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gm, "");
+                        text = text.replace(/<[^>]+>/g, "\n");
+                        text = text.replace(/\s+/g, " ").trim();
+                        // Truncate to avoid huge context (e.g., 2000 chars per link)
+                        return `[Content from ${link}]:\n${text.substring(0, 2000)}...\n`;
+                    } catch (err: any) {
+                        console.error(`Failed to fetch content from ${link}:`, err.message);
+                        return `[Failed to fetch content from ${link}]\n`;
+                    }
+                }));
+
+                contextFromLinks = '\n\nAdditional Context from Reference Links:\n' + linkContents.join('\n');
+            }
+        } catch (e) {
+            console.error('Error processing sourceLinks:', e);
+        }
+
+        const fullPrompt = prompt + contextFromLinks;
+
         let previousSummaries: string[] = [];
         try {
             previousSummaries = JSON.parse(idea.generatedSummaries || '[]');
@@ -110,7 +147,7 @@ router.post('/:id/generate', async (req, res) => {
             previousSummaries = [];
         }
 
-        const { content, summary } = await AIService.generate(prompt, targetAudience, previousSummaries);
+        const { content, summary } = await AIService.generate(fullPrompt, targetAudience, previousSummaries);
 
         // Update idea with new summary
         if (summary) {
