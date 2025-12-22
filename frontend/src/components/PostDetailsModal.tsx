@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trash2, Save, Sparkles, Send } from 'lucide-react';
+import { X, Trash2, Save, Sparkles, Send, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -30,8 +30,10 @@ interface PostDetailsModalProps {
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useRouter } from "next/navigation";
 
 export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: PostDetailsModalProps) {
+    const router = useRouter();
     const { authors, loading: authorsLoading } = useAuthors();
     const { settings } = useSettings();
     const [content, setContent] = useState('');
@@ -151,6 +153,14 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
             setIsLoading(false);
             setShowDeleteConfirm(false);
         }
+    };
+
+    const handleRepost = () => {
+        if (!post) return;
+        localStorage.setItem('draftPostContent', post.content);
+        // Force a small delay to ensure modal close animation doesn't conflict
+        onClose();
+        router.push('/create?source=repost');
     };
 
     return (
@@ -302,6 +312,13 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                         Save Changes
                                     </Button>
                                 </>
+                            )}
+
+                            {(post.status === 'PUBLISHED' || post.status === 'FAILED') && (
+                                <Button onClick={handleRepost} variant="secondary">
+                                    <Repeat className="mr-2 h-4 w-4" />
+                                    Repost
+                                </Button>
                             )}
                         </div>
                     </div>

@@ -21,7 +21,7 @@ export function Sidebar() {
     return (
         <div className="flex h-full w-64 flex-col border-r bg-white text-slate-900">
             <div className="flex h-16 items-center border-b px-6">
-                <h1 className="text-xl font-bold tracking-tight">AG PostScheduler</h1>
+                <h1 className="text-xl font-bold tracking-tight">Post Scheduler</h1>
             </div>
             <nav className="flex-1 space-y-1 p-4">
                 {navItems.map((item) => {

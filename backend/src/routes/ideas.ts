@@ -89,7 +89,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/generate', async (req, res) => {
     try {
         const { id } = req.params;
-        const { platform, targetAudience } = req.body; // 'LINKEDIN' or 'TWITTER'
+        const { platform, targetAudience, additionalContext } = req.body; // 'LINKEDIN' or 'TWITTER'
         const idea = await Idea.findByPk(id);
 
         if (!idea) {
@@ -102,6 +102,7 @@ router.post('/:id/generate', async (req, res) => {
             Title: ${idea.title}
             Description: ${idea.description}
             
+            The post should be easy to understand and should break down complex topics into simple concepts.
             The post should be ready to publish, with appropriate hashtags.
         `;
 
@@ -147,7 +148,7 @@ router.post('/:id/generate', async (req, res) => {
             previousSummaries = [];
         }
 
-        const { content, summary } = await AIService.generate(fullPrompt, targetAudience, previousSummaries);
+        const { content, summary } = await AIService.generate(fullPrompt, targetAudience, previousSummaries, additionalContext);
 
         // Update idea with new summary
         if (summary) {

@@ -29,7 +29,7 @@ export default function CreatePostPage() {
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
-        if (searchParams.get('source') === 'idea') {
+        if (searchParams.get('source') === 'idea' || searchParams.get('source') === 'repost') {
             const draftContent = localStorage.getItem('draftPostContent');
             if (draftContent) {
                 setContent(draftContent);

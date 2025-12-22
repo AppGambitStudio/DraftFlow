@@ -50,6 +50,9 @@ export default function IdeasPage() {
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [authors, setAuthors] = useState<{ urn: string; name: string }[]>([]);
     const [viewingHistoryId, setViewingHistoryId] = useState<number | null>(null);
+    const [contextModalOpen, setContextModalOpen] = useState(false);
+    const [additionalContext, setAdditionalContext] = useState("");
+    const [pendingIdea, setPendingIdea] = useState<Idea | null>(null);
 
     useEffect(() => {
         fetchIdeas();
@@ -159,24 +162,35 @@ export default function IdeasPage() {
         }
     };
 
-    const handleGeneratePost = async (idea: Idea) => {
+    const handleGeneratePost = (idea: Idea) => {
+        setPendingIdea(idea);
+        setAdditionalContext("");
+        setContextModalOpen(true);
+    };
+
+    const confirmGeneration = async () => {
+        if (!pendingIdea) return;
+
+        const idea = pendingIdea;
         setGeneratingId(idea.id);
+        setContextModalOpen(false);
+
         try {
             const res = await api.post(`/ideas/${idea.id}/generate`, {
                 platform: 'LINKEDIN',
-                targetAudience: idea.targetAudience || undefined
+                targetAudience: idea.targetAudience || undefined,
+                additionalContext: additionalContext || undefined
             });
             const content = res.data.content;
 
             // Redirect to create page with content
-            // We can pass it via query param or local storage. 
-            // Query param is cleaner but has length limits. Local storage is safer for long content.
             localStorage.setItem('draftPostContent', content);
             router.push('/create?source=idea');
         } catch (error) {
             toast.error("Failed to generate post");
         } finally {
             setGeneratingId(null);
+            setPendingIdea(null);
         }
     };
 
@@ -431,7 +445,42 @@ export default function IdeasPage() {
                         </div>
                     </div>
                 );
+
             })()}
+
+            {/* Additional Context Modal */}
+            {contextModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4">
+                            <h2 className="text-xl font-bold text-foreground">Generate Post</h2>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Any specific instructions or context for this post?
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <Textarea
+                                placeholder="e.g. Focus on the cost savings aspect... or Include a joke about deployment..."
+                                value={additionalContext}
+                                onChange={(e) => setAdditionalContext(e.target.value)}
+                                className="min-h-[100px]"
+                                autoFocus
+                            />
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button variant="outline" onClick={() => setContextModalOpen(false)}>
+                                    Cancel
+                                </Button>
+                                <Button onClick={confirmGeneration}>
+                                    <Sparkles className="mr-2 h-4 w-4" />
+                                    Generate
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -99,7 +99,7 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         return this.callOpenRouter(SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
     }
 
-    static async generate(prompt: string, targetAudience?: string, previousSummaries: string[] = []): Promise<{ content: string, summary: string }> {
+    static async generate(prompt: string, targetAudience?: string, previousSummaries: string[] = [], additionalContext?: string): Promise<{ content: string, summary: string }> {
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
 
@@ -108,6 +108,10 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
 
         if (targetAudience) {
             SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;
+        }
+
+        if (additionalContext) {
+            SYSTEM_PROMPT += `\n**Additional User Instructions:** ${additionalContext}\nFollow these specific instructions for the post generation.\n`;
         }
 
         if (previousSummaries.length > 0) {
