@@ -8,8 +8,30 @@ const router = express.Router();
 router.get('/', async (req, res) => {
     try {
         const setting = await Settings.findOne();
-        res.json(setting || {});
+        const data = setting ? setting.toJSON() : {};
+
+        // Don't expose safe credentials if they are in env
+        // We will return flags for the frontend to know if "Connect" buttons should be enabled
+        const isLinkedinConfigured = !!(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET);
+        const isTwitterConfigured = !!(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET);
+
+        // Remove sensitive fields from the response if we are using env vars (or even if we are not, we might want to hide them)
+        // For now, let's just make sure we don't send them if they are in env, or if they are in DB, we can send them masked or not send them at all since we want to remove UI for them.
+
+        // Construct safe response
+        const safeSettings = {
+            ...data,
+            linkedinClientId: undefined,
+            linkedinClientSecret: undefined,
+            twitterClientId: undefined,
+            twitterClientSecret: undefined,
+            isLinkedinConfigured,
+            isTwitterConfigured
+        };
+
+        res.json(safeSettings);
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: 'Failed to fetch settings' });
     }
 });
@@ -77,7 +99,7 @@ router.get('/linkedin/authors', async (req, res) => {
         const accessToken = setting.linkedinAccessToken;
         const authors = [];
 
-        // 1. Fetch "Self" Profile (Always fetch fresh for validity check, and it's fast)
+        // 1. Fetch "Self" Profile (Gracefully handle if unauthorized)
         try {
             const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
@@ -87,9 +109,12 @@ router.get('/linkedin/authors', async (req, res) => {
                 name: `${profileResponse.data.localizedFirstName} ${profileResponse.data.localizedLastName} (Self)`,
                 image: null
             });
-        } catch (error) {
-            console.error('Error fetching LinkedIn profile:', error);
-            // If self fetch fails, token might be invalid, but we can still try to return cached orgs if any
+        } catch (error: any) {
+            if (error.response?.status === 403) {
+                console.warn('LinkedIn Profile access denied (scanned without Self):', error.response?.data);
+            } else {
+                console.error('Error fetching LinkedIn profile during authors fetch:', error.response?.data || error.message);
+            }
         }
 
         // 2. Use Cached Organizations
@@ -196,7 +221,7 @@ router.post('/linkedin/scan', async (req, res) => {
             setting.linkedinOrganizations = JSON.stringify(organizations);
             await setting.save();
 
-            // Fetch "Self" Profile for display
+            // Fetch "Self" Profile for display (Gracefully handle if unauthorized)
             let selfProfile = null;
             try {
                 const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
@@ -207,8 +232,12 @@ router.post('/linkedin/scan', async (req, res) => {
                     name: `${profileResponse.data.localizedFirstName} ${profileResponse.data.localizedLastName} (Self)`,
                     image: null
                 };
-            } catch (error) {
-                console.warn('Failed to fetch self profile during scan:', error);
+            } catch (error: any) {
+                if (error.response?.status === 403) {
+                    console.warn('LinkedIn Profile access denied during scan.');
+                } else {
+                    console.warn('Failed to fetch self profile during scan:', error.response?.data || error.message);
+                }
             }
 
             const finalList = selfProfile ? [selfProfile, ...organizations] : organizations;

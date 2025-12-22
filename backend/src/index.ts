@@ -6,6 +6,7 @@ import settingsRoutes from './routes/settings'; // Renamed from settingsRouter
 import aiRoutes from './routes/ai'; // New import
 import ideaRoutes from './routes/ideas';
 import webhookRoutes from './routes/webhooks';
+import authRoutes from './routes/auth';
 import { startScheduler } from './services/scheduler';
 import { initDB } from './db';
 
@@ -23,6 +24,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes); // New route
 app.use('/api/ideas', ideaRoutes); // New route
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/auth', authRoutes);
 
 // The /health endpoint was removed in the provided edit snippet.
 // app.get('/health', (req, res) => {

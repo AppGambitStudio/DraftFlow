@@ -62,6 +62,27 @@ If you prefer to run the services locally without Docker:
     npm run dev
     ```
 
+### OAuth Configuration
+To enable "Connect with LinkedIn" and "Connect with Twitter", you must configure your apps on their respective developer portals and add the credentials to `backend/.env`.
+
+1.  **Redirect URIs (Callback URLs):**
+    -   **LinkedIn**: `http://localhost:5002/api/auth/linkedin/callback`
+    -   **Twitter**: `http://localhost:5002/api/auth/twitter/callback`
+
+2.  **Environment Variables (`backend/.env`):**
+    ```env
+    PORT=5002
+    DATABASE_URL="file:./dev.db"
+
+    # LinkedIn OAuth
+    LINKEDIN_CLIENT_ID="your_client_id"
+    LINKEDIN_CLIENT_SECRET="your_client_secret"
+
+    # Twitter OAuth (OAuth 2.0 PKCE)
+    TWITTER_CLIENT_ID="your_client_id"
+    TWITTER_CLIENT_SECRET="your_client_secret"
+    ```
+
 ### Frontend
 1.  Navigate to the frontend directory:
     ```bash

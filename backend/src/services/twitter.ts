@@ -14,11 +14,11 @@ export class TwitterService {
         if (settings?.twitterAccessToken) {
             // Initialize with access token for posting
             this.client = new TwitterApi(settings.twitterAccessToken);
-        } else if (settings?.twitterClientId && settings?.twitterClientSecret) {
+        } else if (process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET) {
             // Initialize with client credentials for auth flow
             this.client = new TwitterApi({
-                clientId: settings.twitterClientId,
-                clientSecret: settings.twitterClientSecret,
+                clientId: process.env.TWITTER_CLIENT_ID,
+                clientSecret: process.env.TWITTER_CLIENT_SECRET,
             });
         }
     }

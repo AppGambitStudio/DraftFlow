@@ -8,15 +8,27 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import toast, { Toaster } from "react-hot-toast";
 
+import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
     const [scannedOrgs, setScannedOrgs] = useState<any[]>([]);
+    const [config, setConfig] = useState({
+        isLinkedinConfigured: false,
+        isTwitterConfigured: false
+    });
+
+    // Dialog State
+    const [disconnectDialog, setDisconnectDialog] = useState<{
+        isOpen: boolean;
+        platform: 'linkedin' | 'twitter' | null;
+    }>({
+        isOpen: false,
+        platform: null
+    });
+
     const [formData, setFormData] = useState({
-        linkedinClientId: "",
-        linkedinClientSecret: "",
         linkedinAccessToken: "",
-        twitterClientId: "",
-        twitterClientSecret: "",
         twitterAccessToken: "",
         twitterRefreshToken: "",
         openRouterApiKey: "",
@@ -32,16 +44,16 @@ export default function SettingsPage() {
         try {
             const res = await api.get("/settings");
             setFormData({
-                linkedinClientId: res.data.linkedinClientId || "",
-                linkedinClientSecret: res.data.linkedinClientSecret || "",
                 linkedinAccessToken: res.data.linkedinAccessToken || "",
-                twitterClientId: res.data.twitterClientId || "",
-                twitterClientSecret: res.data.twitterClientSecret || "",
                 twitterAccessToken: res.data.twitterAccessToken || "",
                 twitterRefreshToken: res.data.twitterRefreshToken || "",
                 openRouterApiKey: res.data.openRouterApiKey || "",
                 openRouterModelId: res.data.openRouterModelId || "",
                 targetAudiences: res.data.targetAudiences || "",
+            });
+            setConfig({
+                isLinkedinConfigured: res.data.isLinkedinConfigured || false,
+                isTwitterConfigured: res.data.isTwitterConfigured || false
             });
             if (res.data.linkedinOrganizations) {
                 try {
@@ -72,6 +84,25 @@ export default function SettingsPage() {
         }
     };
 
+    const handleDisconnect = (platform: 'linkedin' | 'twitter') => {
+        setDisconnectDialog({ isOpen: true, platform });
+    };
+
+    const confirmDisconnect = () => {
+        if (disconnectDialog.platform === 'linkedin') {
+            setFormData(prev => ({ ...prev, linkedinAccessToken: '' }));
+            toast.success("Disconnected from LinkedIn");
+        } else if (disconnectDialog.platform === 'twitter') {
+            setFormData(prev => ({
+                ...prev,
+                twitterAccessToken: '',
+                twitterRefreshToken: ''
+            }));
+            toast.success("Disconnected from Twitter");
+        }
+        setDisconnectDialog({ isOpen: false, platform: null });
+    };
+
     const handleScanLinkedin = async () => {
         setLoading(true);
         try {
@@ -88,130 +119,149 @@ export default function SettingsPage() {
     return (
         <div className="space-y-6">
             <Toaster />
+            <ConfirmationDialog
+                isOpen={disconnectDialog.isOpen}
+                title={`Disconnect ${disconnectDialog.platform === 'linkedin' ? 'LinkedIn' : 'Twitter'}?`}
+                description="Are you sure you want to disconnect? You will need to re-authenticate to post again."
+                confirmLabel="Disconnect"
+                variant="destructive"
+                onConfirm={confirmDisconnect}
+                onCancel={() => setDisconnectDialog({ isOpen: false, platform: null })}
+            />
+
             <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
 
             <Card>
                 <CardHeader>
                     <CardTitle>LinkedIn Configuration</CardTitle>
                     <CardDescription>
-                        Enter your LinkedIn App credentials and Access Token.
+                        Connect your LinkedIn account to enable posting.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="linkedinClientId">Client ID</Label>
-                            <Input
-                                id="linkedinClientId"
-                                name="linkedinClientId"
-                                value={formData.linkedinClientId}
-                                onChange={handleChange}
-                                placeholder="Enter Client ID"
-                            />
+                        {/* LinkedIn Section */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-medium">LinkedIn Connection</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        Authenticate with your LinkedIn account.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {formData.linkedinAccessToken ? (
+                                <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50/50 border-green-200">
+                                    <div className="flex items-center gap-2 text-green-700">
+                                        <div className="h-2 w-2 rounded-full bg-green-600" />
+                                        <span className="font-medium">Connected to LinkedIn</span>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleDisconnect('linkedin')}
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                        Disconnect
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div>
+                                    {config.isLinkedinConfigured ? (
+                                        <Button
+                                            type="button"
+                                            onClick={() => {
+                                                window.location.href = `${api.defaults.baseURL}/auth/linkedin/connect`;
+                                            }}
+                                        >
+                                            Connect with LinkedIn
+                                        </Button>
+                                    ) : (
+                                        <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-md text-sm text-yellow-800">
+                                            ⚠️ LinkedIn Client ID & Secret not configured in backend .env file.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="linkedinClientSecret">Client Secret</Label>
-                            <Input
-                                id="linkedinClientSecret"
-                                name="linkedinClientSecret"
-                                type="password"
-                                value={formData.linkedinClientSecret}
-                                onChange={handleChange}
-                                placeholder="Enter Client Secret"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="linkedinAccessToken">Access Token</Label>
-                            <Input
-                                id="linkedinAccessToken"
-                                name="linkedinAccessToken"
-                                type="password"
-                                value={formData.linkedinAccessToken}
-                                onChange={handleChange}
-                                placeholder="Enter Access Token"
-                            />
+
+
+                        <div className="space-y-2 pt-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={handleScanLinkedin}
+                                disabled={loading || !formData.linkedinAccessToken}
+                                className="w-full sm:w-auto"
+                            >
+                                Scan for Organizations
+                            </Button>
                             <p className="text-xs text-muted-foreground">
-                                For this MVP, please generate a long-lived access token from the LinkedIn Developer Portal and paste it here.
+                                Fetch the list of LinkedIn Pages you manage.
                             </p>
+                        </div>
+
+                        {scannedOrgs.length > 0 && (
+                            <div className="mt-4 p-4 bg-muted rounded-md">
+                                <h4 className="text-sm font-medium mb-2">Found {scannedOrgs.length} Organizations:</h4>
+                                <ul className="text-sm space-y-1">
+                                    {scannedOrgs.map((org: any) => {
+                                        const id = org.urn.split(':').pop();
+                                        return (
+                                            <li key={org.urn} className="text-muted-foreground">
+                                                {org.name} ({id})
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        )}
+                        <div className="space-y-2 pt-4 border-t border-border">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-medium">Twitter Configuration</h3>
+                            </div>
 
                             <div className="pt-2">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={handleScanLinkedin}
-                                    disabled={loading || !formData.linkedinAccessToken}
-                                >
-                                    Scan for Accounts
-                                </Button>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Click this to fetch and cache the list of Organizations you manage.
-                                </p>
-
-                                {scannedOrgs.length > 0 && (
-                                    <div className="mt-4 p-4 bg-muted rounded-md">
-                                        <h4 className="text-sm font-medium mb-2">Found {scannedOrgs.length} Organizations:</h4>
-                                        <ul className="text-sm space-y-1">
-                                            {scannedOrgs.map((org: any) => {
-                                                const id = org.urn.split(':').pop();
-                                                return (
-                                                    <li key={org.urn} className="text-muted-foreground">
-                                                        {org.name} ({id})
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
+                                {formData.twitterAccessToken ? ( // Checking access token presence to determine connection status
+                                    <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50/50 border-green-200">
+                                        <div className="flex items-center gap-2 text-green-700">
+                                            <div className="h-2 w-2 rounded-full bg-green-600" />
+                                            <span className="font-medium">Connected to Twitter</span>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleDisconnect('twitter')}
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        >
+                                            Disconnect
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        {config.isTwitterConfigured ? (
+                                            <Button
+                                                type="button"
+                                                onClick={() => {
+                                                    window.location.href = `${api.defaults.baseURL}/auth/twitter/connect`;
+                                                }}
+                                            >
+                                                Connect with Twitter
+                                            </Button>
+                                        ) : (
+                                            <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-md text-sm text-yellow-800">
+                                                ⚠️ Twitter Client ID & Secret not configured in backend .env file.
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
-                        </div>
 
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <h3 className="text-lg font-medium">Twitter Configuration</h3>
-                            <div className="space-y-2">
-                                <Label htmlFor="twitterAccessToken">Access Token</Label>
-                                <Input
-                                    id="twitterAccessToken"
-                                    name="twitterAccessToken"
-                                    type="password"
-                                    value={formData.twitterAccessToken || ''}
-                                    onChange={handleChange}
-                                    placeholder="Enter Twitter Access Token"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="twitterRefreshToken">Refresh Token</Label>
-                                <Input
-                                    id="twitterRefreshToken"
-                                    name="twitterRefreshToken"
-                                    type="password"
-                                    value={formData.twitterRefreshToken || ''}
-                                    onChange={handleChange}
-                                    placeholder="Enter Twitter Refresh Token"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="twitterClientId">Client ID</Label>
-                                <Input
-                                    id="twitterClientId"
-                                    name="twitterClientId"
-                                    value={formData.twitterClientId || ''}
-                                    onChange={handleChange}
-                                    placeholder="Enter Twitter Client ID"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="twitterClientSecret">Client Secret</Label>
-                                <Input
-                                    id="twitterClientSecret"
-                                    name="twitterClientSecret"
-                                    type="password"
-                                    value={formData.twitterClientSecret || ''}
-                                    onChange={handleChange}
-                                    placeholder="Enter Twitter Client Secret"
-                                />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                For Twitter API v2, you need OAuth 2.0 credentials.
+                            <p className="text-xs text-muted-foreground pt-2">
+                                For Twitter API v2, ensure you have set up OAuth 2.0 with the correct Redirect URI in the Developer Portal.
                             </p>
                         </div>
 
@@ -309,7 +359,7 @@ export default function SettingsPage() {
                         </Button>
                     </form>
                 </CardContent>
-            </Card>
-        </div>
+            </Card >
+        </div >
     );
 }
