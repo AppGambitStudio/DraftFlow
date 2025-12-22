@@ -46,7 +46,7 @@ export const startScheduler = () => {
                         // The original publishPost function is replaced here
                         // Convert Markdown to Unicode for LinkedIn
                         const contentToPublish = markdownToUnicode(post.content);
-                        const linkedinId = await linkedinService.publishPost(contentToPublish, post.authorUrn || undefined);
+                        const linkedinId = await linkedinService.publishPost(post.userId as string, contentToPublish, post.authorUrn || undefined);
                         await post.update({ linkedinPostId: linkedinId });
                         results.push('LinkedIn');
                     } catch (error: any) {
@@ -59,7 +59,7 @@ export const startScheduler = () => {
                 if (platforms.includes('TWITTER')) {
                     try {
                         // Assuming twitterService is imported and available
-                        const twitterId = await twitterService.publishTweet(post.content);
+                        const twitterId = await twitterService.publishTweet(post.userId as string, post.content);
                         await post.update({ twitterPostId: twitterId });
                         results.push('Twitter');
                     } catch (error: any) {
@@ -161,7 +161,7 @@ const checkRecurringIdeas = async () => {
                     Tags: ${idea.tags}
                     `;
 
-                    const content = await AIService.improvise(prompt);
+                    const content = await AIService.improvise(idea.userId as string, prompt);
 
                     // Schedule for tomorrow same time (or just draft without time?)
                     // Let's set it to DRAFT with a tentative time of tomorrow 9am
@@ -171,6 +171,7 @@ const checkRecurringIdeas = async () => {
 
                     await Post.create({
                         content,
+                        userId: idea.userId,
                         scheduledTime,
                         status: 'DRAFT',
                         platforms: JSON.stringify(['LINKEDIN']),

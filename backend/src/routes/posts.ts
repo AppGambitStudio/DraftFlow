@@ -1,14 +1,17 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { Post } from '../db';
 import { linkedinService } from '../services/linkedin';
 import { markdownToUnicode } from '../utils/markdownToUnicode';
+import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
 // Get all posts
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user!.id;
         const allPosts = await Post.findAll({
+            where: { userId },
             order: [['scheduledTime', 'ASC']]
         });
         res.json(allPosts);
@@ -18,10 +21,12 @@ router.get('/', async (req, res) => {
 });
 
 // Create a post
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
     const { content, scheduledTime, platforms } = req.body;
     try {
         const post = await Post.create({
+            userId,
             content,
             scheduledTime: new Date(scheduledTime),
             status: 'SCHEDULED',
@@ -36,13 +41,14 @@ router.post('/', async (req, res) => {
 });
 
 // Update a post
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
     const { id } = req.params;
     const { content, scheduledTime, mediaUrls, status } = req.body;
     try {
-        const post = await Post.findByPk(id);
+        const post = await Post.findOne({ where: { id, userId } });
         if (!post) {
-            return res.status(404).json({ error: 'Post not found' });
+            return res.status(404).json({ error: 'Post not found or unauthorized' });
         }
 
         post.content = content !== undefined ? content : post.content;
@@ -74,10 +80,11 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete a post
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
     const { id } = req.params;
     try {
-        const post = await Post.findByPk(id);
+        const post = await Post.findOne({ where: { id, userId } });
         if (post) {
             await post.destroy();
         }
@@ -88,16 +95,17 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Publish a post immediately
-router.post('/:id/publish', async (req, res) => {
+router.post('/:id/publish', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
     const { id } = req.params;
     try {
-        const post = await Post.findByPk(id);
+        const post = await Post.findOne({ where: { id, userId } });
         if (!post) {
-            return res.status(404).json({ error: 'Post not found' });
+            return res.status(404).json({ error: 'Post not found or unauthorized' });
         }
 
         const contentToPublish = markdownToUnicode(post.content);
-        const linkedinId = await linkedinService.publishPost(contentToPublish, post.authorUrn || undefined);
+        const linkedinId = await linkedinService.publishPost(userId, contentToPublish, post.authorUrn || undefined);
 
         post.linkedinPostId = linkedinId;
 
@@ -108,9 +116,8 @@ router.post('/:id/publish', async (req, res) => {
         res.json(post);
     } catch (error: any) {
         console.error('Publish Now Error:', error);
-        // Update post status to FAILED if it fails
         try {
-            const post = await Post.findByPk(id);
+            const post = await Post.findOne({ where: { id, userId } });
             if (post) {
                 post.status = 'FAILED';
                 post.error = error.message;

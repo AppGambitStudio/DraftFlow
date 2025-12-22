@@ -2,22 +2,25 @@ import express, { Request, Response } from 'express';
 import axios from 'axios';
 import { Settings } from '../db';
 import { TwitterApi } from 'twitter-api-v2';
+import { twitterService } from '../services/twitter';
+import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
 // Helper to get settings or throw
-const getSettings = async () => {
-    const settings = await Settings.findOne();
-    if (!settings) throw new Error("Settings not found");
+const getSettings = async (userId: string) => {
+    const settings = await Settings.findOne({ where: { userId } });
+    if (!settings) throw new Error("Settings not found for user: " + userId);
     return settings;
 };
 
 // --- LinkedIn OAuth ---
 
 // 1. Connect: Redirect to LinkedIn
-router.get('/linkedin/connect', async (req: Request, res: Response) => {
+router.get('/linkedin/connect', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const settings = await getSettings();
+        const userId = req.user!.id;
+        const settings = await getSettings(userId);
         const clientId = settings.linkedinClientId || process.env.LINKEDIN_CLIENT_ID;
 
         if (!clientId) {
@@ -26,7 +29,7 @@ router.get('/linkedin/connect', async (req: Request, res: Response) => {
         }
 
         const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/linkedin/callback`;
-        const state = Math.random().toString(36).substring(7); // Simple state
+        const state = `${Math.random().toString(36).substring(7)}:${userId}`;
 
         // Scopes: OIDC for identity, Community Management for posting (member + org)
         const requestedScopes = [
@@ -64,7 +67,15 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
     }
 
     try {
-        const settings = await getSettings();
+        const stateStr = state as string;
+        const stateParts = stateStr.split(':');
+        const userIdStr = stateParts[1];
+        if (!userIdStr) {
+            throw new Error("Invalid state: missing userId");
+        }
+        const userId = userIdStr;
+
+        const settings = await getSettings(userId);
         const clientId = settings.linkedinClientId || process.env.LINKEDIN_CLIENT_ID;
         const clientSecret = settings.linkedinClientSecret || process.env.LINKEDIN_CLIENT_SECRET;
 
@@ -102,18 +113,32 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
         // Parse user info to get name for confirmation
         try {
             // Try OIDC endpoint first
-            let profileRes;
+            let selfProfile = null;
             try {
-                profileRes = await axios.get('https://api.linkedin.com/v2/userinfo', {
+                const profileRes = await axios.get('https://api.linkedin.com/v2/userinfo', {
                     headers: { Authorization: `Bearer ${access_token}` }
                 });
                 console.log("Connected LinkedIn User (OIDC):", profileRes.data.name);
+                selfProfile = {
+                    urn: `urn:li:person:${profileRes.data.sub}`,
+                    name: `${profileRes.data.name} (Self)`,
+                    image: profileRes.data.picture || null
+                };
             } catch (oidcError) {
                 // Fallback to legacy profile
-                profileRes = await axios.get('https://api.linkedin.com/v2/me', {
+                const profileRes = await axios.get('https://api.linkedin.com/v2/me', {
                     headers: { Authorization: `Bearer ${access_token}` }
                 });
                 console.log("Connected LinkedIn User (Legacy):", `${profileRes.data.localizedFirstName} ${profileRes.data.localizedLastName}`);
+                selfProfile = {
+                    urn: `urn:li:person:${profileRes.data.id}`,
+                    name: `${profileRes.data.localizedFirstName} ${profileRes.data.localizedLastName} (Self)`,
+                    image: null
+                };
+            }
+
+            if (selfProfile) {
+                await settings.update({ linkedinProfile: JSON.stringify(selfProfile) });
             }
         } catch (e: any) {
             console.warn("Failed to fetch LinkedIn profile during callback:", e.response?.data || e.message);
@@ -131,30 +156,22 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
 
 // --- Twitter OAuth (OAuth 2.0 PKCE) ---
 
-// In-memory store for PKCE verifiers (since we can't easily add to DB schema on the fly and single user assumption)
-// Key: state, Value: { codeVerifier, codeChallenge }
-const twitterAuthStore: Record<string, { codeVerifier: string, state: string }> = {};
+// In-memory store for PKCE verifiers
+// Key: state, Value: { codeVerifier, state, userId }
+const twitterAuthStore: Record<string, { codeVerifier: string, state: string, userId: string }> = {};
 
-router.get('/twitter/connect', async (req: Request, res: Response) => {
+router.get('/twitter/connect', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const clientId = process.env.TWITTER_CLIENT_ID;
-        if (!clientId) {
-            res.status(500).send("Twitter Client ID is missing in server configuration (.env).");
-            return;
-        }
-
+        const userId = req.user!.id;
         const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/twitter/callback`;
 
-        // Twitter Client for OAuth generation make sure to use a NEW client instance just for generation
-        const client = new TwitterApi({ clientId: clientId, clientSecret: process.env.TWITTER_CLIENT_SECRET || '' });
-
-        const { url, codeVerifier, state } = client.generateOAuth2AuthLink(
-            redirectUri,
-            { scope: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'] }
+        const { url, codeVerifier, state } = await twitterService.getAuthUrl(
+            userId,
+            redirectUri
         );
 
         // Store verifier for the callback
-        twitterAuthStore[state] = { codeVerifier, state };
+        twitterAuthStore[state] = { codeVerifier, state, userId };
 
         res.redirect(url);
     } catch (error) {
@@ -182,26 +199,16 @@ router.get('/twitter/callback', async (req: Request, res: Response) => {
     }
 
     try {
-        const settings = await getSettings();
+        const userId = storedAuth.userId;
+        const settings = await getSettings(userId);
         const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/twitter/callback`;
 
-        const clientId = process.env.TWITTER_CLIENT_ID;
-        const clientSecret = process.env.TWITTER_CLIENT_SECRET;
-
-        if (!clientId || !clientSecret) {
-            throw new Error("Twitter credentials missing in .env");
-        }
-
-        const client = new TwitterApi({
-            clientId: clientId,
-            clientSecret: clientSecret
-        });
-
-        const { client: loggedClient, accessToken, refreshToken, expiresIn } = await client.loginWithOAuth2({
-            code: code as string,
-            codeVerifier: storedAuth.codeVerifier,
-            redirectUri: redirectUri
-        });
+        const { accessToken, refreshToken, expiresIn } = await twitterService.getAccessToken(
+            userId,
+            code as string,
+            storedAuth.codeVerifier,
+            redirectUri
+        );
 
         // Clean up store
         delete twitterAuthStore[state as string];

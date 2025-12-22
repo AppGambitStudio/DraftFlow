@@ -1,6 +1,6 @@
-import { Sequelize, DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional } from 'sequelize';
+import { Sequelize, DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional, ForeignKey } from 'sequelize';
 import dotenv from 'dotenv';
-import path from 'path';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -13,9 +13,43 @@ export const sequelize = new Sequelize({
     logging: false, // Set to console.log to see SQL queries
 });
 
+// User Model
+export class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
+    declare id: CreationOptional<string>;
+    declare email: string;
+    declare password: string;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+User.init({
+    id: {
+        type: DataTypes.STRING,
+        primaryKey: true,
+        defaultValue: () => Math.random().toString(36).substring(2, 11),
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: { isEmail: true }
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'User',
+    tableName: 'users',
+});
+
 // Settings Model
 export class Settings extends Model<InferAttributes<Settings>, InferCreationAttributes<Settings>> {
     declare id: CreationOptional<number>;
+    declare userId: ForeignKey<User['id']> | null;
     declare linkedinClientId: string | null;
     declare linkedinClientSecret: string | null;
     declare linkedinAccessToken: string | null;
@@ -29,6 +63,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare openRouterApiKey: string | null;
     declare openRouterModelId: string | null;
     declare targetAudiences: string | null; // Comma separated list
+    declare linkedinProfile: string | null; // JSON string for "Self" profile
     declare linkedinOrganizations: string | null; // JSON string
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
@@ -39,6 +74,11 @@ Settings.init({
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
+    },
+    userId: {
+        type: DataTypes.STRING,
+        allowNull: true, // Initially allow null for migration
+        unique: true,
     },
     linkedinClientId: DataTypes.STRING,
     linkedinClientSecret: DataTypes.STRING,
@@ -53,6 +93,10 @@ Settings.init({
     openRouterApiKey: DataTypes.STRING,
     openRouterModelId: DataTypes.STRING,
     targetAudiences: DataTypes.TEXT,
+    linkedinProfile: {
+        type: DataTypes.TEXT,
+        defaultValue: '{}',
+    },
     linkedinOrganizations: {
         type: DataTypes.TEXT,
         defaultValue: '[]',
@@ -68,6 +112,7 @@ Settings.init({
 // Post Model
 export class Post extends Model<InferAttributes<Post>, InferCreationAttributes<Post>> {
     declare id: CreationOptional<number>;
+    declare userId: ForeignKey<User['id']> | null;
     declare content: string;
     declare mediaUrls: string | null; // JSON string
     declare scheduledTime: Date;
@@ -87,6 +132,10 @@ Post.init({
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
+    },
+    userId: {
+        type: DataTypes.STRING,
+        allowNull: true,
     },
     content: {
         type: DataTypes.TEXT,
@@ -124,6 +173,7 @@ Post.init({
 // Idea Model
 export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<Idea>> {
     declare id: CreationOptional<number>;
+    declare userId: ForeignKey<User['id']> | null;
     declare title: string;
     declare description: string | null;
     declare tags: string; // JSON string
@@ -150,6 +200,10 @@ Idea.init({
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true,
+    },
+    userId: {
+        type: DataTypes.STRING,
+        allowNull: true,
     },
     title: {
         type: DataTypes.STRING,
@@ -219,22 +273,55 @@ Idea.init({
     tableName: 'ideas',
 });
 
+// Associations
+User.hasMany(Settings, { foreignKey: 'userId' });
+Settings.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(Post, { foreignKey: 'userId' });
+Post.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(Idea, { foreignKey: 'userId' });
+Idea.belongsTo(User, { foreignKey: 'userId' });
+
 // Sync database
 export const initDB = async () => {
     try {
         await sequelize.authenticate();
         console.log('Connection has been established successfully.');
-        await sequelize.sync({ alter: true }); // Automatically updates schema
+        await sequelize.sync(); // Removed alter: true
         console.log('Database synced successfully.');
 
-        // Seed default settings if not exists
-        const settingsCount = await Settings.count();
-        if (settingsCount === 0) {
+        // 1. Create Default User if not exists
+        const email = 'dhaval.b.nagar@gmail.com';
+        let defaultUser = await User.findOne({ where: { email } });
+        if (!defaultUser) {
+            const hashedPassword = await bcrypt.hash('Test@1234', 10);
+            defaultUser = await User.create({
+                email,
+                password: hashedPassword,
+            });
+            console.log('Default User created:', email, 'ID:', defaultUser.id);
+        }
+
+        // 2. Data Migration: Assign orphaned records to Default User
+        const orphanedSettings = await Settings.update({ userId: defaultUser.id }, { where: { userId: null } });
+        const orphanedPosts = await Post.update({ userId: defaultUser.id }, { where: { userId: null } });
+        const orphanedIdeas = await Idea.update({ userId: defaultUser.id }, { where: { userId: null } });
+
+        if (orphanedSettings[0] > 0 || orphanedPosts[0] > 0 || orphanedIdeas[0] > 0) {
+            console.log(`Migrated: ${orphanedSettings[0]} settings, ${orphanedPosts[0]} posts, ${orphanedIdeas[0]} ideas to ${email}`);
+        }
+
+        // 3. Ensure Settings exists for the user (double check / seeding)
+        const userSettings = await Settings.findOne({ where: { userId: defaultUser.id } });
+        if (!userSettings) {
             await Settings.create({
+                userId: defaultUser.id,
                 linkedinOrganizations: '[]',
             });
-            console.log('Default settings created.');
+            console.log('Default settings created for the user.');
         }
+
     } catch (error) {
         console.error('Unable to connect to the database:', error);
     }

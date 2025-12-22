@@ -1,13 +1,18 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { Idea } from '../db';
 import { AIService } from '../services/ai';
+import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
 // Get all ideas
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const ideas = await Idea.findAll({ order: [['createdAt', 'DESC']] });
+        const userId = req.user!.id;
+        const ideas = await Idea.findAll({
+            where: { userId },
+            order: [['createdAt', 'DESC']]
+        });
         res.json(ideas);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch ideas' });
@@ -15,10 +20,12 @@ router.get('/', async (req, res) => {
 });
 
 // Create new idea
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user!.id;
         const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth } = req.body;
         const idea = await Idea.create({
+            userId,
             title,
             description,
             tags: JSON.stringify(tags || []),
@@ -42,14 +49,15 @@ router.post('/', async (req, res) => {
 });
 
 // Update idea
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user!.id;
         const { id } = req.params;
         const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth } = req.body;
-        const idea = await Idea.findByPk(id);
+        const idea = await Idea.findOne({ where: { id, userId } });
 
         if (!idea) {
-            return res.status(404).json({ error: 'Idea not found' });
+            return res.status(404).json({ error: 'Idea not found or unauthorized' });
         }
 
         idea.title = title || idea.title;
@@ -76,13 +84,14 @@ router.put('/:id', async (req, res) => {
 });
 
 // Delete idea
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user!.id;
         const { id } = req.params;
-        const idea = await Idea.findByPk(id);
+        const idea = await Idea.findOne({ where: { id, userId } });
 
         if (!idea) {
-            return res.status(404).json({ error: 'Idea not found' });
+            return res.status(404).json({ error: 'Idea not found or unauthorized' });
         }
 
         await idea.destroy();
@@ -93,14 +102,15 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Generate post from idea
-router.post('/:id/generate', async (req, res) => {
+router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
+        const userId = req.user!.id;
         const { id } = req.params;
         const { platform, targetAudience, additionalContext } = req.body; // 'LINKEDIN' or 'TWITTER'
-        const idea = await Idea.findByPk(id);
+        const idea = await Idea.findOne({ where: { id, userId } });
 
         if (!idea) {
-            return res.status(404).json({ error: 'Idea not found' });
+            return res.status(404).json({ error: 'Idea not found or unauthorized' });
         }
 
         const prompt = `
@@ -155,7 +165,7 @@ router.post('/:id/generate', async (req, res) => {
             previousSummaries = [];
         }
 
-        const { content, summary } = await AIService.generate(fullPrompt, targetAudience, previousSummaries, additionalContext);
+        const { content, summary } = await AIService.generate(userId, fullPrompt, targetAudience, previousSummaries, additionalContext);
 
         // Update idea with new summary
         if (summary) {

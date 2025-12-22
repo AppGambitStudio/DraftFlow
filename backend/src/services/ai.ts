@@ -2,16 +2,16 @@ import axios from 'axios';
 import { Settings } from '../db';
 
 export class AIService {
-    private static async getSettings(): Promise<{ apiKey: string | null, modelId: string | null }> {
-        const settings = await Settings.findOne();
+    private static async getSettings(userId: string): Promise<{ apiKey: string | null, modelId: string | null }> {
+        const settings = await Settings.findOne({ where: { userId } });
         return {
             apiKey: settings?.openRouterApiKey || null,
             modelId: settings?.openRouterModelId || null
         };
     }
 
-    private static async callOpenRouter(systemPrompt: string, userContent: string): Promise<string> {
-        const { apiKey, modelId } = await this.getSettings();
+    private static async callOpenRouter(userId: string, systemPrompt: string, userContent: string): Promise<string> {
+        const { apiKey, modelId } = await this.getSettings(userId);
         if (!apiKey) {
             throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
         }
@@ -50,7 +50,7 @@ export class AIService {
         }
     }
 
-    static async improvise(content: string, targetAudience?: string): Promise<string> {
+    static async improvise(userId: string, content: string, targetAudience?: string): Promise<string> {
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.
 
@@ -96,10 +96,10 @@ Your task is to refine and enhance an existing LinkedIn post draft while preserv
 
 Return ONLY the refined LinkedIn post, formatted and ready to publish. No explanations or meta-commentary.
 `;
-        return this.callOpenRouter(SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
+        return this.callOpenRouter(userId, SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
     }
 
-    static async generate(prompt: string, targetAudience?: string, previousSummaries: string[] = [], additionalContext?: string): Promise<{ content: string, summary: string }> {
+    static async generate(userId: string, prompt: string, targetAudience?: string, previousSummaries: string[] = [], additionalContext?: string): Promise<{ content: string, summary: string }> {
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
 
@@ -172,7 +172,7 @@ Return a JSON object with the following structure:
 RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
         `;
 
-        const response = await this.callOpenRouter(SYSTEM_PROMPT, prompt);
+        const response = await this.callOpenRouter(userId, SYSTEM_PROMPT, prompt);
 
         try {
             // Attempt to parse JSON response. 
@@ -193,7 +193,7 @@ RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
         }
     }
 
-    static async enhanceIdeaDescription(title: string, description: string): Promise<string> {
+    static async enhanceIdeaDescription(userId: string, title: string, description: string): Promise<string> {
         const SYSTEM_PROMPT = `
             You are an expert content strategist. Your goal is to create a **Content Brief/Outline** for a future LinkedIn post.
 
@@ -248,6 +248,6 @@ RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
             "${description}"
         `;
 
-        return this.callOpenRouter(SYSTEM_PROMPT, userContent);
+        return this.callOpenRouter(userId, SYSTEM_PROMPT, userContent);
     }
 }

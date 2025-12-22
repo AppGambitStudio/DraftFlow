@@ -2,8 +2,8 @@ import axios from 'axios';
 import { Settings } from '../db';
 
 class LinkedInService {
-    async publishPost(content: string, authorUrn?: string) {
-        const setting = await Settings.findOne();
+    async publishPost(userId: string, content: string, authorUrn?: string) {
+        const setting = await Settings.findOne({ where: { userId } });
 
         if (!setting || !setting.linkedinAccessToken) {
             throw new Error('LinkedIn access token not found in settings.');

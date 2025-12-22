@@ -15,7 +15,9 @@ export default function SettingsPage() {
     const [scannedOrgs, setScannedOrgs] = useState<any[]>([]);
     const [config, setConfig] = useState({
         isLinkedinConfigured: false,
-        isTwitterConfigured: false
+        isTwitterConfigured: false,
+        isLinkedinConnected: false,
+        isTwitterConnected: false
     });
 
     // Dialog State
@@ -28,9 +30,6 @@ export default function SettingsPage() {
     });
 
     const [formData, setFormData] = useState({
-        linkedinAccessToken: "",
-        twitterAccessToken: "",
-        twitterRefreshToken: "",
         openRouterApiKey: "",
         openRouterModelId: "",
         targetAudiences: "",
@@ -44,16 +43,15 @@ export default function SettingsPage() {
         try {
             const res = await api.get("/settings");
             setFormData({
-                linkedinAccessToken: res.data.linkedinAccessToken || "",
-                twitterAccessToken: res.data.twitterAccessToken || "",
-                twitterRefreshToken: res.data.twitterRefreshToken || "",
                 openRouterApiKey: res.data.openRouterApiKey || "",
                 openRouterModelId: res.data.openRouterModelId || "",
                 targetAudiences: res.data.targetAudiences || "",
             });
             setConfig({
                 isLinkedinConfigured: res.data.isLinkedinConfigured || false,
-                isTwitterConfigured: res.data.isTwitterConfigured || false
+                isTwitterConfigured: res.data.isTwitterConfigured || false,
+                isLinkedinConnected: res.data.isLinkedinConnected || false,
+                isTwitterConnected: res.data.isTwitterConnected || false
             });
             if (res.data.linkedinOrganizations) {
                 try {
@@ -88,19 +86,18 @@ export default function SettingsPage() {
         setDisconnectDialog({ isOpen: true, platform });
     };
 
-    const confirmDisconnect = () => {
-        if (disconnectDialog.platform === 'linkedin') {
-            setFormData(prev => ({ ...prev, linkedinAccessToken: '' }));
-            toast.success("Disconnected from LinkedIn");
-        } else if (disconnectDialog.platform === 'twitter') {
-            setFormData(prev => ({
-                ...prev,
-                twitterAccessToken: '',
-                twitterRefreshToken: ''
-            }));
-            toast.success("Disconnected from Twitter");
+    const confirmDisconnect = async () => {
+        setLoading(true);
+        try {
+            await api.post("/settings/disconnect", { platform: disconnectDialog.platform });
+            toast.success(`Disconnected from ${disconnectDialog.platform === 'linkedin' ? 'LinkedIn' : 'Twitter'}`);
+            fetchSettings(); // Refresh to get updated status
+        } catch (error) {
+            toast.error("Failed to disconnect");
+        } finally {
+            setLoading(false);
+            setDisconnectDialog({ isOpen: false, platform: null });
         }
-        setDisconnectDialog({ isOpen: false, platform: null });
     };
 
     const handleScanLinkedin = async () => {
@@ -133,10 +130,7 @@ export default function SettingsPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>LinkedIn Configuration</CardTitle>
-                    <CardDescription>
-                        Connect your LinkedIn account to enable posting.
-                    </CardDescription>
+                    <CardTitle></CardTitle>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -151,7 +145,7 @@ export default function SettingsPage() {
                                 </div>
                             </div>
 
-                            {formData.linkedinAccessToken ? (
+                            {config.isLinkedinConnected ? (
                                 <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50/50 border-green-200">
                                     <div className="flex items-center gap-2 text-green-700">
                                         <div className="h-2 w-2 rounded-full bg-green-600" />
@@ -193,7 +187,7 @@ export default function SettingsPage() {
                                 type="button"
                                 variant="secondary"
                                 onClick={handleScanLinkedin}
-                                disabled={loading || !formData.linkedinAccessToken}
+                                disabled={loading || !config.isLinkedinConnected}
                                 className="w-full sm:w-auto"
                             >
                                 Scan for Organizations
@@ -220,11 +214,11 @@ export default function SettingsPage() {
                         )}
                         <div className="space-y-2 pt-4 border-t border-border">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-medium">Twitter Configuration</h3>
+                                <h3 className="text-lg font-medium">Twitter Connection</h3>
                             </div>
 
                             <div className="pt-2">
-                                {formData.twitterAccessToken ? ( // Checking access token presence to determine connection status
+                                {config.isTwitterConnected ? ( // Checking connection flag
                                     <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50/50 border-green-200">
                                         <div className="flex items-center gap-2 text-green-700">
                                             <div className="h-2 w-2 rounded-full bg-green-600" />
@@ -266,6 +260,9 @@ export default function SettingsPage() {
                         </div>
 
                         <div className="space-y-2 pt-4 border-t border-border">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-medium">OpenRouter Configuration</h3>
+                            </div>
                             <Label htmlFor="openRouterApiKey">OpenRouter API Key</Label>
                             <Input
                                 id="openRouterApiKey"

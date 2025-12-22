@@ -1,7 +1,7 @@
 
 import express from 'express';
 import crypto from 'crypto';
-import { Idea, Post } from '../db';
+import { Idea, Post, User } from '../db';
 import { AIService } from '../services/ai';
 
 const router = express.Router();
@@ -9,7 +9,17 @@ const router = express.Router();
 // POST /api/webhooks/idea
 router.post('/idea', async (req, res) => {
     try {
-        const { title, summary, tags, source } = req.body;
+        const { title, summary, tags, source, userId: providedUserId } = req.body;
+
+        // Find user
+        let userId = providedUserId;
+        if (!userId) {
+            const firstUser = await User.findOne();
+            if (!firstUser) {
+                return res.status(500).json({ error: 'No user found in system' });
+            }
+            userId = firstUser.id;
+        }
 
         // 1. Validation
         if (!title) {
@@ -30,6 +40,7 @@ router.post('/idea', async (req, res) => {
         // 4. Create Idea
         const idea = await Idea.create({
             title,
+            userId,
             description: summary,
             tags: tags ? JSON.stringify(tags) : '[]',
             source: source || 'n8n',
@@ -58,7 +69,7 @@ router.post('/idea', async (req, res) => {
             Keep it engaging and professional.
             `;
 
-            const generatedContent = await AIService.improvise(prompt);
+            const generatedContent = await AIService.improvise(userId, prompt);
 
             // 6. Schedule for 1 week later
             const scheduledTime = new Date();
@@ -66,6 +77,7 @@ router.post('/idea', async (req, res) => {
 
             post = await Post.create({
                 content: generatedContent,
+                userId,
                 scheduledTime: scheduledTime,
                 status: 'DRAFT', // Keep as DRAFT for review, or SCHEDULED if bold. Let's stick to DRAFT for safety.
                 platforms: JSON.stringify(['LINKEDIN']),
@@ -97,7 +109,17 @@ router.post('/idea', async (req, res) => {
 // POST /schedule
 router.post('/schedule', async (req, res) => {
     try {
-        const { content, scheduledTime, platforms, authorUrn, authorName } = req.body;
+        const { content, scheduledTime, platforms, authorUrn, authorName, userId: providedUserId } = req.body;
+
+        // Find user
+        let userId = providedUserId;
+        if (!userId) {
+            const firstUser = await User.findOne();
+            if (!firstUser) {
+                return res.status(500).json({ error: 'No user found in system' });
+            }
+            userId = firstUser.id;
+        }
 
         if (!content) {
             return res.status(400).json({ error: 'Content is required' });
@@ -113,6 +135,7 @@ router.post('/schedule', async (req, res) => {
 
         const post = await Post.create({
             content,
+            userId,
             scheduledTime: time,
             status: 'SCHEDULED',
             platforms: platforms ? JSON.stringify(platforms) : JSON.stringify(['LINKEDIN']),

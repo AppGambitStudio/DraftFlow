@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PenSquare, Settings, Lightbulb, Calendar } from "lucide-react";
+import { LayoutDashboard, PenSquare, Settings, Lightbulb, Calendar, LogOut, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 import { version } from "../../package.json";
 
@@ -17,6 +18,11 @@ const navItems = [
 
 export function Sidebar() {
     const pathname = usePathname();
+    const { user, logout } = useAuth();
+
+    const isPublicPage = pathname === '/login' || pathname === '/signup';
+
+    if (isPublicPage) return null;
 
     return (
         <div className="flex h-full w-64 flex-col border-r bg-white text-slate-900">
@@ -44,9 +50,32 @@ export function Sidebar() {
                     );
                 })}
             </nav>
-            <div className="p-4 border-t text-xs text-slate-400">
-                <div className="mb-1">v{version}</div>
-                <div>&copy; {new Date().getFullYear()} APPGAMBiT</div>
+            <div className="mt-auto border-t">
+                {user && (
+                    <div className="px-6 py-4 border-b bg-slate-50/50">
+                        <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                                <UserIcon className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-xs font-medium text-slate-900 truncate">
+                                    {user.email}
+                                </p>
+                                <button
+                                    onClick={logout}
+                                    className="text-[10px] text-slate-500 hover:text-red-600 transition-colors flex items-center gap-1 mt-1"
+                                >
+                                    <LogOut className="h-3 w-3" />
+                                    Logout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                <div className="p-4 text-xs text-slate-400">
+                    <div className="mb-1">v{version}</div>
+                    <div>&copy; {new Date().getFullYear()} APPGAMBiT</div>
+                </div>
             </div>
         </div>
     );

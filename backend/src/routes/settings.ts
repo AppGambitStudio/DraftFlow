@@ -1,32 +1,40 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { Settings } from '../db';
 import axios from 'axios';
+import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
 // Get settings
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const setting = await Settings.findOne();
-        const data = setting ? setting.toJSON() : {};
+        const userId = req.user!.id;
+        const setting = await Settings.findOne({ where: { userId } });
+        const data = (setting ? setting.toJSON() : {}) as any;
 
-        // Don't expose safe credentials if they are in env
-        // We will return flags for the frontend to know if "Connect" buttons should be enabled
+        // Connection flags
+        const isLinkedinConnected = !!(data.linkedinAccessToken);
+        const isTwitterConnected = !!(data.twitterAccessToken);
+
+        // Configuration flags (app-wide)
         const isLinkedinConfigured = !!(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET);
         const isTwitterConfigured = !!(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET);
 
-        // Remove sensitive fields from the response if we are using env vars (or even if we are not, we might want to hide them)
-        // For now, let's just make sure we don't send them if they are in env, or if they are in DB, we can send them masked or not send them at all since we want to remove UI for them.
-
-        // Construct safe response
+        // Construct safe response (Hide sensitive tokens)
         const safeSettings = {
             ...data,
+            linkedinAccessToken: undefined, // Hide
+            linkedinRefreshToken: undefined, // Hide
+            twitterAccessToken: undefined, // Hide
+            twitterRefreshToken: undefined, // Hide
             linkedinClientId: undefined,
             linkedinClientSecret: undefined,
             twitterClientId: undefined,
             twitterClientSecret: undefined,
             isLinkedinConfigured,
-            isTwitterConfigured
+            isTwitterConfigured,
+            isLinkedinConnected,
+            isTwitterConnected
         };
 
         res.json(safeSettings);
@@ -37,45 +45,24 @@ router.get('/', async (req, res) => {
 });
 
 // Update settings
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
     const {
-        linkedinClientId, linkedinClientSecret, linkedinAccessToken, linkedinRefreshToken, linkedinExpiresAt,
-        twitterClientId, twitterClientSecret, twitterAccessToken, twitterRefreshToken, twitterExpiresAt,
         openRouterApiKey, openRouterModelId, targetAudiences
     } = req.body;
-    console.log('Received settings update:', { ...req.body, openRouterApiKey: '***' });
+    console.log('Received settings update for user:', userId);
 
     try {
         const [setting] = await Settings.findOrCreate({
-            where: {},
+            where: { userId },
             defaults: {
-                linkedinClientId,
-                linkedinClientSecret,
-                linkedinAccessToken,
-                linkedinRefreshToken,
-                linkedinExpiresAt: linkedinExpiresAt ? new Date(linkedinExpiresAt) : null,
-                twitterClientId,
-                twitterClientSecret,
-                twitterAccessToken,
-                twitterRefreshToken,
-                twitterExpiresAt: twitterExpiresAt ? new Date(twitterExpiresAt) : null,
                 openRouterApiKey,
                 openRouterModelId,
                 targetAudiences,
-            }, // Added missing comma and closing brace for defaults object
+            },
         });
 
         await setting.update({
-            linkedinClientId,
-            linkedinClientSecret,
-            linkedinAccessToken,
-            linkedinRefreshToken,
-            linkedinExpiresAt: linkedinExpiresAt ? new Date(linkedinExpiresAt) : null,
-            twitterClientId,
-            twitterClientSecret,
-            twitterAccessToken,
-            twitterRefreshToken,
-            twitterExpiresAt: twitterExpiresAt ? new Date(twitterExpiresAt) : null,
             openRouterApiKey,
             openRouterModelId,
             targetAudiences,
@@ -88,10 +75,44 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Get available LinkedIn authors (Self + Organizations)
-router.get('/linkedin/authors', async (req, res) => {
+// Disconnect platform
+router.post('/disconnect', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const { platform } = req.body;
+
     try {
-        const setting = await Settings.findOne();
+        const setting = await Settings.findOne({ where: { userId } });
+        if (!setting) {
+            return res.status(404).json({ error: 'Settings not found' });
+        }
+
+        if (platform === 'linkedin') {
+            await setting.update({
+                linkedinAccessToken: null,
+                linkedinRefreshToken: null,
+                linkedinExpiresAt: null,
+                linkedinOrganizations: '[]'
+            });
+        } else if (platform === 'twitter') {
+            await setting.update({
+                twitterAccessToken: null,
+                twitterRefreshToken: null,
+                twitterExpiresAt: null
+            });
+        }
+
+        res.json({ message: `Disconnected from ${platform}` });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to disconnect' });
+    }
+});
+
+// Get available LinkedIn authors (Self + Organizations)
+router.get('/linkedin/authors', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const setting = await Settings.findOne({ where: { userId } });
         if (!setting || !setting.linkedinAccessToken) {
             return res.status(401).json({ error: 'LinkedIn not connected' });
         }
@@ -99,21 +120,13 @@ router.get('/linkedin/authors', async (req, res) => {
         const accessToken = setting.linkedinAccessToken;
         const authors = [];
 
-        // 1. Fetch "Self" Profile (Gracefully handle if unauthorized)
-        try {
-            const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
-                headers: { 'Authorization': `Bearer ${accessToken}` }
-            });
-            authors.push({
-                urn: `urn:li:person:${profileResponse.data.id}`,
-                name: `${profileResponse.data.localizedFirstName} ${profileResponse.data.localizedLastName} (Self)`,
-                image: null
-            });
-        } catch (error: any) {
-            if (error.response?.status === 403) {
-                console.warn('LinkedIn Profile access denied (scanned without Self):', error.response?.data);
-            } else {
-                console.error('Error fetching LinkedIn profile during authors fetch:', error.response?.data || error.message);
+        // 1. Fetch "Self" Profile (From Cache)
+        if (setting.linkedinProfile) {
+            try {
+                const profile = JSON.parse(setting.linkedinProfile);
+                authors.push(profile);
+            } catch (e) {
+                console.error('Error parsing cached LinkedIn profile:', e);
             }
         }
 
@@ -135,9 +148,10 @@ router.get('/linkedin/authors', async (req, res) => {
 });
 
 // Scan for LinkedIn Organizations
-router.post('/linkedin/scan', async (req, res) => {
+router.post('/linkedin/scan', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const setting = await Settings.findOne();
+        const userId = req.user!.id;
+        const setting = await Settings.findOne({ where: { userId } });
         if (!setting || !setting.linkedinAccessToken) {
             return res.status(401).json({ error: 'LinkedIn not connected' });
         }
@@ -159,20 +173,19 @@ router.post('/linkedin/scan', async (req, res) => {
             const missingDetailsIds: string[] = [];
             const orgsMap = new Map<string, { urn: string, name: string }>();
 
+
             if (orgsResponse.data && orgsResponse.data.elements) {
                 orgsResponse.data.elements.forEach((element: any) => {
                     const target = element.organizationalTarget;
-                    if (!target) return;
+                    const targetDecoration = element['organizationalTarget~'];
 
-                    if (typeof target === 'object') {
-                        // Projection succeeded
+                    if (targetDecoration) {
                         organizations.push({
-                            urn: element.organizationalTargetUrn || `urn:li:organization:${target.id}`,
-                            name: target.localizedName || "Unknown Organization",
+                            urn: element.organizationalTargetUrn || `urn:li:organization:${targetDecoration.id}`,
+                            name: targetDecoration.localizedName || "Unknown Organization",
                             image: null
                         });
                     } else if (typeof target === 'string') {
-                        // Projection failed, we have the URN
                         const parts = target.split(':');
                         const id = parts[parts.length - 1] || '';
                         if (id) {
@@ -185,6 +198,7 @@ router.post('/linkedin/scan', async (req, res) => {
                     }
                 });
             }
+
 
             // Fetch missing details in batch
             if (missingDetailsIds.length > 0) {
@@ -200,28 +214,29 @@ router.post('/linkedin/scan', async (req, res) => {
                         }
                     );
 
+
                     if (detailsResponse.data && detailsResponse.data.results) {
-                        Object.values(detailsResponse.data.results).forEach((org: any) => {
-                            if (orgsMap.has(String(org.id))) {
-                                const entry = orgsMap.get(String(org.id));
+                        Object.entries(detailsResponse.data.results).forEach(([id, org]: [string, any]) => {
+                            if (orgsMap.has(id)) {
+                                const entry = orgsMap.get(id);
                                 if (entry) {
-                                    entry.name = org.localizedName;
+                                    entry.name = org.localizedName || entry.name;
                                 }
                             }
                         });
                     }
-                } catch (batchError) {
-                    console.error('Error batch fetching organization details:', batchError);
+                } catch (batchError: any) {
+                    console.error('Error batch fetching organization details:', batchError.response?.data || batchError.message);
                 }
 
-                orgsMap.forEach((value) => organizations.push({ ...value, image: null }));
+                orgsMap.forEach((value: { urn: string, name: string }) => organizations.push({ ...value, image: null }));
             }
 
             // Update settings with new cache
             setting.linkedinOrganizations = JSON.stringify(organizations);
             await setting.save();
 
-            // Fetch "Self" Profile for display (Gracefully handle if unauthorized)
+            // Fetch "Self" Profile for display and cache
             let selfProfile = null;
             try {
                 const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
@@ -232,6 +247,10 @@ router.post('/linkedin/scan', async (req, res) => {
                     name: `${profileResponse.data.localizedFirstName} ${profileResponse.data.localizedLastName} (Self)`,
                     image: null
                 };
+
+                // Update cache
+                setting.linkedinProfile = JSON.stringify(selfProfile);
+                await setting.save();
             } catch (error: any) {
                 if (error.response?.status === 403) {
                     console.warn('LinkedIn Profile access denied during scan.');

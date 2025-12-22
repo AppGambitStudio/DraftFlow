@@ -12,6 +12,8 @@ export const metadata: Metadata = {
 
 import { AuthorsProvider } from "@/contexts/AuthorsContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { Toaster } from "react-hot-toast";
 
 export default function RootLayout({
     children,
@@ -21,19 +23,19 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className={inter.className}>
-                <SettingsProvider>
-                    <AuthorsProvider>
-                        <div className="h-6 bg-amber-100 text-amber-800 text-[10px] font-medium flex items-center justify-center border-b border-amber-200 fixed top-0 w-full z-50">
-                            This is a non-auth application, for personal-use only.
-                        </div>
-                        <div className="flex h-screen overflow-hidden bg-slate-50 pt-6">
-                            <Sidebar />
-                            <main className="flex-1 overflow-y-auto p-8">
-                                {children}
-                            </main>
-                        </div>
-                    </AuthorsProvider>
-                </SettingsProvider>
+                <AuthProvider>
+                    <SettingsProvider>
+                        <AuthorsProvider>
+                            <div className="flex h-screen overflow-hidden bg-slate-50">
+                                <Sidebar />
+                                <main className="flex-1 overflow-y-auto p-8">
+                                    {children}
+                                </main>
+                            </div>
+                            <Toaster position="bottom-right" />
+                        </AuthorsProvider>
+                    </SettingsProvider>
+                </AuthProvider>
             </body>
         </html>
     );
