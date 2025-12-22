@@ -37,6 +37,7 @@ export default function IdeasPage() {
     const { settings } = useSettings();
     const [ideas, setIdeas] = useState<Idea[]>([]);
     const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+    const [groupBy, setGroupBy] = useState<'schedule' | 'topic' | 'none'>('schedule');
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentIdea, setCurrentIdea] = useState<Idea | null>(null);
@@ -49,6 +50,7 @@ export default function IdeasPage() {
         authorName: "",
         targetAudience: "",
         sourceLinks: [] as string[],
+        tags: [] as string[],
         scheduleTime: "",
         scheduleDayOfWeek: 1, // 1 = Monday
         scheduleDayOfMonth: 1
@@ -60,6 +62,7 @@ export default function IdeasPage() {
     const [contextModalOpen, setContextModalOpen] = useState(false);
     const [additionalContext, setAdditionalContext] = useState("");
     const [pendingIdea, setPendingIdea] = useState<Idea | null>(null);
+    const [tagsInputValue, setTagsInputValue] = useState("");
 
     useEffect(() => {
         fetchIdeas();
@@ -98,10 +101,13 @@ export default function IdeasPage() {
                 authorName: idea.authorName || (authors.length > 0 ? authors[0].name : ""),
                 targetAudience: idea.targetAudience || "",
                 sourceLinks: JSON.parse(idea.sourceLinks || '[]'),
+                tags: JSON.parse(idea.tags || '[]'),
                 scheduleTime: idea.scheduleTime || "",
                 scheduleDayOfWeek: idea.scheduleDayOfWeek || 1,
                 scheduleDayOfMonth: idea.scheduleDayOfMonth || 1
             });
+            const existingTags = JSON.parse(idea.tags || '[]');
+            setTagsInputValue(existingTags.join(', '));
         } else {
             setCurrentIdea(null);
             setFormData({
@@ -113,10 +119,12 @@ export default function IdeasPage() {
                 authorName: authors.length > 0 ? authors[0].name : "",
                 targetAudience: "",
                 sourceLinks: [],
+                tags: [],
                 scheduleTime: "",
                 scheduleDayOfWeek: 1,
                 scheduleDayOfMonth: 1
             });
+            setTagsInputValue("");
         }
         setIsModalOpen(true);
     };
@@ -207,6 +215,59 @@ export default function IdeasPage() {
         }
     };
 
+    const getGroupedIdeas = () => {
+        if (groupBy === 'none') return { 'All Ideas': ideas };
+
+        if (groupBy === 'schedule') {
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0-6
+            const dayOfMonth = today.getDate(); // 1-31
+
+            const todayFocus: Idea[] = [];
+            const upcoming: Idea[] = [];
+            const backlog: Idea[] = [];
+
+            ideas.forEach(idea => {
+                if (idea.isRecurring) {
+                    let isToday = false;
+                    if (idea.frequency === 'DAILY') isToday = true;
+                    else if (idea.frequency === 'WEEKLY' && idea.scheduleDayOfWeek === dayOfWeek) isToday = true;
+                    else if (idea.frequency === 'MONTHLY' && idea.scheduleDayOfMonth === dayOfMonth) isToday = true;
+
+                    if (isToday) todayFocus.push(idea);
+                    else upcoming.push(idea);
+                } else {
+                    backlog.push(idea);
+                }
+            });
+
+            return {
+                "Today's Focus": todayFocus,
+                "Upcoming": upcoming,
+                "Backlog": backlog
+            };
+        }
+
+        if (groupBy === 'topic') {
+            const groups: Record<string, Idea[]> = {};
+            ideas.forEach(idea => {
+                let tags: string[] = [];
+                try {
+                    tags = JSON.parse(idea.tags || '[]');
+                } catch (e) { tags = []; }
+
+                const category = tags.length > 0 ? tags[0] : 'Uncategorized';
+                if (!groups[category]) groups[category] = [];
+                groups[category].push(idea);
+            });
+            return groups;
+        }
+
+        return { 'All Ideas': ideas };
+    };
+
+    const groupedIdeas = getGroupedIdeas();
+
     return (
         <div className="space-y-6">
             <Toaster />
@@ -216,6 +277,20 @@ export default function IdeasPage() {
                     <p className="text-muted-foreground">Capture and organize your content ideas.</p>
                 </div>
                 <div className="flex gap-4 items-center">
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="groupBy" className="text-sm font-medium">Group By:</Label>
+                        <select
+                            id="groupBy"
+                            className="h-8 rounded-md border border-input bg-background px-2 py-1 text-sm bg-muted/20"
+                            value={groupBy}
+                            onChange={(e) => setGroupBy(e.target.value as any)}
+                        >
+                            <option value="schedule">Schedule</option>
+                            <option value="topic">Topic</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+
                     <div className="flex items-center border rounded-lg p-1 bg-muted/20">
                         <Button
                             variant={viewMode === 'card' ? 'secondary' : 'ghost'}
@@ -249,98 +324,117 @@ export default function IdeasPage() {
                     <p>No ideas yet. Start capturing your thoughts!</p>
                 </div>
             ) : (
-                viewMode === 'card' ? (
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {ideas.map((idea) => (
-                            <div key={idea.id} className="group relative flex flex-col justify-between rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md">
-                                <div className="space-y-4">
-                                    <div className="flex items-start justify-between">
-                                        <div className="space-y-1">
-                                            <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
-                                            {idea.isRecurring && (
-                                                <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
-                                                    <Repeat className="h-3 w-3" />
-                                                    <span className="font-medium">{idea.frequency}</span>
+                <div className="space-y-8">
+                    {Object.entries(groupedIdeas).map(([groupName, groupIdeas]) => {
+                        if (groupIdeas.length === 0) return null;
+
+                        return (
+                            <div key={groupName} className="space-y-4">
+                                {groupBy !== 'none' && (
+                                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                                        {groupName}
+                                        <span className="text-sm font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                                            {groupIdeas.length}
+                                        </span>
+                                    </h3>
+                                )}
+
+                                {viewMode === 'card' ? (
+                                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                                        {groupIdeas.map((idea) => (
+                                            <div key={idea.id} className="group relative flex flex-col justify-between rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md">
+                                                <div className="space-y-4">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="space-y-1">
+                                                            <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
+                                                            {idea.isRecurring && (
+                                                                <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                                                                    <Repeat className="h-3 w-3" />
+                                                                    <span className="font-medium">{idea.frequency}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => setViewingHistoryId(idea.id)} className="text-muted-foreground hover:text-blue-500" title="Previous Posts">
+                                                                <BookOpen className="h-4 w-4" />
+                                                            </button>
+                                                            <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary" title="Edit Idea">
+                                                                <Pencil className="h-4 w-4" />
+                                                            </button>
+                                                            <button onClick={() => handleDelete(idea.id)} className="text-muted-foreground hover:text-red-500" title="Delete Idea">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
+                                                        {idea.description}
+                                                    </p>
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => setViewingHistoryId(idea.id)} className="text-muted-foreground hover:text-blue-500" title="Previous Posts">
-                                                <BookOpen className="h-4 w-4" />
-                                            </button>
-                                            <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary" title="Edit Idea">
-                                                <Pencil className="h-4 w-4" />
-                                            </button>
-                                            <button onClick={() => handleDelete(idea.id)} className="text-muted-foreground hover:text-red-500" title="Delete Idea">
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                                        {idea.description}
-                                    </p>
-                                </div>
-                                <div className="mt-6 pt-4 border-t">
-                                    <Button
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={() => handleGeneratePost(idea)}
-                                        disabled={generatingId === idea.id}
-                                    >
-                                        <Sparkles className="mr-2 h-4 w-4" />
-                                        {generatingId === idea.id ? "Generating..." : "Generate Post"}
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {ideas.map((idea) => (
-                            <div key={idea.id} className="group flex items-center justify-between p-4 rounded-lg border bg-card shadow-sm hover:shadow-md transition-all">
-                                <div className="flex-1 min-w-0 mr-6">
-                                    <div className="flex items-center gap-3 mb-1">
-                                        <h3 className="font-semibold truncate text-base">{idea.title}</h3>
-                                        {idea.isRecurring && (
-                                            <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
-                                                <Repeat className="h-3 w-3" />
-                                                <span className="font-medium">{idea.frequency}</span>
+                                                <div className="mt-6 pt-4 border-t">
+                                                    <Button
+                                                        variant="outline"
+                                                        className="w-full"
+                                                        onClick={() => handleGeneratePost(idea)}
+                                                        disabled={generatingId === idea.id}
+                                                    >
+                                                        <Sparkles className="mr-2 h-4 w-4" />
+                                                        {generatingId === idea.id ? "Generating..." : "Generate Post"}
+                                                    </Button>
+                                                </div>
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
-                                    <p className="text-sm text-muted-foreground truncate max-w-2xl">
-                                        {idea.description}
-                                    </p>
-                                </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {groupIdeas.map((idea) => (
+                                            <div key={idea.id} className="group flex items-center justify-between p-4 rounded-lg border bg-card shadow-sm hover:shadow-md transition-all">
+                                                <div className="flex-1 min-w-0 mr-6">
+                                                    <div className="flex items-center gap-3 mb-1">
+                                                        <h3 className="font-semibold truncate text-base">{idea.title}</h3>
+                                                        {idea.isRecurring && (
+                                                            <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
+                                                                <Repeat className="h-3 w-3" />
+                                                                <span className="font-medium">{idea.frequency}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground truncate max-w-2xl">
+                                                        {idea.description}
+                                                    </p>
+                                                </div>
 
-                                <div className="flex items-center gap-4 shrink-0">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleGeneratePost(idea)}
-                                        disabled={generatingId === idea.id}
-                                        className="h-8"
-                                    >
-                                        <Sparkles className="mr-2 h-3.5 w-3.5" />
-                                        {generatingId === idea.id ? "Generating..." : "Generate"}
-                                    </Button>
+                                                <div className="flex items-center gap-4 shrink-0">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleGeneratePost(idea)}
+                                                        disabled={generatingId === idea.id}
+                                                        className="h-8"
+                                                    >
+                                                        <Sparkles className="mr-2 h-3.5 w-3.5" />
+                                                        {generatingId === idea.id ? "Generating..." : "Generate"}
+                                                    </Button>
 
-                                    <div className="flex items-center gap-1 pl-4 border-l">
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-blue-500" onClick={() => setViewingHistoryId(idea.id)} title="History">
-                                            <BookOpen className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleOpenModal(idea)} title="Edit">
-                                            <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => handleDelete(idea.id)} title="Delete">
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                                    <div className="flex items-center gap-1 pl-4 border-l">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-blue-500" onClick={() => setViewingHistoryId(idea.id)} title="History">
+                                                            <BookOpen className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleOpenModal(idea)} title="Edit">
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => handleDelete(idea.id)} title="Delete">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                </div>
+                                )}
                             </div>
-                        ))}
-                    </div>
-                )
+                        );
+                    })}
+                </div>
             )}
 
             {isModalOpen && (
@@ -384,6 +478,22 @@ export default function IdeasPage() {
                             </div>
 
                             <div className="space-y-2">
+                                <Label htmlFor="tags">Topics / Tags (comma separated)</Label>
+                                <Input
+                                    id="tags"
+                                    placeholder="e.g., AI, Marketing, Security"
+                                    value={tagsInputValue}
+                                    onChange={(e) => {
+                                        setTagsInputValue(e.target.value);
+                                        setFormData({
+                                            ...formData,
+                                            tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)
+                                        });
+                                    }}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
                                 <Label>Reference Links (One per line)</Label>
                                 <Textarea
                                     placeholder="https://example.com/article&#10;https://another-source.com"
@@ -413,7 +523,7 @@ export default function IdeasPage() {
                                         <Label htmlFor="frequency">Frequency</Label>
                                         <select
                                             id="frequency"
-                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
                                             value={formData.frequency}
                                             onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
                                         >
@@ -439,7 +549,7 @@ export default function IdeasPage() {
                                                 <Label htmlFor="dayOfWeek">Day</Label>
                                                 <select
                                                     id="dayOfWeek"
-                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
                                                     value={formData.scheduleDayOfWeek}
                                                     onChange={(e) => setFormData({ ...formData, scheduleDayOfWeek: parseInt(e.target.value) })}
                                                 >
@@ -459,7 +569,7 @@ export default function IdeasPage() {
                                                 <Label htmlFor="dayOfMonth">Day of Month</Label>
                                                 <select
                                                     id="dayOfMonth"
-                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
                                                     value={formData.scheduleDayOfMonth}
                                                     onChange={(e) => setFormData({ ...formData, scheduleDayOfMonth: parseInt(e.target.value) })}
                                                 >
