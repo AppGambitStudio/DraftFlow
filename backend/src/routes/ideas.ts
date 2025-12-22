@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
 // Create new idea
 router.post('/', async (req, res) => {
     try {
-        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience } = req.body;
+        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth } = req.body;
         const idea = await Idea.create({
             title,
             description,
@@ -31,6 +31,9 @@ router.post('/', async (req, res) => {
             targetAudience: targetAudience || null,
             generatedSummaries: '[]',
             sourceLinks: JSON.stringify(req.body.sourceLinks || []),
+            scheduleTime: scheduleTime || null,
+            scheduleDayOfWeek: scheduleDayOfWeek !== undefined ? scheduleDayOfWeek : null,
+            scheduleDayOfMonth: scheduleDayOfMonth || null
         });
         res.json(idea);
     } catch (error) {
@@ -42,7 +45,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience } = req.body;
+        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth } = req.body;
         const idea = await Idea.findByPk(id);
 
         if (!idea) {
@@ -59,6 +62,10 @@ router.put('/:id', async (req, res) => {
         if (authorName !== undefined) idea.authorName = authorName;
         if (targetAudience !== undefined) idea.targetAudience = targetAudience;
         if (req.body.sourceLinks !== undefined) idea.sourceLinks = JSON.stringify(req.body.sourceLinks);
+
+        if (scheduleTime !== undefined) idea.scheduleTime = scheduleTime;
+        if (scheduleDayOfWeek !== undefined) idea.scheduleDayOfWeek = scheduleDayOfWeek;
+        if (scheduleDayOfMonth !== undefined) idea.scheduleDayOfMonth = scheduleDayOfMonth;
 
         await idea.save();
 

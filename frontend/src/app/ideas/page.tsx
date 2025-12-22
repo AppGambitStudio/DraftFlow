@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2 } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -25,6 +25,9 @@ interface Idea {
     targetAudience?: string;
     generatedSummaries?: string; // JSON string
     sourceLinks?: string; // JSON string array
+    scheduleTime?: string;
+    scheduleDayOfWeek?: number;
+    scheduleDayOfMonth?: number;
 }
 
 import { useSettings } from "@/contexts/SettingsContext";
@@ -33,6 +36,7 @@ export default function IdeasPage() {
     const router = useRouter();
     const { settings } = useSettings();
     const [ideas, setIdeas] = useState<Idea[]>([]);
+    const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentIdea, setCurrentIdea] = useState<Idea | null>(null);
@@ -44,7 +48,10 @@ export default function IdeasPage() {
         authorUrn: "",
         authorName: "",
         targetAudience: "",
-        sourceLinks: [] as string[]
+        sourceLinks: [] as string[],
+        scheduleTime: "",
+        scheduleDayOfWeek: 1, // 1 = Monday
+        scheduleDayOfMonth: 1
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [isEnhancing, setIsEnhancing] = useState(false);
@@ -90,7 +97,10 @@ export default function IdeasPage() {
                 authorUrn: idea.authorUrn || (authors.length > 0 ? authors[0].urn : ""),
                 authorName: idea.authorName || (authors.length > 0 ? authors[0].name : ""),
                 targetAudience: idea.targetAudience || "",
-                sourceLinks: JSON.parse(idea.sourceLinks || '[]')
+                sourceLinks: JSON.parse(idea.sourceLinks || '[]'),
+                scheduleTime: idea.scheduleTime || "",
+                scheduleDayOfWeek: idea.scheduleDayOfWeek || 1,
+                scheduleDayOfMonth: idea.scheduleDayOfMonth || 1
             });
         } else {
             setCurrentIdea(null);
@@ -102,7 +112,10 @@ export default function IdeasPage() {
                 authorUrn: authors.length > 0 ? authors[0].urn : "",
                 authorName: authors.length > 0 ? authors[0].name : "",
                 targetAudience: "",
-                sourceLinks: []
+                sourceLinks: [],
+                scheduleTime: "",
+                scheduleDayOfWeek: 1,
+                scheduleDayOfMonth: 1
             });
         }
         setIsModalOpen(true);
@@ -203,6 +216,24 @@ export default function IdeasPage() {
                     <p className="text-muted-foreground">Capture and organize your content ideas.</p>
                 </div>
                 <div className="flex gap-4 items-center">
+                    <div className="flex items-center border rounded-lg p-1 bg-muted/20">
+                        <Button
+                            variant={viewMode === 'card' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setViewMode('card')}
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => setViewMode('list')}
+                        >
+                            <List className="h-4 w-4" />
+                        </Button>
+                    </div>
                     <Button onClick={() => handleOpenModal()}>
                         <Plus className="mr-2 h-4 w-4" />
                         New Idea
@@ -218,50 +249,98 @@ export default function IdeasPage() {
                     <p>No ideas yet. Start capturing your thoughts!</p>
                 </div>
             ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {ideas.map((idea) => (
-                        <div key={idea.id} className="group relative flex flex-col justify-between rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md">
-                            <div className="space-y-4">
-                                <div className="flex items-start justify-between">
-                                    <div className="space-y-1">
-                                        <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
+                viewMode === 'card' ? (
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                        {ideas.map((idea) => (
+                            <div key={idea.id} className="group relative flex flex-col justify-between rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md">
+                                <div className="space-y-4">
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
+                                            {idea.isRecurring && (
+                                                <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                                                    <Repeat className="h-3 w-3" />
+                                                    <span className="font-medium">{idea.frequency}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setViewingHistoryId(idea.id)} className="text-muted-foreground hover:text-blue-500" title="Previous Posts">
+                                                <BookOpen className="h-4 w-4" />
+                                            </button>
+                                            <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary" title="Edit Idea">
+                                                <Pencil className="h-4 w-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(idea.id)} className="text-muted-foreground hover:text-red-500" title="Delete Idea">
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
+                                        {idea.description}
+                                    </p>
+                                </div>
+                                <div className="mt-6 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => handleGeneratePost(idea)}
+                                        disabled={generatingId === idea.id}
+                                    >
+                                        <Sparkles className="mr-2 h-4 w-4" />
+                                        {generatingId === idea.id ? "Generating..." : "Generate Post"}
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {ideas.map((idea) => (
+                            <div key={idea.id} className="group flex items-center justify-between p-4 rounded-lg border bg-card shadow-sm hover:shadow-md transition-all">
+                                <div className="flex-1 min-w-0 mr-6">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <h3 className="font-semibold truncate text-base">{idea.title}</h3>
                                         {idea.isRecurring && (
-                                            <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                                            <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
                                                 <Repeat className="h-3 w-3" />
                                                 <span className="font-medium">{idea.frequency}</span>
                                             </div>
                                         )}
                                     </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => setViewingHistoryId(idea.id)} className="text-muted-foreground hover:text-blue-500" title="Previous Posts">
+                                    <p className="text-sm text-muted-foreground truncate max-w-2xl">
+                                        {idea.description}
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center gap-4 shrink-0">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleGeneratePost(idea)}
+                                        disabled={generatingId === idea.id}
+                                        className="h-8"
+                                    >
+                                        <Sparkles className="mr-2 h-3.5 w-3.5" />
+                                        {generatingId === idea.id ? "Generating..." : "Generate"}
+                                    </Button>
+
+                                    <div className="flex items-center gap-1 pl-4 border-l">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-blue-500" onClick={() => setViewingHistoryId(idea.id)} title="History">
                                             <BookOpen className="h-4 w-4" />
-                                        </button>
-                                        <button onClick={() => handleOpenModal(idea)} className="text-muted-foreground hover:text-primary" title="Edit Idea">
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => handleOpenModal(idea)} title="Edit">
                                             <Pencil className="h-4 w-4" />
-                                        </button>
-                                        <button onClick={() => handleDelete(idea.id)} className="text-muted-foreground hover:text-red-500" title="Delete Idea">
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-red-500" onClick={() => handleDelete(idea.id)} title="Delete">
                                             <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        </Button>
                                     </div>
                                 </div>
-                                <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                                    {idea.description}
-                                </p>
                             </div>
-                            <div className="mt-6 pt-4 border-t">
-                                <Button
-                                    variant="outline"
-                                    className="w-full"
-                                    onClick={() => handleGeneratePost(idea)}
-                                    disabled={generatingId === idea.id}
-                                >
-                                    <Sparkles className="mr-2 h-4 w-4" />
-                                    {generatingId === idea.id ? "Generating..." : "Generate Post"}
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )
             )}
 
             {isModalOpen && (
@@ -329,20 +408,71 @@ export default function IdeasPage() {
                             </div>
 
                             {formData.isRecurring && (
-                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                    <Label htmlFor="frequency">Frequency</Label>
-                                    <select
-                                        id="frequency"
-                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                        value={formData.frequency}
-                                        onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                                    >
-                                        <option value="DAILY">Daily</option>
-                                        <option value="WEEKLY">Weekly</option>
-                                        <option value="MONTHLY">Monthly</option>
-                                    </select>
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 p-4 bg-muted/30 rounded-lg border">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="frequency">Frequency</Label>
+                                        <select
+                                            id="frequency"
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                            value={formData.frequency}
+                                            onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                                        >
+                                            <option value="DAILY">Daily</option>
+                                            <option value="WEEKLY">Weekly</option>
+                                            <option value="MONTHLY">Monthly</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="scheduleTime">Time</Label>
+                                            <Input
+                                                id="scheduleTime"
+                                                type="time"
+                                                value={formData.scheduleTime}
+                                                onChange={(e) => setFormData({ ...formData, scheduleTime: e.target.value })}
+                                            />
+                                        </div>
+
+                                        {formData.frequency === 'WEEKLY' && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="dayOfWeek">Day</Label>
+                                                <select
+                                                    id="dayOfWeek"
+                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                    value={formData.scheduleDayOfWeek}
+                                                    onChange={(e) => setFormData({ ...formData, scheduleDayOfWeek: parseInt(e.target.value) })}
+                                                >
+                                                    <option value={1}>Monday</option>
+                                                    <option value={2}>Tuesday</option>
+                                                    <option value={3}>Wednesday</option>
+                                                    <option value={4}>Thursday</option>
+                                                    <option value={5}>Friday</option>
+                                                    <option value={6}>Saturday</option>
+                                                    <option value={0}>Sunday</option>
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {formData.frequency === 'MONTHLY' && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="dayOfMonth">Day of Month</Label>
+                                                <select
+                                                    id="dayOfMonth"
+                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                                    value={formData.scheduleDayOfMonth}
+                                                    onChange={(e) => setFormData({ ...formData, scheduleDayOfMonth: parseInt(e.target.value) })}
+                                                >
+                                                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                                                        <option key={day} value={day}>{day}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <p className="text-xs text-muted-foreground">
-                                        A new draft post will be automatically generated based on this frequency.
+                                        Drafts will be generated at this time in your browser's timezone.
                                     </p>
                                 </div>
                             )}

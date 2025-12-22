@@ -138,6 +138,9 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare targetAudience: string | null;
     declare generatedSummaries: string; // JSON string array of last 5 summaries
     declare sourceLinks: string; // JSON string array of reference links
+    declare scheduleTime: string | null;
+    declare scheduleDayOfWeek: number | null;
+    declare scheduleDayOfMonth: number | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -195,6 +198,18 @@ Idea.init({
     sourceLinks: {
         type: DataTypes.TEXT,
         defaultValue: '[]',
+    },
+    scheduleTime: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    scheduleDayOfWeek: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    scheduleDayOfMonth: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
