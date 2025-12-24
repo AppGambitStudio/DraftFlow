@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List, Timer, CheckCircle2 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -20,6 +20,7 @@ interface Idea {
     createdAt: string;
     isRecurring?: boolean;
     frequency?: string;
+    lastGeneratedAt?: string; // Add lastGeneratedAt
     authorUrn?: string;
     authorName?: string;
     targetAudience?: string;
@@ -268,6 +269,44 @@ export default function IdeasPage() {
 
     const groupedIdeas = getGroupedIdeas();
 
+    const getStatusIcon = (idea: Idea) => {
+        if (!idea.isRecurring) return null;
+
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const dayOfMonth = today.getDate();
+
+        let isScheduledForToday = false;
+        if (idea.frequency === 'DAILY') isScheduledForToday = true;
+        else if (idea.frequency === 'WEEKLY' && idea.scheduleDayOfWeek === dayOfWeek) isScheduledForToday = true;
+        else if (idea.frequency === 'MONTHLY' && idea.scheduleDayOfMonth === dayOfMonth) isScheduledForToday = true;
+
+        if (!isScheduledForToday) return null;
+
+        // Check if generated today
+        const lastRun = idea.lastGeneratedAt ? new Date(idea.lastGeneratedAt) : null;
+        const generatedToday = lastRun &&
+            lastRun.getDate() === today.getDate() &&
+            lastRun.getMonth() === today.getMonth() &&
+            lastRun.getFullYear() === today.getFullYear();
+
+        if (generatedToday) {
+            return (
+                <div className="flex items-center gap-1 text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full shrink-0 animate-in fade-in zoom-in-95 duration-500" title="Draft generated for today">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span className="font-medium">Done</span>
+                </div>
+            );
+        }
+
+        return (
+            <div className="flex items-center gap-1 text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full shrink-0 animate-pulse" title="Scheduled for today">
+                <Timer className="h-3 w-3" />
+                <span className="font-medium">Today</span>
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <Toaster />
@@ -348,9 +387,12 @@ export default function IdeasPage() {
                                                         <div className="space-y-1">
                                                             <h3 className="font-semibold leading-none tracking-tight">{idea.title}</h3>
                                                             {idea.isRecurring && (
-                                                                <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
-                                                                    <Repeat className="h-3 w-3" />
-                                                                    <span className="font-medium">{idea.frequency}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
+                                                                        <Repeat className="h-3 w-3" />
+                                                                        <span className="font-medium">{idea.frequency}</span>
+                                                                    </div>
+                                                                    {getStatusIcon(idea)}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -392,9 +434,12 @@ export default function IdeasPage() {
                                                     <div className="flex items-center gap-3 mb-1">
                                                         <h3 className="font-semibold truncate text-base">{idea.title}</h3>
                                                         {idea.isRecurring && (
-                                                            <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
-                                                                <Repeat className="h-3 w-3" />
-                                                                <span className="font-medium">{idea.frequency}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
+                                                                    <Repeat className="h-3 w-3" />
+                                                                    <span className="font-medium">{idea.frequency}</span>
+                                                                </div>
+                                                                {getStatusIcon(idea)}
                                                             </div>
                                                         )}
                                                     </div>

@@ -32,7 +32,30 @@ export default function RootLayout({
                                     {children}
                                 </main>
                             </div>
-                            <Toaster position="bottom-right" />
+                            <Toaster
+                                position="bottom-right"
+                                toastOptions={{
+                                    duration: 4000,
+                                    style: {
+                                        background: '#333',
+                                        color: '#fff',
+                                    },
+                                    success: {
+                                        duration: 3000,
+                                        iconTheme: {
+                                            primary: '#4ade80',
+                                            secondary: '#fff',
+                                        },
+                                    },
+                                    error: {
+                                        duration: 5000,
+                                        iconTheme: {
+                                            primary: '#ef4444',
+                                            secondary: '#fff',
+                                        },
+                                    },
+                                }}
+                            />
                         </AuthorsProvider>
                     </SettingsProvider>
                 </AuthProvider>

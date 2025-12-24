@@ -22,10 +22,11 @@ export default function LoginPage() {
         try {
             const response = await api.post('/user-auth/login', { email, password });
             login(response.data.token, response.data.user);
-            toast.success('Login successful');
+            toast.success('Login successful', { duration: 4000 });
         } catch (error: any) {
             console.error('Login error:', error);
-            toast.error(error.response?.data?.error || 'Login failed');
+            const errorMessage = error.response?.data?.error || error.message || 'Login failed';
+            toast.error(errorMessage, { duration: 4000 });
         } finally {
             setLoading(false);
         }

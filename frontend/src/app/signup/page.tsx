@@ -21,7 +21,7 @@ export default function SignupPage() {
         e.preventDefault();
 
         if (password !== confirmPassword) {
-            toast.error('Passwords do not match');
+            toast.error('Passwords do not match', { duration: 4000 });
             return;
         }
 
@@ -30,10 +30,11 @@ export default function SignupPage() {
         try {
             const response = await api.post('/user-auth/signup', { email, password });
             login(response.data.token, response.data.user);
-            toast.success('Account created successfully');
+            toast.success('Account created successfully', { duration: 4000 });
         } catch (error: any) {
             console.error('Signup error:', error);
-            toast.error(error.response?.data?.error || 'Signup failed');
+            const errorMessage = error.response?.data?.error || error.message || 'Signup failed';
+            toast.error(errorMessage, { duration: 4000 });
         } finally {
             setLoading(false);
         }

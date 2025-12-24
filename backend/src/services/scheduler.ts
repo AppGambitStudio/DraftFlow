@@ -1,9 +1,10 @@
 import cron from 'node-cron';
-import { Post } from '../db';
+import { Post, Idea } from '../db';
 import { linkedinService } from './linkedin';
 import { twitterService } from './twitter';
 import { Op } from 'sequelize';
 import { markdownToUnicode } from '../utils/markdownToUnicode';
+import { AIService } from './ai';
 
 export const startScheduler = () => {
     console.log('Scheduler started...');
@@ -101,8 +102,6 @@ export const startScheduler = () => {
 
 const checkRecurringIdeas = async () => {
     try {
-        const { Idea, Post } = require('../db'); // Lazy load to avoid circular deps if any
-        const { AIService } = require('./ai');
 
         const recurringIdeas = await Idea.findAll({
             where: {
@@ -112,45 +111,41 @@ const checkRecurringIdeas = async () => {
         });
 
         const now = new Date();
+        const currentDayOfWeek = now.getDay(); // 0-6 (Sun-Sat)
+        const currentDayOfMonth = now.getDate();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
 
         for (const idea of recurringIdeas) {
-            let shouldGenerate = false;
-            const lastRun = idea.lastGeneratedAt ? new Date(idea.lastGeneratedAt) : null;
+            try {
+                let shouldGenerate = false;
+                const lastRun = idea.lastGeneratedAt ? new Date(idea.lastGeneratedAt) : null;
 
-            if (!lastRun) {
-                shouldGenerate = true;
-            } else {
-                const diffMs = now.getTime() - lastRun.getTime();
-                const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                // 1. Time Check (Requirement: Current time must be at or after idea.scheduleTime)
+                const timeParts = (idea.scheduleTime || "09:00").split(':');
+                const targetHour = parseInt(timeParts[0] || "9", 10);
+                const targetMinute = parseInt(timeParts[1] || "0", 10);
 
-                if (idea.frequency === 'DAILY' && diffDays >= 1) shouldGenerate = true;
-                if (idea.frequency === 'WEEKLY' && diffDays >= 7) shouldGenerate = true;
-                if (idea.frequency === 'MONTHLY' && diffDays >= 30) shouldGenerate = true;
-            }
+                const timeHasPassed = (currentHour > targetHour) || (currentHour === targetHour && currentMinute >= targetMinute);
 
-            if (shouldGenerate) {
-                console.log(`Generating recurring post for idea: ${idea.title} (${idea.frequency})`);
+                if (isNaN(targetHour) || isNaN(targetMinute) || !timeHasPassed) continue;
 
-                try {
-                    // Optimistic locking: Update lastGeneratedAt BEFORE generation to prevent other workers from picking it up
-                    // We use a transaction or just check if the update affected any rows
-                    // Since we are using Sequelize, we can try to update with a where clause on the old timestamp
+                // 2. Frequency & Recency Check (Requirement: Correct day and not already run today)
+                const hoursSinceLastRun = lastRun ? (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60) : 999999;
 
-                    const [affectedRows] = await Idea.update(
-                        { lastGeneratedAt: now },
-                        {
-                            where: {
-                                id: idea.id,
-                                // Ensure we only update if it hasn't changed since we read it
-                                lastGeneratedAt: idea.lastGeneratedAt
-                            }
-                        }
-                    );
+                if (idea.frequency === 'DAILY') {
+                    if (hoursSinceLastRun >= 23) shouldGenerate = true;
+                } else if (idea.frequency === 'WEEKLY') {
+                    // Check if today is the correct day of week
+                    const dayOfWeekToRun = idea.scheduleDayOfWeek !== null ? idea.scheduleDayOfWeek : 1; // Default Monday
+                    if (currentDayOfWeek === dayOfWeekToRun && hoursSinceLastRun >= 23) shouldGenerate = true;
+                } else if (idea.frequency === 'MONTHLY') {
+                    const dayOfMonthToRun = idea.scheduleDayOfMonth !== null ? idea.scheduleDayOfMonth : 1;
+                    if (currentDayOfMonth === dayOfMonthToRun && hoursSinceLastRun >= 23) shouldGenerate = true;
+                }
 
-                    if (affectedRows === 0) {
-                        console.log(`Skipping idea ${idea.id} - already processed by another worker.`);
-                        continue;
-                    }
+                if (shouldGenerate) {
+                    console.log(`[Scheduler] Generation triggered for Idea ${idea.id}: "${idea.title}" (${idea.frequency})`);
 
                     const prompt = `
                     Write a fresh, engaging LinkedIn post based on this core idea. 
@@ -161,34 +156,43 @@ const checkRecurringIdeas = async () => {
                     Tags: ${idea.tags}
                     `;
 
+                    // Generate content
                     const content = await AIService.improvise(idea.userId as string, prompt);
 
-                    // Schedule for tomorrow same time (or just draft without time?)
-                    // Let's set it to DRAFT with a tentative time of tomorrow 9am
-                    const scheduledTime = new Date();
-                    scheduledTime.setDate(scheduledTime.getDate() + 1);
-                    scheduledTime.setHours(9, 0, 0, 0);
+                    // Calculate next scheduled time for the post
+                    // If generated today, maybe schedule for next occurrence?
+                    // Typically, if we generate it now, we want it to show up as a draft for the NEXT slot.
+                    const postScheduledTime = new Date();
+                    if (idea.frequency === 'DAILY') {
+                        postScheduledTime.setDate(postScheduledTime.getDate() + 1);
+                    } else if (idea.frequency === 'WEEKLY') {
+                        postScheduledTime.setDate(postScheduledTime.getDate() + 7);
+                    } else if (idea.frequency === 'MONTHLY') {
+                        postScheduledTime.setMonth(postScheduledTime.getMonth() + 1);
+                    }
+                    postScheduledTime.setHours(targetHour, targetMinute, 0, 0);
 
+                    // Create Post
                     await Post.create({
                         content,
                         userId: idea.userId,
-                        scheduledTime,
+                        scheduledTime: postScheduledTime,
                         status: 'DRAFT',
                         platforms: JSON.stringify(['LINKEDIN']),
                         authorUrn: idea.authorUrn,
                         authorName: idea.authorName,
                     });
 
-                    console.log(`Recurring post generated for idea ${idea.id}`);
+                    // Update lastGeneratedAt ONLY after success
+                    await idea.update({ lastGeneratedAt: now });
 
-                } catch (error) {
-                    console.error(`Failed to generate recurring post for idea ${idea.id}:`, error);
-                    // Optional: Revert lastGeneratedAt if failed, but maybe safer to just skip till next cycle
+                    console.log(`[Scheduler] Successfully generated draft for Idea ${idea.id}`);
                 }
+            } catch (ideaError: any) {
+                console.error(`[Scheduler] Error processing Idea ${idea.id}:`, ideaError);
             }
         }
-
     } catch (error) {
-        console.error('Error checking recurring ideas:', error);
+        console.error('[Scheduler] Error in checkRecurringIdeas:', error);
     }
 };
