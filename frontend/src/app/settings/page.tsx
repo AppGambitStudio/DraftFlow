@@ -13,6 +13,7 @@ import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
     const [scannedOrgs, setScannedOrgs] = useState<any[]>([]);
+    const [authors, setAuthors] = useState<any[]>([]);
     const [config, setConfig] = useState({
         isLinkedinConfigured: false,
         isTwitterConfigured: false,
@@ -33,11 +34,24 @@ export default function SettingsPage() {
         openRouterApiKey: "",
         openRouterModelId: "",
         targetAudiences: "",
+        maxHistoryItems: 5,
+        globalTone: "",
+        accountTones: {} as Record<string, string>,
     });
 
     useEffect(() => {
         fetchSettings();
+        fetchAuthors();
     }, []);
+
+    const fetchAuthors = async () => {
+        try {
+            const res = await api.get("/settings/linkedin/authors");
+            setAuthors(res.data);
+        } catch (error) {
+            console.error("Failed to fetch authors", error);
+        }
+    };
 
     const fetchSettings = async () => {
         try {
@@ -46,6 +60,9 @@ export default function SettingsPage() {
                 openRouterApiKey: res.data.openRouterApiKey || "",
                 openRouterModelId: res.data.openRouterModelId || "",
                 targetAudiences: res.data.targetAudiences || "",
+                maxHistoryItems: res.data.maxHistoryItems !== undefined ? res.data.maxHistoryItems : 5,
+                globalTone: res.data.globalTone || "",
+                accountTones: res.data.accountTones ? JSON.parse(res.data.accountTones) : {},
             });
             setConfig({
                 isLinkedinConfigured: res.data.isLinkedinConfigured || false,
@@ -202,7 +219,7 @@ export default function SettingsPage() {
                                 <h4 className="text-sm font-medium mb-2">Found {scannedOrgs.length} Organizations:</h4>
                                 <ul className="text-sm space-y-1">
                                     {scannedOrgs.map((org: any) => {
-                                        const id = org.urn.split(':').pop();
+                                        const id = org.urn?.split(':').pop();
                                         return (
                                             <li key={org.urn} className="text-muted-foreground">
                                                 {org.name} ({id})
@@ -331,6 +348,80 @@ export default function SettingsPage() {
 }`}
                                     </code>
                                 </pre>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-4 border-t border-border">
+                            <h3 className="text-lg font-medium">Idea History Settings</h3>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="maxHistoryItems">Previous Posts History (Max items to store/reference)</Label>
+                                    <div className="flex items-center gap-4">
+                                        <Input
+                                            id="maxHistoryItems"
+                                            name="maxHistoryItems"
+                                            type="number"
+                                            min="0"
+                                            max="15"
+                                            value={formData.maxHistoryItems}
+                                            onChange={(e) => setFormData({ ...formData, maxHistoryItems: parseInt(e.target.value) || 0 })}
+                                            className="w-24"
+                                        />
+                                        <span className="text-sm text-muted-foreground">
+                                            {formData.maxHistoryItems === 0
+                                                ? "History disabled. AI will not have context of previous posts."
+                                                : `Storing up to ${formData.maxHistoryItems} recent post summaries per idea.`}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Value from 0 to 15. Higher values provide better variety but consume more AI tokens.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-4 border-t border-border">
+                            <h3 className="text-lg font-medium">Brand Voice</h3>
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="globalTone">Global Tone (Default)</Label>
+                                    <textarea
+                                        id="globalTone"
+                                        name="globalTone"
+                                        value={formData.globalTone}
+                                        onChange={(e) => setFormData({ ...formData, globalTone: e.target.value })}
+                                        className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                        placeholder="e.g. Write in a professional, authoritative yet accessible tone. Use active voice and lead with data points. Avoid corporate buzzwords."
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        This will be used for all AI generations unless a specific account tone is defined below.
+                                    </p>
+                                </div>
+
+                                {authors.length > 0 && (
+                                    <div className="space-y-4">
+                                        <Label>Account-Specific Tones</Label>
+                                        <div className="grid gap-4">
+                                            {authors.filter(a => a.urn).map((author) => (
+                                                <div key={author.urn} className="p-4 border rounded-lg bg-muted/30">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-sm font-semibold">{author.name}</span>
+                                                        <span className="text-[10px] text-muted-foreground opacity-70">{author.urn?.split(':').pop()}</span>
+                                                    </div>
+                                                    <textarea
+                                                        value={formData.accountTones[author.urn] || ""}
+                                                        onChange={(e) => {
+                                                            const newTones = { ...formData.accountTones, [author.urn]: e.target.value };
+                                                            setFormData({ ...formData, accountTones: newTones });
+                                                        }}
+                                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                        placeholder={`Specific tone instructions for ${author.name}...`}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

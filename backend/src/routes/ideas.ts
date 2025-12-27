@@ -1,5 +1,5 @@
 import express, { Response } from 'express';
-import { Idea } from '../db';
+import { Idea, Settings } from '../db';
 import { AIService } from '../services/ai';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
@@ -165,12 +165,41 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
             previousSummaries = [];
         }
 
-        const { content, summary } = await AIService.generate(userId, fullPrompt, targetAudience, previousSummaries, additionalContext);
+        // Fetch user settings
+        const settings = await Settings.findOne({ where: { userId } });
+        const maxHistory = settings?.maxHistoryItems !== undefined ? settings.maxHistoryItems : 5;
+
+        // Determine Tone Instructions
+        let toneInstructions = settings?.globalTone || undefined;
+        if (settings?.accountTones && idea.authorUrn) {
+            try {
+                const accountTones = JSON.parse(settings.accountTones);
+                if (accountTones[idea.authorUrn]) {
+                    toneInstructions = accountTones[idea.authorUrn];
+                }
+            } catch (e) {
+                console.error('Error parsing accountTones:', e);
+            }
+        }
+
+        const { content, summary } = await AIService.generate(
+            userId,
+            fullPrompt,
+            targetAudience,
+            previousSummaries,
+            additionalContext,
+            toneInstructions
+        );
 
         // Update idea with new summary
-        if (summary) {
-            const newSummaries = [...previousSummaries, summary].slice(-5); // Keep last 5
+        if (summary && maxHistory > 0) {
+            const newSummaries = [...previousSummaries, summary].slice(-maxHistory); // Use user setting
             idea.generatedSummaries = JSON.stringify(newSummaries);
+            idea.lastGeneratedAt = new Date();
+            await idea.save();
+        } else if (summary && maxHistory === 0) {
+            // Disabled history
+            idea.generatedSummaries = '[]';
             idea.lastGeneratedAt = new Date();
             await idea.save();
         }

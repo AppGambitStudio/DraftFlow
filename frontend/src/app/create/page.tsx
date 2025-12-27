@@ -54,7 +54,8 @@ export default function CreatePostPage() {
         try {
             const res = await api.post("/ai/improvise", {
                 content,
-                targetAudience: selectedAudience || undefined
+                targetAudience: selectedAudience || undefined,
+                authorUrn: selectedAuthorUrn || undefined
             });
             setContent(res.data.content);
             toast.success("Content improved by AI!");

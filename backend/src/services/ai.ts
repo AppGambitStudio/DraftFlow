@@ -50,7 +50,7 @@ export class AIService {
         }
     }
 
-    static async improvise(userId: string, content: string, targetAudience?: string): Promise<string> {
+    static async improvise(userId: string, content: string, targetAudience?: string, toneInstructions?: string): Promise<string> {
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.
 
@@ -59,6 +59,10 @@ Your task is to refine and enhance an existing LinkedIn post draft while preserv
 
         if (targetAudience) {
             SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the tone, complexity, and value proposition resonate specifically with this audience.\n`;
+        }
+
+        if (toneInstructions) {
+            SYSTEM_PROMPT += `\n**Tone & Writing Style Instructions:**\n${toneInstructions}\nYou MUST strictly follow these specific style guidelines.\n`;
         }
 
         SYSTEM_PROMPT += `
@@ -99,7 +103,14 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         return this.callOpenRouter(userId, SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
     }
 
-    static async generate(userId: string, prompt: string, targetAudience?: string, previousSummaries: string[] = [], additionalContext?: string): Promise<{ content: string, summary: string }> {
+    static async generate(
+        userId: string,
+        prompt: string,
+        targetAudience?: string,
+        previousSummaries: string[] = [],
+        additionalContext?: string,
+        toneInstructions?: string
+    ): Promise<{ content: string; summary: string }> {
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
 
@@ -112,6 +123,10 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
 
         if (additionalContext) {
             SYSTEM_PROMPT += `\n**Additional User Instructions:** ${additionalContext}\nFollow these specific instructions for the post generation.\n`;
+        }
+
+        if (toneInstructions) {
+            SYSTEM_PROMPT += `\n**Tone & Writing Style Instructions:**\n${toneInstructions}\nYou MUST strictly follow these specific style guidelines.\n`;
         }
 
         if (previousSummaries.length > 0) {

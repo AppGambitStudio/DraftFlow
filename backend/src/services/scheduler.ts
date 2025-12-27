@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { Post, Idea } from '../db';
+import { Post, Idea, Settings } from '../db';
 import { linkedinService } from './linkedin';
 import { twitterService } from './twitter';
 import { Op } from 'sequelize';
@@ -156,8 +156,39 @@ const checkRecurringIdeas = async () => {
                     Tags: ${idea.tags}
                     `;
 
-                    // Generate content
-                    const content = await AIService.improvise(idea.userId as string, prompt);
+                    let previousSummaries: string[] = [];
+                    try {
+                        previousSummaries = JSON.parse(idea.generatedSummaries || '[]');
+                    } catch (e) {
+                        previousSummaries = [];
+                    }
+
+                    // Fetch user settings
+                    const settings = await Settings.findOne({ where: { userId: idea.userId } });
+                    const maxHistory = settings?.maxHistoryItems !== undefined ? settings.maxHistoryItems : 5;
+
+                    // Determine Tone Instructions
+                    let toneInstructions = settings?.globalTone || undefined;
+                    if (settings?.accountTones && idea.authorUrn) {
+                        try {
+                            const accountTones = JSON.parse(settings.accountTones);
+                            if (accountTones[idea.authorUrn]) {
+                                toneInstructions = accountTones[idea.authorUrn];
+                            }
+                        } catch (e) {
+                            console.error('Error parsing accountTones:', e);
+                        }
+                    }
+
+                    // Generate content and summary
+                    const { content, summary } = await AIService.generate(
+                        idea.userId as string,
+                        prompt,
+                        idea.targetAudience || undefined,
+                        previousSummaries,
+                        undefined,
+                        toneInstructions
+                    );
 
                     // Calculate next scheduled time for the post
                     // If generated today, maybe schedule for next occurrence?
@@ -183,8 +214,19 @@ const checkRecurringIdeas = async () => {
                         authorName: idea.authorName,
                     });
 
-                    // Update lastGeneratedAt ONLY after success
-                    await idea.update({ lastGeneratedAt: now });
+                    // Update lastGeneratedAt and history ONLY after success
+                    if (maxHistory > 0) {
+                        const newSummaries = [...previousSummaries, summary].slice(-maxHistory);
+                        await idea.update({
+                            lastGeneratedAt: now,
+                            generatedSummaries: JSON.stringify(newSummaries)
+                        });
+                    } else {
+                        await idea.update({
+                            lastGeneratedAt: now,
+                            generatedSummaries: '[]'
+                        });
+                    }
 
                     console.log(`[Scheduler] Successfully generated draft for Idea ${idea.id}`);
                 }

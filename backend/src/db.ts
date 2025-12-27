@@ -65,6 +65,9 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare targetAudiences: string | null; // Comma separated list
     declare linkedinProfile: string | null; // JSON string for "Self" profile
     declare linkedinOrganizations: string | null; // JSON string
+    declare maxHistoryItems: CreationOptional<number>;
+    declare globalTone: string | null;
+    declare accountTones: string | null; // JSON string mapping urn -> instructions
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -100,6 +103,18 @@ Settings.init({
     linkedinOrganizations: {
         type: DataTypes.TEXT,
         defaultValue: '[]',
+    },
+    maxHistoryItems: {
+        type: DataTypes.INTEGER,
+        defaultValue: 5,
+    },
+    globalTone: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    accountTones: {
+        type: DataTypes.TEXT,
+        defaultValue: '{}',
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
