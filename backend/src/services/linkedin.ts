@@ -63,6 +63,54 @@ class LinkedInService {
             throw error;
         }
     }
+
+    async getPostStats(userId: string, postUrns: string[], authorUrn?: string) {
+        if (postUrns.length === 0) return [];
+
+        const setting = await Settings.findOne({ where: { userId } });
+        if (!setting || !setting.linkedinAccessToken) return [];
+
+        const accessToken = setting.linkedinAccessToken;
+        const isOrg = authorUrn?.includes(':organization:');
+
+        // Differentiate between Share URNs and UGC Post URNs
+        const isUgc = postUrns[0]?.includes('urn:li:ugcPost:');
+        const paramName = isUgc ? 'ugcPosts' : 'shares';
+        const sharesParam = encodeURIComponent(`List(${postUrns.join(',')})`);
+
+        let baseUrl = isOrg
+            ? 'https://api.linkedin.com/v2/organizationalEntityShareStatistics'
+            : 'https://api.linkedin.com/v2/shareStatistics';
+
+        let url = `${baseUrl}?${paramName}=${sharesParam}`;
+        if (isOrg) {
+            url += `&organizationalEntity=${encodeURIComponent(authorUrn as string)}`;
+        }
+
+        console.log(`[LinkedInService] CALLING: ${url}`);
+        console.log(`[LinkedInService] Fetching ${paramName} stats for ${postUrns.length} posts. First URN: ${postUrns[0]}`);
+
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'X-Restli-Protocol-Version': '2.0.0',
+                },
+            });
+
+            const results = response.data.elements || [];
+            return results.map((item: any) => ({
+                urn: item.share || item.ugcPost || item.organizationalEntity,
+                likes: item.totalShareStatistics?.likeCount || 0,
+                comments: item.totalShareStatistics?.commentCount || 0,
+                reposts: item.totalShareStatistics?.shareCount || 0,
+                impressions: item.totalShareStatistics?.impressionCount || 0
+            }));
+        } catch (error: any) {
+            console.error(`LinkedIn Stats Error (${paramName}):`, error.response?.data || error.message);
+            return [];
+        }
+    }
 }
 
 export const linkedinService = new LinkedInService();

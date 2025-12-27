@@ -1,6 +1,6 @@
 
 import axios from 'axios';
-import { initDB, Settings } from './db';
+import { initDB, Settings } from '../db';
 
 const run = async () => {
     await initDB();

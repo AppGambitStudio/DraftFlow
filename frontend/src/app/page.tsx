@@ -9,6 +9,7 @@ import { Plus, Pencil } from "lucide-react";
 import { format, isToday, isAfter, startOfToday, endOfToday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PostDetailsModal } from "@/components/PostDetailsModal";
+import { DashboardAnalytics } from "@/components/DashboardAnalytics";
 import toast, { Toaster } from "react-hot-toast";
 
 interface Post {
@@ -101,6 +102,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                {/* ... existing stat cards ... */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Posts</CardTitle>
@@ -150,6 +152,8 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <DashboardAnalytics />
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
                 <div className="col-span-4 space-y-4">

@@ -1,4 +1,4 @@
-import { Post, Settings, initDB } from './db';
+import { Post, Settings, initDB } from '../db';
 
 async function verifyTypes() {
     await initDB();

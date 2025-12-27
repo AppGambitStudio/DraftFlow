@@ -1,6 +1,6 @@
 
-import { Idea, Post, initDB } from './db';
-import { AIService } from './services/ai';
+import { Idea, Post, initDB } from '../db';
+import { AIService } from '../services/ai';
 import crypto from 'crypto';
 
 async function debugWebhook() {

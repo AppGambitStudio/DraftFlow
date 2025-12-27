@@ -1,4 +1,4 @@
-import { sequelize, Settings, Post, initDB } from './db';
+import { sequelize, Settings, Post, initDB } from '../db';
 
 async function testSequelize() {
     console.log('Testing Sequelize ORM...');

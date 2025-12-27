@@ -5,6 +5,7 @@ import { twitterService } from './twitter';
 import { Op } from 'sequelize';
 import { markdownToUnicode } from '../utils/markdownToUnicode';
 import { AIService } from './ai';
+import { analyticsSyncService } from './analyticsSync';
 
 export const startScheduler = () => {
     console.log('Scheduler started...');
@@ -97,6 +98,11 @@ export const startScheduler = () => {
 
         // Check for recurring ideas
         await checkRecurringIdeas();
+    });
+
+    // Run every day at midnight
+    cron.schedule('0 0 * * *', async () => {
+        analyticsSyncService.syncAllRecentPosts();
     });
 };
 

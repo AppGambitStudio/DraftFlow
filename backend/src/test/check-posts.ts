@@ -1,4 +1,4 @@
-import { sequelize, Post } from './db';
+import { sequelize, Post } from '../db';
 
 async function checkPosts() {
     try {

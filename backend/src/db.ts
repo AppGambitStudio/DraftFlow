@@ -138,6 +138,11 @@ export class Post extends Model<InferAttributes<Post>, InferCreationAttributes<P
     declare error: string | null;
     declare authorUrn: string | null;
     declare authorName: string | null;
+    declare likesCount: CreationOptional<number>;
+    declare commentsCount: CreationOptional<number>;
+    declare repostsCount: CreationOptional<number>;
+    declare impressionsCount: CreationOptional<number>;
+    declare lastStatsSyncedAt: CreationOptional<Date | null>;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -177,6 +182,26 @@ Post.init({
     error: DataTypes.TEXT,
     authorUrn: DataTypes.STRING,
     authorName: DataTypes.STRING,
+    likesCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+    },
+    commentsCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+    },
+    repostsCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+    },
+    impressionsCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+    },
+    lastStatsSyncedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {

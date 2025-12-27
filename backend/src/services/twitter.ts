@@ -104,6 +104,30 @@ export class TwitterService {
             throw error;
         }
     }
+
+    async getTweetStats(userId: string, tweetIds: string[]) {
+        if (tweetIds.length === 0) return [];
+
+        await this.initializeClient(userId);
+        if (!this.client) return [];
+
+        try {
+            const response = await this.client.v2.tweets(tweetIds, {
+                'tweet.fields': ['public_metrics']
+            });
+
+            return (response.data || []).map(tweet => ({
+                id: tweet.id,
+                likes: tweet.public_metrics?.like_count || 0,
+                comments: tweet.public_metrics?.reply_count || 0,
+                reposts: tweet.public_metrics?.retweet_count || 0,
+                impressions: tweet.public_metrics?.impression_count || 0
+            }));
+        } catch (error) {
+            console.error('Twitter Stats Error:', error);
+            return [];
+        }
+    }
 }
 
 export const twitterService = new TwitterService();
