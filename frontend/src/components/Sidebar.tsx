@@ -13,6 +13,7 @@ const navItems = [
     { href: "/ideas", label: "Idea Board", icon: Lightbulb },
     { href: "/calendar", label: "Calendar", icon: Calendar },
     { href: "/create", label: "Create Post", icon: PenSquare },
+    { href: "/users", label: "Users", icon: UserIcon },
     { href: "/settings", label: "Settings", icon: Settings },
 ];
 

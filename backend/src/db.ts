@@ -122,6 +122,9 @@ Settings.init({
     sequelize,
     modelName: 'Settings',
     tableName: 'settings',
+    indexes: [
+        { fields: ['userId'] }
+    ]
 });
 
 // Post Model
@@ -208,6 +211,11 @@ Post.init({
     sequelize,
     modelName: 'Post',
     tableName: 'posts',
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['status', 'scheduledTime'] },
+        { fields: ['createdAt'] }
+    ]
 });
 
 // Idea Model
@@ -319,6 +327,11 @@ Idea.init({
     sequelize,
     modelName: 'Idea',
     tableName: 'ideas',
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['isRecurring'] },
+        { fields: ['createdAt'] }
+    ]
 });
 
 // Associations
