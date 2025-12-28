@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import toast, { Toaster } from "react-hot-toast";
+import {
+    Link2,
+    Bot,
+    Zap,
+    Sparkles,
+    History,
+    Target,
+    RefreshCw,
+    AlertCircle
+} from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
 
@@ -131,7 +141,7 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="container max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
             <Toaster />
             <ConfirmationDialog
                 isOpen={disconnectDialog.isOpen}
@@ -143,37 +153,41 @@ export default function SettingsPage() {
                 onCancel={() => setDisconnectDialog({ isOpen: false, platform: null })}
             />
 
-            <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+            <div className="flex flex-col gap-2">
+                <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+                <p className="text-muted-foreground">Manage your connections, AI services, and global content preferences.</p>
+            </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle></CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        {/* LinkedIn Section */}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-lg font-medium">LinkedIn Connection</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Authenticate with your LinkedIn account.
-                                    </p>
-                                </div>
+            <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Platform Connections */}
+                <Card className="overflow-hidden border-slate-200">
+                    <CardHeader className="bg-slate-50/50 border-b">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white rounded-lg border shadow-sm">
+                                <Link2 className="h-5 w-5 text-slate-600" />
                             </div>
-
+                            <div>
+                                <CardTitle>Platform Connections</CardTitle>
+                                <CardDescription>Link your social media profiles to enable cross-platform publishing.</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-6">
+                        {/* LinkedIn */}
+                        <div className="space-y-4">
+                            <Label className="text-sm font-semibold text-slate-900">LinkedIn</Label>
                             {config.isLinkedinConnected ? (
-                                <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50/50 border-green-200">
-                                    <div className="flex items-center gap-2 text-green-700">
-                                        <div className="h-2 w-2 rounded-full bg-green-600" />
-                                        <span className="font-medium">Connected to LinkedIn</span>
+                                <div className="flex items-center justify-between p-4 border rounded-xl bg-green-50/30 border-green-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                                        <span className="font-medium text-green-800">Linked to personal profile</span>
                                     </div>
                                     <Button
                                         type="button"
-                                        variant="outline"
+                                        variant="ghost"
                                         size="sm"
                                         onClick={() => handleDisconnect('linkedin')}
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
                                     >
                                         Disconnect
                                     </Button>
@@ -183,271 +197,319 @@ export default function SettingsPage() {
                                     {config.isLinkedinConfigured ? (
                                         <Button
                                             type="button"
-                                            onClick={() => {
-                                                window.location.href = `${api.defaults.baseURL}/auth/linkedin/connect`;
-                                            }}
+                                            onClick={() => window.location.href = `${api.defaults.baseURL}/auth/linkedin/connect`}
+                                            className="w-full sm:w-auto"
                                         >
-                                            Connect with LinkedIn
+                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            Connect LinkedIn
                                         </Button>
                                     ) : (
-                                        <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-md text-sm text-yellow-800">
-                                            ⚠️ LinkedIn Client ID & Secret not configured in backend .env file.
+                                        <div className="flex items-start gap-3 p-4 border border-amber-200 bg-amber-50 rounded-xl text-amber-800 text-sm">
+                                            <AlertCircle className="h-5 w-5 shrink-0" />
+                                            <p>LinkedIn API credentials are missing. Check your <code>.env</code> file.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleScanLinkedin}
+                                    disabled={loading || !config.isLinkedinConnected}
+                                    className="w-full sm:w-auto"
+                                >
+                                    Scan LinkedIn Pages
+                                </Button>
+                                <p className="text-xs text-muted-foreground">
+                                    Discover pages where you have administrative access.
+                                </p>
+                            </div>
+
+                            {scannedOrgs.length > 0 && (
+                                <div className="p-4 bg-slate-50 border rounded-xl">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Managed Pages ({scannedOrgs.length})</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {scannedOrgs.map((org: any) => (
+                                            <div key={org.urn} className="text-sm p-2 bg-white border rounded-lg shadow-sm truncate">
+                                                {org.name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="h-px bg-slate-100" />
+
+                        {/* Twitter */}
+                        <div className="space-y-4">
+                            <Label className="text-sm font-semibold text-slate-900">Twitter (X)</Label>
+                            {config.isTwitterConnected ? (
+                                <div className="flex items-center justify-between p-4 border rounded-xl bg-green-50/30 border-green-100">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                                        <span className="font-medium text-green-800">Connected</span>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDisconnect('twitter')}
+                                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                    >
+                                        Disconnect
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div>
+                                    {config.isTwitterConfigured ? (
+                                        <Button
+                                            type="button"
+                                            onClick={() => window.location.href = `${api.defaults.baseURL}/auth/twitter/connect`}
+                                            className="w-full sm:w-auto"
+                                        >
+                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            Connect Twitter
+                                        </Button>
+                                    ) : (
+                                        <div className="flex items-start gap-3 p-4 border border-amber-200 bg-amber-50 rounded-xl text-amber-800 text-sm">
+                                            <AlertCircle className="h-5 w-5 shrink-0" />
+                                            <p>Twitter API credentials are missing. Check your <code>.env</code> file.</p>
                                         </div>
                                     )}
                                 </div>
                             )}
                         </div>
+                    </CardContent>
+                </Card>
 
-
-                        <div className="space-y-2 pt-2">
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={handleScanLinkedin}
-                                disabled={loading || !config.isLinkedinConnected}
-                                className="w-full sm:w-auto"
-                            >
-                                Scan for Organizations
-                            </Button>
-                            <p className="text-xs text-muted-foreground">
-                                Fetch the list of LinkedIn Pages you manage.
-                            </p>
-                        </div>
-
-                        {scannedOrgs.length > 0 && (
-                            <div className="mt-4 p-4 bg-muted rounded-md">
-                                <h4 className="text-sm font-medium mb-2">Found {scannedOrgs.length} Organizations:</h4>
-                                <ul className="text-sm space-y-1">
-                                    {scannedOrgs.map((org: any) => {
-                                        const id = org.urn?.split(':').pop();
-                                        return (
-                                            <li key={org.urn} className="text-muted-foreground">
-                                                {org.name} ({id})
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
+                {/* AI Configuration */}
+                <Card className="overflow-hidden border-slate-200">
+                    <CardHeader className="bg-slate-50/50 border-b">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white rounded-lg border shadow-sm">
+                                <Bot className="h-5 w-5 text-indigo-600" />
                             </div>
-                        )}
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-medium">Twitter Connection</h3>
-                            </div>
-
-                            <div className="pt-2">
-                                {config.isTwitterConnected ? ( // Checking connection flag
-                                    <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50/50 border-green-200">
-                                        <div className="flex items-center gap-2 text-green-700">
-                                            <div className="h-2 w-2 rounded-full bg-green-600" />
-                                            <span className="font-medium">Connected to Twitter</span>
-                                        </div>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleDisconnect('twitter')}
-                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                        >
-                                            Disconnect
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div>
-                                        {config.isTwitterConfigured ? (
-                                            <Button
-                                                type="button"
-                                                onClick={() => {
-                                                    window.location.href = `${api.defaults.baseURL}/auth/twitter/connect`;
-                                                }}
-                                            >
-                                                Connect with Twitter
-                                            </Button>
-                                        ) : (
-                                            <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-md text-sm text-yellow-800">
-                                                ⚠️ Twitter Client ID & Secret not configured in backend .env file.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            <p className="text-xs text-muted-foreground pt-2">
-                                For Twitter API v2, ensure you have set up OAuth 2.0 with the correct Redirect URI in the Developer Portal.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-medium">OpenRouter Configuration</h3>
-                            </div>
-                            <Label htmlFor="openRouterApiKey">OpenRouter API Key</Label>
-                            <Input
-                                id="openRouterApiKey"
-                                name="openRouterApiKey"
-                                type="password"
-                                value={formData.openRouterApiKey}
-                                onChange={handleChange}
-                                placeholder="Enter OpenRouter API Key"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Required for AI features (Smart Writing). Get one at <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="underline hover:text-primary">openrouter.ai</a>.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="openRouterModelId">OpenRouter Model ID</Label>
-                            <Input
-                                id="openRouterModelId"
-                                name="openRouterModelId"
-                                value={formData.openRouterModelId}
-                                onChange={handleChange}
-                                placeholder="anthropic/claude-sonnet-4.5"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Optional. Defaults to <code>anthropic/claude-sonnet-4.5</code> if left empty.
-                            </p>
-                        </div>
-
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <h3 className="text-lg font-medium">Webhook Integration</h3>
-                            <div className="rounded-md bg-muted p-4">
-                                <p className="text-sm font-medium mb-2">Save Idea Endpoint</p>
-                                <code className="relative rounded bg-muted-foreground/20 px-[0.3rem] py-[0.2rem] font-mono text-sm">
-                                    {typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5002/api/webhooks/idea` : '/api/webhooks/idea'}
-                                </code>
-                                <p className="text-xs text-muted-foreground mt-2">
-                                    Send a POST request with the following JSON body to automatically create an idea and draft post.
-                                </p>
-                                <pre className="mt-2 w-full rounded-md bg-slate-950 p-4 overflow-x-auto">
-                                    <code className="text-white text-xs">
-                                        {`{
-  "title": "Idea Title",
-  "summary": "Description...",
-  "tags": ["tag1", "tag2"],
-  "source": "n8n:source-name"
-}`}
-                                    </code>
-                                </pre>
-                            </div>
-
-                            <div className="rounded-md bg-muted p-4 mt-4">
-                                <p className="text-sm font-medium mb-2">Direct Schedule Endpoint</p>
-                                <code className="relative rounded bg-muted-foreground/20 px-[0.3rem] py-[0.2rem] font-mono text-sm">
-                                    {typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:5002/api/webhooks/schedule` : '/api/webhooks/schedule'}
-                                </code>
-                                <p className="text-xs text-muted-foreground mt-2">
-                                    Send a POST request to directly schedule a post.
-                                </p>
-                                <pre className="mt-2 w-full rounded-md bg-slate-950 p-4 overflow-x-auto">
-                                    <code className="text-white text-xs">
-                                        {`{
-  "content": "Post content...",
-  "scheduledTime": "2025-12-25T10:00:00Z", // Optional (defaults to +24h)
-  "platforms": ["LINKEDIN"], // Optional
-  "authorUrn": "urn:li:person:..." // Optional
-}`}
-                                    </code>
-                                </pre>
+                            <div>
+                                <CardTitle>AI Writing Engine</CardTitle>
+                                <CardDescription>Configure OpenRouter to power intelligent post drafts and research.</CardDescription>
                             </div>
                         </div>
-
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <h3 className="text-lg font-medium">Idea History Settings</h3>
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="maxHistoryItems">Previous Posts History (Max items to store/reference)</Label>
-                                    <div className="flex items-center gap-4">
-                                        <Input
-                                            id="maxHistoryItems"
-                                            name="maxHistoryItems"
-                                            type="number"
-                                            min="0"
-                                            max="15"
-                                            value={formData.maxHistoryItems}
-                                            onChange={(e) => setFormData({ ...formData, maxHistoryItems: parseInt(e.target.value) || 0 })}
-                                            className="w-24"
-                                        />
-                                        <span className="text-sm text-muted-foreground">
-                                            {formData.maxHistoryItems === 0
-                                                ? "History disabled. AI will not have context of previous posts."
-                                                : `Storing up to ${formData.maxHistoryItems} recent post summaries per idea.`}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        Value from 0 to 15. Higher values provide better variety but consume more AI tokens.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <h3 className="text-lg font-medium">Brand Voice</h3>
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <Label htmlFor="globalTone">Global Tone (Default)</Label>
-                                    <textarea
-                                        id="globalTone"
-                                        name="globalTone"
-                                        value={formData.globalTone}
-                                        onChange={(e) => setFormData({ ...formData, globalTone: e.target.value })}
-                                        className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                        placeholder="e.g. Write in a professional, authoritative yet accessible tone. Use active voice and lead with data points. Avoid corporate buzzwords."
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        This will be used for all AI generations unless a specific account tone is defined below.
-                                    </p>
-                                </div>
-
-                                {authors.length > 0 && (
-                                    <div className="space-y-4">
-                                        <Label>Account-Specific Tones</Label>
-                                        <div className="grid gap-4">
-                                            {authors.filter(a => a.urn).map((author) => (
-                                                <div key={author.urn} className="p-4 border rounded-lg bg-muted/30">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <span className="text-sm font-semibold">{author.name}</span>
-                                                        <span className="text-[10px] text-muted-foreground opacity-70">{author.urn?.split(':').pop()}</span>
-                                                    </div>
-                                                    <textarea
-                                                        value={formData.accountTones[author.urn] || ""}
-                                                        onChange={(e) => {
-                                                            const newTones = { ...formData.accountTones, [author.urn]: e.target.value };
-                                                            setFormData({ ...formData, accountTones: newTones });
-                                                        }}
-                                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                        placeholder={`Specific tone instructions for ${author.name}...`}
-                                                    />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="space-y-2 pt-4 border-t border-border">
-                            <h3 className="text-lg font-medium">Audience Targeting</h3>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="space-y-2">
-                                <Label htmlFor="targetAudiences">Post Audiences (Comma Separated)</Label>
-                                <textarea
-                                    id="targetAudiences"
-                                    name="targetAudiences"
-                                    value={formData.targetAudiences}
-                                    onChange={(e) => setFormData({ ...formData, targetAudiences: e.target.value })}
-                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                    placeholder="e.g. CTOs, Startup Founders, Software Engineers, Marketing Managers"
+                                <Label htmlFor="openRouterApiKey">OpenRouter API Key</Label>
+                                <Input
+                                    id="openRouterApiKey"
+                                    name="openRouterApiKey"
+                                    type="password"
+                                    value={formData.openRouterApiKey}
+                                    onChange={handleChange}
+                                    placeholder="sk-or-v1-..."
+                                    className="bg-slate-50/30"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    Define your post audiences here. You can select one when creating a post to tailor the AI content generation.
+                                    Get your key from <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">openrouter.ai</a>
+                                </p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="openRouterModelId">Model Preference</Label>
+                                <Input
+                                    id="openRouterModelId"
+                                    name="openRouterModelId"
+                                    value={formData.openRouterModelId}
+                                    onChange={handleChange}
+                                    placeholder="anthropic/claude-3.5-sonnet"
+                                    className="bg-slate-50/30"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Recommended: <code>anthropic/claude-3.5-sonnet</code>
                                 </p>
                             </div>
                         </div>
-                        <Button type="submit" disabled={loading}>
-                            {loading ? "Saving..." : "Save Changes"}
-                        </Button>
-                    </form>
-                </CardContent>
-            </Card >
-        </div >
+                    </CardContent>
+                </Card>
+
+                {/* Content Strategy */}
+                <Card className="overflow-hidden border-slate-200">
+                    <CardHeader className="bg-slate-50/50 border-b">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white rounded-lg border shadow-sm">
+                                <Sparkles className="h-5 w-5 text-fuchsia-600" />
+                            </div>
+                            <div>
+                                <CardTitle>Content Strategy & Voice</CardTitle>
+                                <CardDescription>Define how the AI writes for you and how much previous context it should remember.</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-8">
+                        {/* History */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <History className="h-4 w-4 text-slate-400" />
+                                    <Label className="text-sm font-semibold">Context Awareness</Label>
+                                </div>
+                                <div className="space-y-3">
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        max="15"
+                                        value={formData.maxHistoryItems}
+                                        onChange={(e) => setFormData({ ...formData, maxHistoryItems: parseInt(e.target.value) || 0 })}
+                                        className="w-24 bg-slate-50/30"
+                                    />
+                                    <p className="text-xs text-muted-foreground leading-relaxed">
+                                        Max historical snapshots to store per idea. 0 disables context; higher values (up to 15) increase variety but use more tokens.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Audience */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <Target className="h-4 w-4 text-slate-400" />
+                                    <Label className="text-sm font-semibold">Audience Segments</Label>
+                                </div>
+                                <textarea
+                                    value={formData.targetAudiences}
+                                    onChange={(e) => setFormData({ ...formData, targetAudiences: e.target.value })}
+                                    className="flex min-h-[80px] w-full rounded-xl border border-input bg-slate-50/30 px-3 py-2 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                                    placeholder="CTOs, Startup Founders, Product Mangers..."
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Comma-separated list of your ideal readers.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="h-px bg-slate-100" />
+
+                        {/* Tone */}
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">Global Brand Voice</Label>
+                                <textarea
+                                    value={formData.globalTone}
+                                    onChange={(e) => setFormData({ ...formData, globalTone: e.target.value })}
+                                    className="flex min-h-[120px] w-full rounded-xl border border-input bg-slate-50/30 px-4 py-3 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                                    placeholder="Describe your tone: authoritative, witty, data-driven, etc."
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    The default style used whenever you generate a post.
+                                </p>
+                            </div>
+
+                            {authors.length > 0 && (
+                                <div className="space-y-4">
+                                    <Label className="text-sm font-semibold">Account Specific Personalities</Label>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        {authors.filter(a => a.urn).map((author) => (
+                                            <div key={author.urn} className="p-4 border rounded-xl bg-slate-50/50 space-y-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 uppercase">
+                                                        {author.name.charAt(0)}
+                                                    </div>
+                                                    <span className="text-sm font-medium">{author.name}</span>
+                                                </div>
+                                                <textarea
+                                                    value={formData.accountTones[author.urn] || ""}
+                                                    onChange={(e) => {
+                                                        const newTones = { ...formData.accountTones, [author.urn]: e.target.value };
+                                                        setFormData({ ...formData, accountTones: newTones });
+                                                    }}
+                                                    className="flex min-h-[80px] w-full rounded-lg border border-input bg-white px-3 py-2 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                                                    placeholder="Custom tone for this specifically..."
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Automation & Webhooks */}
+                <Card className="overflow-hidden border-slate-200">
+                    <CardHeader className="bg-slate-50/50 border-b">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white rounded-lg border shadow-sm">
+                                <Zap className="h-5 w-5 text-amber-500" />
+                            </div>
+                            <div>
+                                <CardTitle>Automation Webhooks</CardTitle>
+                                <CardDescription>Streamline content creation by sending ideas directly from n8n, Zapier, or custom scripts.</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-8">
+                        {/* Save Idea */}
+                        <div className="space-y-3">
+                            <h4 className="text-sm font-semibold flex items-center gap-2">
+                                <RefreshCw className="h-4 w-4 text-slate-400" />
+                                Idea Ingestion
+                            </h4>
+                            <div className="p-4 bg-slate-900 rounded-xl space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <code className="text-amber-400 text-xs font-mono">
+                                        POST /api/webhooks/idea
+                                    </code>
+                                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">Raw Payload</span>
+                                </div>
+                                <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
+                                    {`{
+  "title": "Scaling Node.js apps",
+  "summary": "Context about memory limits...",
+  "tags": ["cloud", "devops"]
+}`}
+                                </pre>
+                            </div>
+                            <p className="text-xs text-muted-foreground italic">
+                                Automatically creates a persistent idea on your board.
+                            </p>
+                        </div>
+
+                        {/* Direct Schedule */}
+                        <div className="space-y-3">
+                            <h4 className="text-sm font-semibold flex items-center gap-2">
+                                <RefreshCw className="h-4 w-4 text-slate-400" />
+                                Instant Scheduler
+                            </h4>
+                            <div className="p-4 bg-slate-900 rounded-xl space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <code className="text-indigo-400 text-xs font-mono">
+                                        POST /api/webhooks/schedule
+                                    </code>
+                                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">API Context</span>
+                                </div>
+                                <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
+                                    {`{
+  "content": "Fully written post logic...",
+  "scheduledTime": "ISO-TIMESTAMP",
+  "platforms": ["LINKEDIN"]
+}`}
+                                </pre>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Sticky Save Bar */}
+                <div className="sticky bottom-6 flex justify-end">
+                    <Button
+                        type="submit"
+                        disabled={loading}
+                        className="shadow-xl px-12 h-12 rounded-full font-bold bg-indigo-600 hover:bg-indigo-700 transition-all hover:scale-105"
+                    >
+                        {loading ? "Saving Changes..." : "Save All Settings"}
+                    </Button>
+                </div>
+            </form>
+        </div>
     );
 }
