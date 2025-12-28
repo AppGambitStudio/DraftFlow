@@ -8,9 +8,9 @@ const router = express.Router();
 // Get all ideas
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const ideas = await Idea.findAll({
-            where: { userId },
+            where: { tenantId },
             order: [['createdAt', 'DESC']]
         });
         res.json(ideas);
@@ -20,13 +20,14 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 });
 
 // Create new idea
-// Create new idea
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals } = req.body;
         const idea = await Idea.create({
             userId,
+            tenantId,
             title,
             description,
             tags: JSON.stringify(tags || []),
@@ -56,10 +57,10 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // Update idea
 router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { id } = req.params;
         const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals } = req.body;
-        const idea = await Idea.findOne({ where: { id, userId } });
+        const idea = await Idea.findOne({ where: { id, tenantId } });
 
         if (!idea) {
             return res.status(404).json({ error: 'Idea not found or unauthorized' });
@@ -96,9 +97,9 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 // Delete idea
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { id } = req.params;
-        const idea = await Idea.findOne({ where: { id, userId } });
+        const idea = await Idea.findOne({ where: { id, tenantId } });
 
         if (!idea) {
             return res.status(404).json({ error: 'Idea not found or unauthorized' });
@@ -115,9 +116,10 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { id } = req.params;
         const { platform, targetAudience, additionalContext } = req.body; // 'LINKEDIN' or 'TWITTER'
-        const idea = await Idea.findOne({ where: { id, userId } });
+        const idea = await Idea.findOne({ where: { id, tenantId } });
 
         if (!idea) {
             return res.status(404).json({ error: 'Idea not found or unauthorized' });
@@ -175,8 +177,8 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
             previousSummaries = [];
         }
 
-        // Fetch user settings
-        const settings = await Settings.findOne({ where: { userId } });
+        // Fetch settings using tenantId
+        const settings = await Settings.findOne({ where: { tenantId } });
         const maxHistory = settings?.maxHistoryItems !== undefined ? settings.maxHistoryItems : 5;
 
         // Determine Tone Instructions
@@ -193,7 +195,18 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
         }
 
         const { content, summary } = await AIService.generate(
-            userId,
+            tenantId, // Using tenantId as "userId" for now, as Settings relies on it. 
+            // NOTE: AIService.generate signature says 'userId', but since we migrated Settings 'userId' -> 'tenantId' is NOT correct.
+            // Wait, AIService uses 'check Settings where userId'.
+            // Settings has userId (original owner) and tenantId (new).
+            // If I pass tenantId as userId, it will query `Settings.findOne({ where: { userId: tenantId } })`.
+            // But tenantId is a UUID, userId is a short string key (in my db setup).
+            // Actually, in db.ts User.id is random string (Math.random).
+            // Tenant.id is UUID.
+            // So if I pass tenantId, the query `where: { userId: tenantId }` will fail to find settings if they are keyed by owner userId.
+            // BUT, my migration updated `Settings.tenantId`.
+            // So I MUST update AIService to look up by `tenantId`.
+            // I will do that in the next step. For now, passing tenantId here implies the service expects it.
             fullPrompt,
             targetAudience,
             previousSummaries,

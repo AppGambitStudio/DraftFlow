@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { start, end } = req.query;
 
         if (!start || !end) {
@@ -21,7 +21,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
         const posts = await Post.findAll({
             where: {
-                userId,
+                tenantId,
                 status: 'PUBLISHED',
                 scheduledTime: {
                     [Op.between]: [startDate, endDate]
@@ -63,7 +63,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         // Top performing posts
         const topPosts = await Post.findAll({
             where: {
-                userId,
+                tenantId,
                 status: 'PUBLISHED',
                 [Op.or]: [
                     { linkedinPostId: { [Op.not]: null } },

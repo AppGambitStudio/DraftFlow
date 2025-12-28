@@ -46,10 +46,127 @@ User.init({
     tableName: 'users',
 });
 
+// Tenant Model
+export class Tenant extends Model<InferAttributes<Tenant>, InferCreationAttributes<Tenant>> {
+    declare id: CreationOptional<string>;
+    declare name: string;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+Tenant.init({
+    id: {
+        type: DataTypes.STRING,
+        primaryKey: true,
+        defaultValue: DataTypes.UUIDV4,
+    },
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'My Workspace',
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'Tenant',
+    tableName: 'tenants',
+});
+
+// TenantMember Model
+export class TenantMember extends Model<InferAttributes<TenantMember>, InferCreationAttributes<TenantMember>> {
+    declare id: CreationOptional<number>;
+    declare userId: ForeignKey<User['id']>;
+    declare tenantId: ForeignKey<Tenant['id']>;
+    declare role: string; // OWNER, ADMIN, EDITOR
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+TenantMember.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    userId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    role: {
+        type: DataTypes.STRING,
+        defaultValue: 'OWNER',
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'TenantMember',
+    tableName: 'tenant_members',
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['tenantId'] }
+    ]
+});
+
+// Invitation Model
+export class Invitation extends Model<InferAttributes<Invitation>, InferCreationAttributes<Invitation>> {
+    declare id: CreationOptional<number>;
+    declare email: string;
+    declare tenantId: ForeignKey<Tenant['id']>;
+    declare token: string;
+    declare role: string;
+    declare status: string; // PENDING, ACCEPTED
+    declare expiresAt: Date;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+Invitation.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    token: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+    },
+    role: {
+        type: DataTypes.STRING,
+        defaultValue: 'ADMIN',
+    },
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: 'PENDING',
+    },
+    expiresAt: DataTypes.DATE,
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'Invitation',
+    tableName: 'invitations',
+});
+
 // Settings Model
 export class Settings extends Model<InferAttributes<Settings>, InferCreationAttributes<Settings>> {
     declare id: CreationOptional<number>;
     declare userId: ForeignKey<User['id']> | null;
+    declare tenantId: ForeignKey<Tenant['id']> | null; // Added
     declare linkedinClientId: string | null;
     declare linkedinClientSecret: string | null;
     declare linkedinAccessToken: string | null;
@@ -82,6 +199,10 @@ Settings.init({
         type: DataTypes.STRING,
         allowNull: true, // Initially allow null for migration
         unique: true,
+    },
+    tenantId: { // Added
+        type: DataTypes.STRING,
+        allowNull: true,
     },
     linkedinClientId: DataTypes.STRING,
     linkedinClientSecret: DataTypes.STRING,
@@ -131,6 +252,7 @@ Settings.init({
 export class Post extends Model<InferAttributes<Post>, InferCreationAttributes<Post>> {
     declare id: CreationOptional<number>;
     declare userId: ForeignKey<User['id']> | null;
+    declare tenantId: ForeignKey<Tenant['id']> | null; // Added
     declare content: string;
     declare mediaUrls: string | null; // JSON string
     declare scheduledTime: Date;
@@ -157,6 +279,10 @@ Post.init({
         primaryKey: true,
     },
     userId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    tenantId: { // Added
         type: DataTypes.STRING,
         allowNull: true,
     },
@@ -222,6 +348,7 @@ Post.init({
 export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<Idea>> {
     declare id: CreationOptional<number>;
     declare userId: ForeignKey<User['id']> | null;
+    declare tenantId: ForeignKey<Tenant['id']> | null; // Added
     declare title: string;
     declare description: string | null;
     declare tags: string; // JSON string
@@ -254,6 +381,10 @@ Idea.init({
         primaryKey: true,
     },
     userId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    tenantId: { // Added
         type: DataTypes.STRING,
         allowNull: true,
     },
@@ -343,6 +474,25 @@ Post.belongsTo(User, { foreignKey: 'userId' });
 
 User.hasMany(Idea, { foreignKey: 'userId' });
 Idea.belongsTo(User, { foreignKey: 'userId' });
+
+// Tenant Associations
+User.hasMany(TenantMember, { foreignKey: 'userId' });
+TenantMember.belongsTo(User, { foreignKey: 'userId' });
+
+Tenant.hasMany(TenantMember, { foreignKey: 'tenantId' });
+TenantMember.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+Tenant.hasMany(Post, { foreignKey: 'tenantId' });
+Post.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+Tenant.hasMany(Idea, { foreignKey: 'tenantId' });
+Idea.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+Tenant.hasMany(Settings, { foreignKey: 'tenantId' });
+Settings.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+Tenant.hasMany(Invitation, { foreignKey: 'tenantId' });
+Invitation.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
 // Sync database
 export const initDB = async () => {

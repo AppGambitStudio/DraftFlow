@@ -9,9 +9,9 @@ const router = express.Router();
 // Get all posts
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const allPosts = await Post.findAll({
-            where: { userId },
+            where: { tenantId },
             order: [['scheduledTime', 'ASC']]
         });
         res.json(allPosts);
@@ -23,10 +23,12 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 // Create a post
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
+    const tenantId = req.tenantId!;
     const { content, scheduledTime, platforms } = req.body;
     try {
         const post = await Post.create({
             userId,
+            tenantId,
             content,
             scheduledTime: new Date(scheduledTime),
             status: 'SCHEDULED',
@@ -42,11 +44,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // Update a post
 router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
     const { content, scheduledTime, mediaUrls, status } = req.body;
     try {
-        const post = await Post.findOne({ where: { id, userId } });
+        const post = await Post.findOne({ where: { id, tenantId } });
         if (!post) {
             return res.status(404).json({ error: 'Post not found or unauthorized' });
         }
@@ -58,7 +60,6 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
         post.authorName = req.body.authorName !== undefined ? req.body.authorName : post.authorName;
 
         // If status is provided, use it. Otherwise, if it was FAILED and we're updating, reset to SCHEDULED.
-        // If status is provided, use it.
         if (status !== undefined) {
             post.status = status;
         } else {
@@ -81,10 +82,10 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // Delete a post
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
     try {
-        const post = await Post.findOne({ where: { id, userId } });
+        const post = await Post.findOne({ where: { id, tenantId } });
         if (post) {
             await post.destroy();
         }
@@ -96,16 +97,17 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
 
 // Publish a post immediately
 router.post('/:id/publish', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
+    const tenantId = req.tenantId!;
     const { id } = req.params;
     try {
-        const post = await Post.findOne({ where: { id, userId } });
+        const post = await Post.findOne({ where: { id, tenantId } });
         if (!post) {
             return res.status(404).json({ error: 'Post not found or unauthorized' });
         }
 
         const contentToPublish = markdownToUnicode(post.content);
-        const linkedinId = await linkedinService.publishPost(userId, contentToPublish, post.authorUrn || undefined);
+        // Note: We pass tenantId instead of userId now
+        const linkedinId = await linkedinService.publishPost(tenantId, contentToPublish, post.authorUrn || undefined);
 
         post.linkedinPostId = linkedinId;
 
@@ -117,7 +119,7 @@ router.post('/:id/publish', authMiddleware, async (req: AuthRequest, res: Respon
     } catch (error: any) {
         console.error('Publish Now Error:', error);
         try {
-            const post = await Post.findOne({ where: { id, userId } });
+            const post = await Post.findOne({ where: { id, tenantId } });
             if (post) {
                 post.status = 'FAILED';
                 post.error = error.message;

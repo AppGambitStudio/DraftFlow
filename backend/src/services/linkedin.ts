@@ -2,8 +2,8 @@ import axios from 'axios';
 import { Settings } from '../db';
 
 class LinkedInService {
-    async publishPost(userId: string, content: string, authorUrn?: string) {
-        const setting = await Settings.findOne({ where: { userId } });
+    async publishPost(tenantId: string, content: string, authorUrn?: string) {
+        const setting = await Settings.findOne({ where: { tenantId } });
 
         if (!setting || !setting.linkedinAccessToken) {
             throw new Error('LinkedIn access token not found in settings.');
@@ -64,10 +64,10 @@ class LinkedInService {
         }
     }
 
-    async getPostStats(userId: string, postUrns: string[], authorUrn?: string) {
+    async getPostStats(tenantId: string, postUrns: string[], authorUrn?: string) {
         if (postUrns.length === 0) return [];
 
-        const setting = await Settings.findOne({ where: { userId } });
+        const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return [];
 
         const accessToken = setting.linkedinAccessToken;
@@ -122,8 +122,8 @@ class LinkedInService {
      * Optional: Fetch detailed social actions if aggregate fails or for specific deeper insights.
      * Follows the practice: GET https://api.linkedin.com/rest/socialActions/{urn}/comments
      */
-    async getDetailedSocialActions(userId: string, activityUrn: string) {
-        const setting = await Settings.findOne({ where: { userId } });
+    async getDetailedSocialActions(tenantId: string, activityUrn: string) {
+        const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return null;
 
         // Ensure we're using the activity URN format as requested in step 1 of practices
@@ -156,8 +156,8 @@ class LinkedInService {
         }
     }
 
-    async getRecentPosts(userId: string, authorUrn?: string, count: number = 20) {
-        const setting = await Settings.findOne({ where: { userId } });
+    async getRecentPosts(tenantId: string, authorUrn?: string, count: number = 20) {
+        const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return [];
 
         const accessToken = setting.linkedinAccessToken;

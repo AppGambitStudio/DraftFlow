@@ -8,8 +8,8 @@ const router = express.Router();
 // Get settings
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
-        const setting = await Settings.findOne({ where: { userId } });
+        const tenantId = req.tenantId!;
+        const setting = await Settings.findOne({ where: { tenantId } });
         const data = (setting ? setting.toJSON() : {}) as any;
 
         // Connection flags
@@ -46,17 +46,19 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // Update settings
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
+    const tenantId = req.tenantId!;
     const {
         openRouterApiKey, openRouterModelId, targetAudiences, maxHistoryItems,
         globalTone, accountTones
     } = req.body;
-    console.log('Received settings update for user:', userId);
+    console.log('Received settings update for tenant:', tenantId);
 
     try {
         const [setting] = await Settings.findOrCreate({
-            where: { userId },
+            where: { tenantId },
             defaults: {
+                userId: req.user!.id, // Set initial creator as userId reference
+                tenantId,
                 openRouterApiKey,
                 openRouterModelId,
                 targetAudiences,
@@ -84,11 +86,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // Disconnect platform
 router.post('/disconnect', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
+    const tenantId = req.tenantId!;
     const { platform } = req.body;
 
     try {
-        const setting = await Settings.findOne({ where: { userId } });
+        const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting) {
             return res.status(404).json({ error: 'Settings not found' });
         }
@@ -118,8 +120,8 @@ router.post('/disconnect', authMiddleware, async (req: AuthRequest, res: Respons
 // Get available LinkedIn authors (Self + Organizations)
 router.get('/linkedin/authors', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
-        const setting = await Settings.findOne({ where: { userId } });
+        const tenantId = req.tenantId!;
+        const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) {
             return res.status(401).json({ error: 'LinkedIn not connected' });
         }
@@ -157,8 +159,8 @@ router.get('/linkedin/authors', authMiddleware, async (req: AuthRequest, res: Re
 // Scan for LinkedIn Organizations
 router.post('/linkedin/scan', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
-        const setting = await Settings.findOne({ where: { userId } });
+        const tenantId = req.tenantId!;
+        const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) {
             return res.status(401).json({ error: 'LinkedIn not connected' });
         }

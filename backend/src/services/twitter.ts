@@ -4,8 +4,8 @@ import { Settings } from '../db';
 export class TwitterService {
     private client: TwitterApi | null = null;
 
-    private async initializeClient(userId: string) {
-        const settings = await Settings.findOne({ where: { userId } });
+    private async initializeClient(tenantId: string) {
+        const settings = await Settings.findOne({ where: { tenantId } });
         if (settings?.twitterAccessToken) {
             // Initialize with access token for posting
             this.client = new TwitterApi(settings.twitterAccessToken);
@@ -18,8 +18,8 @@ export class TwitterService {
         }
     }
 
-    async getAuthUrl(userId: string, callbackUrl: string) {
-        const settings = await Settings.findOne({ where: { userId } });
+    async getAuthUrl(tenantId: string, callbackUrl: string) {
+        const settings = await Settings.findOne({ where: { tenantId } });
         if (!settings?.twitterClientId || !settings?.twitterClientSecret) {
             throw new Error('Twitter Client ID and Secret are required');
         }
@@ -37,8 +37,8 @@ export class TwitterService {
         return { url, codeVerifier, state };
     }
 
-    async getAccessToken(userId: string, code: string, codeVerifier: string, callbackUrl: string) {
-        const settings = await Settings.findOne({ where: { userId } });
+    async getAccessToken(tenantId: string, code: string, codeVerifier: string, callbackUrl: string) {
+        const settings = await Settings.findOne({ where: { tenantId } });
         if (!settings?.twitterClientId || !settings?.twitterClientSecret) {
             throw new Error('Twitter Client ID and Secret are required');
         }
@@ -57,8 +57,8 @@ export class TwitterService {
         return { accessToken, refreshToken, expiresIn };
     }
 
-    async refreshAccessToken(userId: string) {
-        const settings = await Settings.findOne({ where: { userId } });
+    async refreshAccessToken(tenantId: string) {
+        const settings = await Settings.findOne({ where: { tenantId } });
         if (!settings?.twitterClientId || !settings?.twitterClientSecret || !settings?.twitterRefreshToken) {
             throw new Error('Missing credentials for refresh');
         }
@@ -81,19 +81,19 @@ export class TwitterService {
         return accessToken;
     }
 
-    async publishTweet(userId: string, content: string) {
+    async publishTweet(tenantId: string, content: string) {
         // Re-initialize to ensure we have the latest token
-        await this.initializeClient(userId);
+        await this.initializeClient(tenantId);
 
         if (!this.client) {
             throw new Error('Twitter client not initialized');
         }
 
         // Check if token needs refresh
-        const settings = await Settings.findOne({ where: { userId } });
+        const settings = await Settings.findOne({ where: { tenantId } });
         if (settings?.twitterExpiresAt && new Date() > settings.twitterExpiresAt) {
             console.log('Refreshing Twitter token...');
-            await this.refreshAccessToken(userId);
+            await this.refreshAccessToken(tenantId);
         }
 
         try {
@@ -105,10 +105,10 @@ export class TwitterService {
         }
     }
 
-    async getTweetStats(userId: string, tweetIds: string[]) {
+    async getTweetStats(tenantId: string, tweetIds: string[]) {
         if (tweetIds.length === 0) return [];
 
-        await this.initializeClient(userId);
+        await this.initializeClient(tenantId);
         if (!this.client) return [];
 
         try {

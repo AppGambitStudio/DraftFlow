@@ -19,9 +19,9 @@ const navItems = [
 
 export function Sidebar() {
     const pathname = usePathname();
-    const { user, logout } = useAuth();
+    const { user, logout, tenants, currentTenant, switchTenant } = useAuth();
 
-    const isPublicPage = pathname === '/login' || pathname === '/signup';
+    const isPublicPage = pathname === '/login' || pathname === '/signup' || pathname === '/accept-invite';
 
     if (isPublicPage) return null;
 
@@ -30,6 +30,31 @@ export function Sidebar() {
             <div className="flex h-16 items-center border-b px-6">
                 <h1 className="text-xl font-bold tracking-tight">DraftFlow</h1>
             </div>
+
+            {/* Tenant Switcher */}
+            {user && (
+                <div className="px-4 py-4 border-b">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block px-2">
+                        Workspace
+                    </label>
+                    {tenants.length > 1 ? (
+                        <select
+                            className="w-full text-sm border-slate-200 rounded-md p-2 bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                            value={currentTenant?.id || ''}
+                            onChange={(e) => switchTenant(e.target.value)}
+                        >
+                            {tenants.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <div className="px-2 py-1 text-sm font-medium text-slate-900 truncate">
+                            {currentTenant?.name || 'My Workspace'}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <nav className="flex-1 space-y-1 p-4">
                 {navItems.map((item) => {
                     const Icon = item.icon;

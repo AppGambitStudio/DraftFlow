@@ -1,5 +1,5 @@
 
-import { initDB, Post, User, Settings } from './db';
+import { initDB, Post, User, Settings, TenantMember } from './db';
 import { linkedinService } from './services/linkedin';
 import { Op } from 'sequelize';
 
@@ -8,17 +8,18 @@ const run = async () => {
 
     console.log('--- SYNCING LINKEDIN HISTORY ---');
 
-    // 1. Get default user
-    const user = await User.findOne();
-    if (!user) {
-        console.error('No user found');
+    // 1. Get first membership
+    const membership = await TenantMember.findOne();
+    if (!membership) {
+        console.error('No memberships found');
         return;
     }
-    console.log(`Syncing for user: ${user.email} (${user.id})`);
+    const { userId, tenantId } = membership;
+    console.log(`Syncing for Tenant: ${tenantId} (User: ${userId})`);
 
     // 2. Fetch recent posts from LinkedIn
     console.log('Fetching recent posts from LinkedIn...');
-    const recentPosts = await linkedinService.getRecentPosts(user.id, undefined, 20);
+    const recentPosts = await linkedinService.getRecentPosts(tenantId, undefined, 20);
     console.log(`Found ${recentPosts.length} posts on LinkedIn.`);
 
     let added = 0;
@@ -30,8 +31,6 @@ const run = async () => {
             where: {
                 [Op.or]: [
                     { linkedinPostId: liPost.id },
-                    // Also check vaguely by content if ID is missing (unlikely but safe)
-                    // { content: liPost.content } 
                 ]
             }
         });
@@ -50,7 +49,8 @@ const run = async () => {
             // Create new post
             console.log(`Importing LinkedIn Post: ${liPost.id}`);
             await Post.create({
-                userId: user.id,
+                userId: userId,
+                tenantId: tenantId,
                 content: liPost.content,
                 scheduledTime: new Date(liPost.createdAt),
                 status: 'PUBLISHED', // It's already live

@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { content, targetAudience, authorUrn } = req.body;
 
         if (!content) {
@@ -15,7 +15,7 @@ router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response
             return;
         }
 
-        const settings = await Settings.findOne({ where: { userId } });
+        const settings = await Settings.findOne({ where: { tenantId } });
         let toneInstructions = settings?.globalTone || undefined;
 
         if (settings?.accountTones && authorUrn) {
@@ -29,7 +29,7 @@ router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response
             }
         }
 
-        const improvedContent = await AIService.improvise(userId, content, targetAudience, toneInstructions);
+        const improvedContent = await AIService.improvise(tenantId, content, targetAudience, toneInstructions);
         res.json({ content: improvedContent });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -38,7 +38,7 @@ router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response
 
 router.post('/enhance-idea', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
         const { title, description } = req.body;
 
         if (!description) {
@@ -46,7 +46,7 @@ router.post('/enhance-idea', authMiddleware, async (req: AuthRequest, res: Respo
             return;
         }
 
-        const enhancedDescription = await AIService.enhanceIdeaDescription(userId, title || '', description);
+        const enhancedDescription = await AIService.enhanceIdeaDescription(tenantId, title || '', description);
         res.json({ content: enhancedDescription });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

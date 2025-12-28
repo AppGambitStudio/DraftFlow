@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { Secret } from 'jsonwebtoken';
-import { User } from '../db';
+import { User, TenantMember } from '../db';
 
 const JWT_SECRET: Secret = (process.env.JWT_SECRET || 'your-default-secret-change-this') as Secret;
 
 export interface AuthRequest extends Request {
     user?: User;
+    tenantId?: string;
+    membership?: TenantMember;
 }
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -33,8 +35,43 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         }
 
         req.user = user;
+
+        // Resolve Tenant
+        const headerTenantId = req.headers['x-tenant-id'];
+        let member: TenantMember | null = null;
+
+        if (headerTenantId) {
+            member = await TenantMember.findOne({
+                where: { userId: user.id, tenantId: headerTenantId as string }
+            });
+        } else {
+            // Default to first found tenant
+            member = await TenantMember.findOne({
+                where: { userId: user.id }
+            });
+        }
+
+        if (member) {
+            req.tenantId = member.tenantId;
+            req.membership = member;
+        } else {
+            // Edge case: User has no tenant (created before migration and missed? or newly created?)
+            // Ideally we auto-create one here to self-heal
+            console.warn(`User ${user.id} has no tenant. Auto-creating...`);
+            const { Tenant } = require('../db'); // Lazy load to avoid circular dep issues if any
+            const newTenant = await Tenant.create({ name: 'My Workspace' });
+            member = await TenantMember.create({
+                userId: user.id,
+                tenantId: newTenant.id,
+                role: 'OWNER'
+            });
+            req.tenantId = newTenant.id;
+            req.membership = member;
+        }
+
         next();
     } catch (error) {
+        console.error('Auth Middleware Error:', error);
         res.status(401).json({ error: 'Invalid token' });
     }
 };

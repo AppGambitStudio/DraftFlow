@@ -62,7 +62,7 @@ export const startScheduler = () => {
                 if (platforms.includes('LINKEDIN')) {
                     try {
                         const contentToPublish = markdownToUnicode(post.content);
-                        const linkedinId = await linkedinService.publishPost(post.userId as string, contentToPublish, post.authorUrn || undefined);
+                        const linkedinId = await linkedinService.publishPost(post.tenantId as string, contentToPublish, post.authorUrn || undefined);
                         await post.update({ linkedinPostId: linkedinId });
                         results.push('LinkedIn');
                     } catch (error: any) {
@@ -74,7 +74,7 @@ export const startScheduler = () => {
                 // Publish to Twitter
                 if (platforms.includes('TWITTER')) {
                     try {
-                        const twitterId = await twitterService.publishTweet(post.userId as string, post.content);
+                        const twitterId = await twitterService.publishTweet(post.tenantId as string, post.content);
                         await post.update({ twitterPostId: twitterId });
                         results.push('Twitter');
                     } catch (error: any) {
@@ -195,8 +195,8 @@ const checkRecurringIdeas = async () => {
                         previousSummaries = [];
                     }
 
-                    // Fetch user settings
-                    const settings = await Settings.findOne({ where: { userId: idea.userId } });
+                    // Fetch tenant settings
+                    const settings = await Settings.findOne({ where: { tenantId: idea.tenantId } });
                     const maxHistory = settings?.maxHistoryItems !== undefined ? settings.maxHistoryItems : 5;
 
                     // Determine Tone Instructions
@@ -214,7 +214,7 @@ const checkRecurringIdeas = async () => {
 
                     // Generate content and summary
                     const { content, summary } = await AIService.generate(
-                        idea.userId as string,
+                        idea.tenantId as string,
                         prompt,
                         idea.targetAudience || undefined,
                         previousSummaries,
@@ -243,6 +243,7 @@ const checkRecurringIdeas = async () => {
                     await Post.create({
                         content,
                         userId: idea.userId,
+                        tenantId: idea.tenantId,
                         scheduledTime: postScheduledTime,
                         status: 'DRAFT',
                         platforms: JSON.stringify(['LINKEDIN']),

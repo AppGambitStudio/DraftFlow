@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { User } from '../db';
+import { User, Tenant, TenantMember } from '../db';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -56,6 +56,17 @@ router.post('/signup', async (req: Request, res: Response) => {
             password: hashedPassword,
         });
 
+        // Create Default Tenant
+        const tenant = await Tenant.create({
+            name: `${email.split('@')[0]}'s Workspace`
+        });
+
+        await TenantMember.create({
+            userId: user.id,
+            tenantId: tenant.id,
+            role: 'OWNER'
+        });
+
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
         res.json({
@@ -72,14 +83,30 @@ router.post('/signup', async (req: Request, res: Response) => {
 });
 
 // Me (Get current user)
-router.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
+router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!req.user) {
         res.status(401).json({ error: 'Unauthorized' });
         return;
     }
+
+    // Fetch Tenants
+    const members = await TenantMember.findAll({
+        where: { userId: req.user.id },
+        include: [Tenant]
+    });
+
+    const tenants = members.map((m: any) => ({
+        id: m.Tenant.id,
+        name: m.Tenant.name,
+        role: m.role
+    }));
+
     res.json({
         id: req.user.id,
-        email: req.user.email
+        email: req.user.email,
+        tenantId: req.tenantId,
+        role: req.membership?.role,
+        tenants
     });
 });
 
