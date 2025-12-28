@@ -428,7 +428,7 @@ export default function SettingsPage() {
                         <div className="space-y-2 pt-4 border-t border-border">
                             <h3 className="text-lg font-medium">Audience Targeting</h3>
                             <div className="space-y-2">
-                                <Label htmlFor="targetAudiences">Target Audiences (Comma Separated)</Label>
+                                <Label htmlFor="targetAudiences">Post Audiences (Comma Separated)</Label>
                                 <textarea
                                     id="targetAudiences"
                                     name="targetAudiences"
@@ -438,7 +438,7 @@ export default function SettingsPage() {
                                     placeholder="e.g. CTOs, Startup Founders, Software Engineers, Marketing Managers"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    Define your target audiences here. You can select one when creating a post to tailor the AI content generation.
+                                    Define your post audiences here. You can select one when creating a post to tailor the AI content generation.
                                 </p>
                             </div>
                         </div>

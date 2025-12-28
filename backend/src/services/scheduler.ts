@@ -26,6 +26,23 @@ export const startScheduler = () => {
             });
 
             for (const post of postsToPublish) {
+                // Atomic update to 'PUBLISHING' to prevent race conditions
+                const [affectedCount] = await Post.update(
+                    { status: 'PUBLISHING' },
+                    {
+                        where: {
+                            id: post.id,
+                            status: 'SCHEDULED'
+                        }
+                    }
+                );
+
+                // If affectedCount is 0, another instance already picked this up
+                if (affectedCount === 0) {
+                    console.log(`[Scheduler] Post ${post.id} already being processed by another instance.`);
+                    continue;
+                }
+
                 // Parse platforms
                 let platforms: string[] = ['LINKEDIN'];
                 try {
@@ -44,9 +61,6 @@ export const startScheduler = () => {
                 // Publish to LinkedIn
                 if (platforms.includes('LINKEDIN')) {
                     try {
-                        // Assuming linkedinService is imported and available
-                        // The original publishPost function is replaced here
-                        // Convert Markdown to Unicode for LinkedIn
                         const contentToPublish = markdownToUnicode(post.content);
                         const linkedinId = await linkedinService.publishPost(post.userId as string, contentToPublish, post.authorUrn || undefined);
                         await post.update({ linkedinPostId: linkedinId });
@@ -60,7 +74,6 @@ export const startScheduler = () => {
                 // Publish to Twitter
                 if (platforms.includes('TWITTER')) {
                     try {
-                        // Assuming twitterService is imported and available
                         const twitterId = await twitterService.publishTweet(post.userId as string, post.content);
                         await post.update({ twitterPostId: twitterId });
                         results.push('Twitter');
@@ -71,15 +84,12 @@ export const startScheduler = () => {
                 }
 
                 if (errors.length > 0) {
-                    // If all failed, mark as FAILED
                     if (results.length === 0) {
                         await post.update({
                             status: 'FAILED',
                             error: errors.join('; '),
                         });
                     } else {
-                        // If some succeeded, mark as PUBLISHED but log errors
-                        // Ideally we'd have a PARTIAL_SUCCESS status, but for now PUBLISHED with error note
                         await post.update({
                             status: 'PUBLISHED',
                             error: `Partial success. Published to: ${results.join(', ')}. Failed: ${errors.join('; ')}`,
@@ -151,6 +161,22 @@ const checkRecurringIdeas = async () => {
                 }
 
                 if (shouldGenerate) {
+                    // Atomic update to mark as starting generation to prevent double-runs
+                    const [affectedCount] = await Idea.update(
+                        { lastGeneratedAt: now },
+                        {
+                            where: {
+                                id: idea.id,
+                                lastGeneratedAt: idea.lastGeneratedAt // Ensure it hasn't changed since our check
+                            }
+                        }
+                    );
+
+                    if (affectedCount === 0) {
+                        console.log(`[Scheduler] Idea ${idea.id} already being processed by another instance.`);
+                        continue;
+                    }
+
                     console.log(`[Scheduler] Generation triggered for Idea ${idea.id}: "${idea.title}" (${idea.frequency})`);
 
                     const prompt = `
@@ -193,7 +219,11 @@ const checkRecurringIdeas = async () => {
                         idea.targetAudience || undefined,
                         previousSummaries,
                         undefined,
-                        toneInstructions
+                        toneInstructions,
+                        idea.postShape || undefined,
+                        idea.effortLevel || undefined,
+                        idea.keyTakeaway || undefined,
+                        idea.antiGoals || undefined
                     );
 
                     // Calculate next scheduled time for the post

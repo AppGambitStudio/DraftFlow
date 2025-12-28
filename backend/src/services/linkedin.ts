@@ -73,10 +73,17 @@ class LinkedInService {
         const accessToken = setting.linkedinAccessToken;
         const isOrg = authorUrn?.includes(':organization:');
 
-        // Differentiate between Share URNs and UGC Post URNs
-        const isUgc = postUrns[0]?.includes('urn:li:ugcPost:');
-        const paramName = isUgc ? 'ugcPosts' : 'shares';
-        const sharesParam = encodeURIComponent(`List(${postUrns.join(',')})`);
+        // Normalizing URNs: The practices suggest using urn:li:activity:ID
+        // We'll try to use the most compatible format for the aggregate endpoint
+        const normalizedUrns = postUrns.map(urn => {
+            if (urn.includes('urn:li:share:')) return urn;
+            if (urn.includes('urn:li:ugcPost:')) return urn;
+            // Fallback: If it's already an activity URN or other, keep it
+            return urn;
+        });
+
+        const paramName = normalizedUrns[0]?.includes('urn:li:ugcPost:') ? 'ugcPosts' : 'shares';
+        const sharesParam = encodeURIComponent(`List(${normalizedUrns.join(',')})`);
 
         let baseUrl = isOrg
             ? 'https://api.linkedin.com/v2/organizationalEntityShareStatistics'
@@ -86,9 +93,6 @@ class LinkedInService {
         if (isOrg) {
             url += `&organizationalEntity=${encodeURIComponent(authorUrn as string)}`;
         }
-
-        console.log(`[LinkedInService] CALLING: ${url}`);
-        console.log(`[LinkedInService] Fetching ${paramName} stats for ${postUrns.length} posts. First URN: ${postUrns[0]}`);
 
         try {
             const response = await axios.get(url, {
@@ -107,8 +111,48 @@ class LinkedInService {
                 impressions: item.totalShareStatistics?.impressionCount || 0
             }));
         } catch (error: any) {
-            console.error(`LinkedIn Stats Error (${paramName}):`, error.response?.data || error.message);
+            // If the aggregate call fails, we log it. 
+            // The practices suggest granular endpoints for standard accounts to avoid blocks.
+            console.error(`LinkedIn Aggregate Stats Error (${paramName}):`, error.response?.data || error.message);
             return [];
+        }
+    }
+
+    /**
+     * Optional: Fetch detailed social actions if aggregate fails or for specific deeper insights.
+     * Follows the practice: GET https://api.linkedin.com/rest/socialActions/{urn}/comments
+     */
+    async getDetailedSocialActions(userId: string, activityUrn: string) {
+        const setting = await Settings.findOne({ where: { userId } });
+        if (!setting || !setting.linkedinAccessToken) return null;
+
+        // Ensure we're using the activity URN format as requested in step 1 of practices
+        const normalizedUrn = activityUrn.replace('share', 'activity').replace('ugcPost', 'activity');
+
+        try {
+            const headers = {
+                'Authorization': `Bearer ${setting.linkedinAccessToken}`,
+                'LinkedIn-Version': '202306',
+                'X-Restli-Protocol-Version': '2.0.0'
+            };
+
+            // Get Likes (Reactions)
+            const reactionsUrl = `https://api.linkedin.com/rest/reactions/(entity:${encodeURIComponent(normalizedUrn)})?q=entity`;
+            const reactionsRes = await axios.get(reactionsUrl, { headers });
+            const likesCount = reactionsRes.data.paging?.total || 0;
+
+            // Get Comments
+            const commentsUrl = `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(normalizedUrn)}/comments`;
+            const commentsRes = await axios.get(commentsUrl, { headers });
+            const commentsCount = commentsRes.data.paging?.total || 0;
+
+            return {
+                likes: likesCount,
+                comments: commentsCount
+            };
+        } catch (error: any) {
+            console.error(`LinkedIn Detailed Stats Error for ${normalizedUrn}:`, error.response?.data || error.message);
+            return null;
         }
     }
 }

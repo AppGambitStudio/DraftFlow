@@ -47,12 +47,15 @@ export class AnalyticsSyncService {
         const thirtyDaysAgo = subDays(new Date(), 30);
 
         try {
+            // Respect the 50 posts/day extraction limit mentioned in standard practices
             const posts = await Post.findAll({
                 where: {
                     userId,
                     status: 'PUBLISHED',
                     scheduledTime: { [Op.gte]: thirtyDaysAgo }
-                }
+                },
+                order: [['scheduledTime', 'DESC']],
+                limit: 50
             });
 
             // Sync LinkedIn
@@ -67,18 +70,35 @@ export class AnalyticsSyncService {
 
                 for (const [authorUrn, group] of Object.entries(authorGroups)) {
                     const postIds = group.map(p => p.linkedinPostId as string);
-                    const stats = await linkedinService.getPostStats(userId, postIds, authorUrn === 'SELF' ? undefined : authorUrn);
+                    let stats = await linkedinService.getPostStats(userId, postIds, authorUrn === 'SELF' ? undefined : authorUrn);
 
-                    for (const stat of stats) {
-                        const post = group.find(p => p.linkedinPostId === stat.urn);
-                        if (post) {
-                            await post.update({
-                                likesCount: stat.likes,
-                                commentsCount: stat.comments,
-                                repostsCount: stat.reposts,
-                                impressionsCount: stat.impressions,
-                                lastStatsSyncedAt: new Date()
-                            });
+                    // If aggregate stats failed to find these posts, try granular extraction for the most recent 10 posts
+                    // to respect the extraction limit while ensuring we get data for new content.
+                    if (stats.length === 0) {
+                        console.log(`[AnalyticsSync] Aggregate stats returned empty for ${authorUrn}. Trying granular fallback...`);
+                        const recentPosts = group.slice(0, 10);
+                        for (const post of recentPosts) {
+                            const granular = await linkedinService.getDetailedSocialActions(userId, post.linkedinPostId!);
+                            if (granular) {
+                                await post.update({
+                                    likesCount: granular.likes,
+                                    commentsCount: granular.comments,
+                                    lastStatsSyncedAt: new Date()
+                                });
+                            }
+                        }
+                    } else {
+                        for (const stat of stats) {
+                            const post = group.find(p => p.linkedinPostId === stat.urn);
+                            if (post) {
+                                await post.update({
+                                    likesCount: stat.likes,
+                                    commentsCount: stat.comments,
+                                    repostsCount: stat.reposts,
+                                    impressionsCount: stat.impressions,
+                                    lastStatsSyncedAt: new Date()
+                                });
+                            }
                         }
                     }
                 }

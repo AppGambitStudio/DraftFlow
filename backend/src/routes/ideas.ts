@@ -20,10 +20,11 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 });
 
 // Create new idea
+// Create new idea
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth } = req.body;
+        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals } = req.body;
         const idea = await Idea.create({
             userId,
             title,
@@ -40,7 +41,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             sourceLinks: JSON.stringify(req.body.sourceLinks || []),
             scheduleTime: scheduleTime || null,
             scheduleDayOfWeek: scheduleDayOfWeek !== undefined ? scheduleDayOfWeek : null,
-            scheduleDayOfMonth: scheduleDayOfMonth || null
+            scheduleDayOfMonth: scheduleDayOfMonth || null,
+            postShape: postShape || null,
+            effortLevel: effortLevel || null,
+            keyTakeaway: keyTakeaway || null,
+            antiGoals: antiGoals || null
         });
         res.json(idea);
     } catch (error) {
@@ -53,7 +58,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
         const { id } = req.params;
-        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth } = req.body;
+        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals } = req.body;
         const idea = await Idea.findOne({ where: { id, userId } });
 
         if (!idea) {
@@ -74,6 +79,11 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
         if (scheduleTime !== undefined) idea.scheduleTime = scheduleTime;
         if (scheduleDayOfWeek !== undefined) idea.scheduleDayOfWeek = scheduleDayOfWeek;
         if (scheduleDayOfMonth !== undefined) idea.scheduleDayOfMonth = scheduleDayOfMonth;
+
+        if (postShape !== undefined) idea.postShape = postShape;
+        if (effortLevel !== undefined) idea.effortLevel = effortLevel;
+        if (keyTakeaway !== undefined) idea.keyTakeaway = keyTakeaway;
+        if (antiGoals !== undefined) idea.antiGoals = antiGoals;
 
         await idea.save();
 
@@ -188,7 +198,11 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
             targetAudience,
             previousSummaries,
             additionalContext,
-            toneInstructions
+            toneInstructions,
+            idea.postShape || undefined,
+            idea.effortLevel || undefined,
+            idea.keyTakeaway || undefined,
+            idea.antiGoals || undefined
         );
 
         // Update idea with new summary

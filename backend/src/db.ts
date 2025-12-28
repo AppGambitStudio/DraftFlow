@@ -231,6 +231,10 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare scheduleTime: string | null;
     declare scheduleDayOfWeek: number | null;
     declare scheduleDayOfMonth: number | null;
+    declare postShape: string | null;
+    declare effortLevel: string | null;
+    declare keyTakeaway: string | null;
+    declare antiGoals: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -305,6 +309,10 @@ Idea.init({
         type: DataTypes.INTEGER,
         allowNull: true,
     },
+    postShape: DataTypes.TEXT,
+    effortLevel: DataTypes.TEXT,
+    keyTakeaway: DataTypes.TEXT,
+    antiGoals: DataTypes.TEXT,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {

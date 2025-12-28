@@ -58,7 +58,7 @@ Your task is to refine and enhance an existing LinkedIn post draft while preserv
 `;
 
         if (targetAudience) {
-            SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the tone, complexity, and value proposition resonate specifically with this audience.\n`;
+            SYSTEM_PROMPT += `\n**Post Audience:** ${targetAudience}\nEnsure the tone, complexity, and value proposition resonate specifically with this audience.\n`;
         }
 
         if (toneInstructions) {
@@ -109,8 +109,14 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         targetAudience?: string,
         previousSummaries: string[] = [],
         additionalContext?: string,
-        toneInstructions?: string
+        toneInstructions?: string,
+        postShape?: string,
+        effortLevel?: string,
+        keyTakeaway?: string,
+        antiGoals?: string
     ): Promise<{ content: string; summary: string }> {
+        console.log(`[AIService] Generating with options: Shape="${postShape}", Effort="${effortLevel}", Takeaway="${keyTakeaway ? 'Yes' : 'No'}", AntiGoals="${antiGoals ? 'Yes' : 'No'}"`);
+
         let SYSTEM_PROMPT = `
             You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
 
@@ -118,7 +124,7 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
 `;
 
         if (targetAudience) {
-            SYSTEM_PROMPT += `\n**Target Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;
+            SYSTEM_PROMPT += `\n**Post Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;
         }
 
         if (additionalContext) {
@@ -127,6 +133,34 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
 
         if (toneInstructions) {
             SYSTEM_PROMPT += `\n**Tone & Writing Style Instructions:**\n${toneInstructions}\nYou MUST strictly follow these specific style guidelines.\n`;
+        }
+
+        if (antiGoals) {
+            SYSTEM_PROMPT += `\n**Anti-Goals (Strict constraints - what to AVOID):**\n"${antiGoals}"\n(You must ensure the post does NOT violate these constraints.)\n`;
+        }
+
+        // New Fields Logic
+        if (postShape) {
+            SYSTEM_PROMPT += `\n**Post Shape/Format Strategy:**\nYou must structure the post as a "${postShape}".\n`;
+            if (postShape === 'Hot take') SYSTEM_PROMPT += `Be bold, controversial, and start with a strong opinion.\n`;
+            else if (postShape === 'Breakdown (step-by-step)') SYSTEM_PROMPT += `Use a clear, step-by-step numbered list logic.\n`;
+            else if (postShape === 'Story / anecdote') SYSTEM_PROMPT += `Use a narrative arc (Situation -> Complication -> Resolution).\n`;
+            else if (postShape === 'Checklist') SYSTEM_PROMPT += `Provide a practical, actionable checklist.\n`;
+            else if (postShape === 'Before vs After') SYSTEM_PROMPT += `Contrast the old way (Before) with the better new way (After).\n`;
+            else if (postShape === 'Diagram-first') SYSTEM_PROMPT += `Write the post to accompany a visual diagram (describe the visual context).\n`;
+            else if (postShape === 'Question-led') SYSTEM_PROMPT += `Start with a provocative question and answer it through the post.\n`;
+            else if (postShape === 'Myth vs Reality') SYSTEM_PROMPT += `Debunk a common myth and present the reality.\n`;
+        }
+
+        if (effortLevel) {
+            SYSTEM_PROMPT += `\n**Complexity Level:** "${effortLevel}"\n`;
+            if (effortLevel === '⚡ Quick') SYSTEM_PROMPT += `Keep it short, punchy, under 150 words. Focus on one single idea.\n`;
+            else if (effortLevel === '🧠 Medium') SYSTEM_PROMPT += `Balanced depth, standard length (150-250 words).\n`;
+            else if (effortLevel === '🧩 Deep') SYSTEM_PROMPT += `Go into detail, explain nuances, use a longer format (250-350 words).\n`;
+        }
+
+        if (keyTakeaway) {
+            SYSTEM_PROMPT += `\n**Mandatory Key Takeaway:**\nThe post MUST end with or clearly drive towards this conclusion: "${keyTakeaway}". Ensure the entire argument supports this final point.\n`;
         }
 
         if (previousSummaries.length > 0) {

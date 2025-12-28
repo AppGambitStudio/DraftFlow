@@ -29,6 +29,10 @@ interface Idea {
     scheduleTime?: string;
     scheduleDayOfWeek?: number;
     scheduleDayOfMonth?: number;
+    postShape?: string;
+    effortLevel?: string;
+    keyTakeaway?: string;
+    antiGoals?: string;
 }
 
 import { useSettings } from "@/contexts/SettingsContext";
@@ -54,7 +58,11 @@ export default function IdeasPage() {
         tags: [] as string[],
         scheduleTime: "",
         scheduleDayOfWeek: 1, // 1 = Monday
-        scheduleDayOfMonth: 1
+        scheduleDayOfMonth: 1,
+        postShape: "Hot take",
+        effortLevel: "🧠 Medium",
+        keyTakeaway: "",
+        antiGoals: ""
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [isEnhancing, setIsEnhancing] = useState(false);
@@ -105,7 +113,11 @@ export default function IdeasPage() {
                 tags: JSON.parse(idea.tags || '[]'),
                 scheduleTime: idea.scheduleTime || "",
                 scheduleDayOfWeek: idea.scheduleDayOfWeek || 1,
-                scheduleDayOfMonth: idea.scheduleDayOfMonth || 1
+                scheduleDayOfMonth: idea.scheduleDayOfMonth || 1,
+                postShape: idea.postShape || "Hot take",
+                effortLevel: idea.effortLevel || "🧠 Medium",
+                keyTakeaway: idea.keyTakeaway || "",
+                antiGoals: idea.antiGoals || ""
             });
             const existingTags = JSON.parse(idea.tags || '[]');
             setTagsInputValue(existingTags.join(', '));
@@ -123,7 +135,11 @@ export default function IdeasPage() {
                 tags: [],
                 scheduleTime: "",
                 scheduleDayOfWeek: 1,
-                scheduleDayOfMonth: 1
+                scheduleDayOfMonth: 1,
+                postShape: "Hot take",
+                effortLevel: "🧠 Medium",
+                keyTakeaway: "",
+                antiGoals: ""
             });
             setTagsInputValue("");
         }
@@ -520,6 +536,26 @@ export default function IdeasPage() {
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 />
+                                <div className="space-y-2">
+                                    <Label htmlFor="keyTakeaway">Key Teaching / Takeaway</Label>
+                                    <Textarea
+                                        id="keyTakeaway"
+                                        placeholder="What is the one thing the reader should learn?"
+                                        className="min-h-[60px]"
+                                        value={formData.keyTakeaway}
+                                        onChange={(e) => setFormData({ ...formData, keyTakeaway: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="antiGoals">Anti-Goals (What to avoid)</Label>
+                                    <Textarea
+                                        id="antiGoals"
+                                        placeholder="e.g. Do not sound salesy, Avoid jargon, No emojis..."
+                                        className="min-h-[60px]"
+                                        value={formData.antiGoals}
+                                        onChange={(e) => setFormData({ ...formData, antiGoals: e.target.value })}
+                                    />
+                                </div>
                             </div>
 
                             <div className="space-y-2">
@@ -551,7 +587,45 @@ export default function IdeasPage() {
                                 </p>
                             </div>
 
-                            <div className="flex items-center space-x-2 pt-2">
+                            <div className="space-y-4 pt-2 border-t">
+                                <h3 className="font-semibold text-sm text-foreground">Content Strategy</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="postShape">Post Shape</Label>
+                                        <select
+                                            id="postShape"
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
+                                            value={formData.postShape}
+                                            onChange={(e) => setFormData({ ...formData, postShape: e.target.value })}
+                                        >
+                                            <option value="Hot take">Hot take</option>
+                                            <option value="Breakdown (step-by-step)">Breakdown (step-by-step)</option>
+                                            <option value="Story / anecdote">Story / anecdote</option>
+                                            <option value="Checklist">Checklist</option>
+                                            <option value="Before vs After">Before vs After</option>
+                                            <option value="Diagram-first">Diagram-first</option>
+                                            <option value="Question-led">Question-led</option>
+                                            <option value="Myth vs Reality">Myth vs Reality</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="effortLevel">Effort Level</Label>
+                                        <select
+                                            id="effortLevel"
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none"
+                                            value={formData.effortLevel}
+                                            onChange={(e) => setFormData({ ...formData, effortLevel: e.target.value })}
+                                        >
+                                            <option value="⚡ Quick">⚡ Quick</option>
+                                            <option value="🧠 Medium">🧠 Medium</option>
+                                            <option value="🧩 Deep">🧩 Deep</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div className="flex items-center space-x-2 pt-4 border-t">
                                 <input
                                     type="checkbox"
                                     id="isRecurring"
@@ -657,14 +731,14 @@ export default function IdeasPage() {
 
                             {settings.targetAudiences.length > 0 && (
                                 <div className="space-y-2">
-                                    <Label htmlFor="idea-audience">Target Audience</Label>
+                                    <Label htmlFor="idea-audience">Post Audience</Label>
                                     <select
                                         id="idea-audience"
                                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                                         value={formData.targetAudience}
                                         onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
                                     >
-                                        <option value="">No Target Audience</option>
+                                        <option value="">No Post Audience</option>
                                         {settings.targetAudiences.map((audience, index) => (
                                             <option key={index} value={audience}>
                                                 {audience}
