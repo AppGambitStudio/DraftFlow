@@ -285,6 +285,16 @@ export default function IdeasPage() {
 
     const groupedIdeas = getGroupedIdeas();
 
+    const getScheduleDetails = (idea: Idea) => {
+        if (!idea.scheduleTime) return null;
+        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+        if (idea.frequency === 'DAILY') return idea.scheduleTime;
+        if (idea.frequency === 'WEEKLY') return `${days[(idea.scheduleDayOfWeek ?? 1) % 7]} ${idea.scheduleTime}`;
+        if (idea.frequency === 'MONTHLY') return `Day ${idea.scheduleDayOfMonth} • ${idea.scheduleTime}`;
+        return idea.scheduleTime;
+    };
+
     const getStatusIcon = (idea: Idea) => {
         if (!idea.isRecurring) return null;
 
@@ -406,7 +416,10 @@ export default function IdeasPage() {
                                                                 <div className="flex items-center gap-2">
                                                                     <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full w-fit">
                                                                         <Repeat className="h-3 w-3" />
-                                                                        <span className="font-medium">{idea.frequency}</span>
+                                                                        <span className="font-medium">
+                                                                            {idea.frequency}
+                                                                            {getScheduleDetails(idea) && <span className="opacity-75 font-normal ml-1">• {getScheduleDetails(idea)}</span>}
+                                                                        </span>
                                                                     </div>
                                                                     {getStatusIcon(idea)}
                                                                 </div>
@@ -453,7 +466,10 @@ export default function IdeasPage() {
                                                             <div className="flex items-center gap-2">
                                                                 <div className="flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full shrink-0">
                                                                     <Repeat className="h-3 w-3" />
-                                                                    <span className="font-medium">{idea.frequency}</span>
+                                                                    <span className="font-medium">
+                                                                        {idea.frequency}
+                                                                        {getScheduleDetails(idea) && <span className="opacity-75 font-normal ml-1">• {getScheduleDetails(idea)}</span>}
+                                                                    </span>
                                                                 </div>
                                                                 {getStatusIcon(idea)}
                                                             </div>

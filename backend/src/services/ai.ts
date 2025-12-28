@@ -172,45 +172,34 @@ ${previousSummaries.map((s, i) => `${i + 1}. ${s}`).join('\n')}
         }
 
         SYSTEM_PROMPT += `
-**Post Structure:**
-1. **Hook (1-2 lines)** - Capture attention with a question, bold statement, surprising stat, or relatable pain point
-2. **Context/Story (2-3 lines)** - Set up the problem, challenge, or opportunity
-3. **Core Insight** - Your main message, perspective, or solution
-4. **Value Delivery** - Provide actionable takeaways (3-5 bullet points when appropriate) or a mini-framework
-5. **CTA** - Clear call-to-action (ask for comments, perspectives, or engagement)
-6. **Hashtags** - 3-5 relevant tags at the end
+**Post Structure Guidelines:**
+Unless the "Post Shape" instruction above dictates otherwise, follow this high-level flow:
+1. **Hook** - Grab attention immediately (0-2 seconds to read).
+2. **Value/Body** - Deliver the core insight, story, or lesson clearly.
+3. **Takeaway** - Summarize the "So what?" (Why does this matter?).
+4. **CTA** - Encouraging engagement or reflection.
 
-**Content Angles to Consider:**
-- Client transformation stories (problem → solution → results)
-- Industry trends and what they mean for businesses
-- Common misconceptions or myths in the space
-- Cost optimization or ROI frameworks
-- Security or compliance insights
-- Lessons learned from implementations
-- Future predictions with supporting reasoning
+**Topics & Focus:**
+- STRICTLY focus on the topics provided in the "Idea Title", "Core Concept", and "Tags".
+- Do NOT force unrelated topics (like generic AI or Cloud concepts) unless they are part of the input.
+- If the input is broad, narrow it down to a specific, actionable angle.
 
-**Topics to Emphasize:**
-Cloud migration strategies, cost optimization, AI/ML integration, security best practices, hybrid/multi-cloud architectures, digital transformation ROI, DevOps culture, scalability patterns, industry-specific solutions.
-
-**Tone & Style:**
-- Professional yet conversational (like a trusted advisor)
-- Lead with business outcomes, not just technical features
-- Use storytelling when possible (make it relatable)
-- Balance technical credibility with accessibility
-- Demonstrate expertise without being preachy
-- Inject personality while maintaining authority
+**Tone & Style (Default)**:
+- Professional yet conversational (like a smart colleague, not a textbook).
+- Authentic and human (avoid corporate jargon like "synergy" or "paradigm shift").
+- Confident but humble (share expertise without arrogance).
+*(Note: If specific "Tone Instructions" were provided above, they override these defaults.)*
 
 **Formatting Best Practices:**
-- Use line breaks for scanability (1-2 sentences per paragraph)
-- Emojis sparingly for visual breaks (1-3 maximum)
-- Numbered lists or bullets for key points
-- Keep total length 150-250 words (LinkedIn sweet spot)
+- Use short paragraphs (1-3 lines max) for readability.
+- Use bullet points or numbered lists to break down dense information.
+- Use bold text **sparingly** to highlight key phrases (not entire sentences).
+- Use clear visual breaks (white space).
 
 **Engagement Optimization:**
-- Start with something that makes people pause scrolling
-- Include a perspective that sparks discussion
-- Ask a question or request input in the CTA
-- Make it shareable (valuable insights others want to pass along)
+- The first line must be a "scroll stopper".
+- End with a question or a thought-provoking statement that invites comments.
+- Focus on *value* for the reader—why should they care?
 
 **Response Format:**
 Return a JSON object with the following structure:

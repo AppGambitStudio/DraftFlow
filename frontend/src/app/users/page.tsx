@@ -49,15 +49,6 @@ export default function UsersPage() {
                     <p className="text-xs text-center text-muted-foreground">Admin and Editor roles for better security.</p>
                 </div>
             </div>
-
-            <div className="pt-8">
-                <Button className="rounded-full px-8" disabled>
-                    Join Waitlist
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Notifications will be sent to your email.
-                </p>
-            </div>
         </div>
     );
 }

@@ -82,7 +82,7 @@ export default function DashboardPage() {
             return isAfter(date, endOfToday());
         })
         .sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime())
-        .slice(0, 10);
+        .slice(0, 5);
 
     const recentActivity = posts
         .filter((p) => p.status === "PUBLISHED" || p.status === "FAILED" || (p.status === "SCHEDULED" && new Date(p.scheduledTime) < startOfToday()))

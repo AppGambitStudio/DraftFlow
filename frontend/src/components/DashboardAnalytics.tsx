@@ -183,46 +183,6 @@ export function DashboardAnalytics() {
                     </CardContent>
                 </Card>
             </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Top Performing Content</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        {(data?.topPosts || []).length === 0 ? (
-                            <p className="text-sm text-slate-500">No data available yet.</p>
-                        ) : (
-                            data.topPosts.map((post: any) => (
-                                <div key={post.id} className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
-                                    <div className="flex-1 min-w-0 mr-4">
-                                        <p className="text-sm font-medium line-clamp-1 mb-1">{post.content}</p>
-                                        <p className="text-xs text-muted-foreground">{format(new Date(post.scheduledTime), 'PPP')}</p>
-                                    </div>
-                                    <div className="flex items-center gap-6 text-sm">
-                                        <div className="flex flex-col items-center">
-                                            <span className="font-bold text-blue-600">{post.likesCount}</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase">Likes</span>
-                                        </div>
-                                        <div className="flex flex-col items-center">
-                                            <span className="font-bold text-green-600">{post.commentsCount}</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase">Comments</span>
-                                        </div>
-                                        <div className="flex flex-col items-center">
-                                            <span className="font-bold text-purple-600">{post.repostsCount}</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase">Shares</span>
-                                        </div>
-                                        <div className="flex flex-col items-center min-w-[60px]">
-                                            <span className="font-bold">{post.impressionsCount.toLocaleString()}</span>
-                                            <span className="text-[10px] text-muted-foreground uppercase">Reach</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
         </div>
     );
 }

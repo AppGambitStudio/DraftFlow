@@ -155,6 +155,52 @@ class LinkedInService {
             return null;
         }
     }
+
+    async getRecentPosts(userId: string, authorUrn?: string, count: number = 20) {
+        const setting = await Settings.findOne({ where: { userId } });
+        if (!setting || !setting.linkedinAccessToken) return [];
+
+        const accessToken = setting.linkedinAccessToken;
+        let finalAuthorUrn = authorUrn;
+
+        if (!finalAuthorUrn) {
+            try {
+                const profileResponse = await axios.get('https://api.linkedin.com/v2/me', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                });
+                finalAuthorUrn = `urn:li:person:${profileResponse.data.id}`;
+            } catch (error) {
+                console.error('Failed to fetch profile for URN resolution', error);
+                return [];
+            }
+        }
+
+        try {
+            const encodedUrn = encodeURIComponent(finalAuthorUrn);
+            const url = `https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${encodedUrn})&count=${count}`;
+
+            const response = await axios.get(url, {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'X-Restli-Protocol-Version': '2.0.0',
+                },
+            });
+
+            return response.data.elements.map((item: any) => {
+                const specificContent = item.specificContent?.['com.linkedin.ugc.ShareContent'];
+                return {
+                    id: item.id, // urn:li:ugcPost:123
+                    urn: item.id,
+                    content: specificContent?.shareCommentary?.text || '',
+                    createdAt: item.created?.time, // Timestamp
+                    visibility: item.visibility?.['com.linkedin.ugc.MemberNetworkVisibility']
+                };
+            });
+        } catch (error: any) {
+            console.error('LinkedIn GetRecentPosts Error:', error.response?.data || error.message);
+            return [];
+        }
+    }
 }
 
 export const linkedinService = new LinkedInService();
