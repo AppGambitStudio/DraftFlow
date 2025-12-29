@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 interface Author {
     urn: string;
@@ -19,11 +20,13 @@ interface AuthorsContextType {
 const AuthorsContext = createContext<AuthorsContextType | undefined>(undefined);
 
 export function AuthorsProvider({ children }: { children: ReactNode }) {
+    const { token, currentTenant } = useAuth();
     const [authors, setAuthors] = useState<Author[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const fetchAuthors = async () => {
+        if (!token) return;
         try {
             setLoading(true);
             const res = await api.get('/settings/linkedin/authors');
@@ -38,8 +41,13 @@ export function AuthorsProvider({ children }: { children: ReactNode }) {
     };
 
     useEffect(() => {
-        fetchAuthors();
-    }, []);
+        if (token) {
+            fetchAuthors();
+        } else {
+            setAuthors([]);
+            setLoading(false);
+        }
+    }, [token, currentTenant?.id]);
 
     return (
         <AuthorsContext.Provider value={{ authors, loading, error, refreshAuthors: fetchAuthors }}>

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/context/AuthContext';
 
 interface Settings {
     targetAudiences: string[];
@@ -20,6 +21,7 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+    const { token, currentTenant } = useAuth();
     const [settings, setSettings] = useState<Settings>({
         targetAudiences: [],
         maxHistoryItems: 5,
@@ -29,7 +31,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     const fetchSettings = async () => {
+        if (!token) return;
         try {
+            setLoading(true);
             const res = await api.get('/settings');
             const audiences = res.data.targetAudiences
                 ? res.data.targetAudiences.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
@@ -52,15 +56,24 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
             });
         } catch (error) {
             console.error('Failed to fetch settings:', error);
-            // Don't show toast here to avoid spamming on initial load if something minor fails
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchSettings();
-    }, []);
+        if (token) {
+            fetchSettings();
+        } else {
+            setSettings({
+                targetAudiences: [],
+                maxHistoryItems: 5,
+                globalTone: "",
+                accountTones: {}
+            });
+            setLoading(false);
+        }
+    }, [token, currentTenant?.id]);
 
     return (
         <SettingsContext.Provider value={{ settings, loading, refreshSettings: fetchSettings }}>

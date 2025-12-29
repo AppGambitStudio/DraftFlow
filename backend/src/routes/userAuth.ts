@@ -10,6 +10,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-change-this';
 // Login
 router.post('/login', async (req: Request, res: Response) => {
     const { email, password } = req.body;
+    console.log(`[LOGIN_ATTEMPT] Email: "${email}"`);
 
     try {
         const user = await User.findOne({ where: { email } });

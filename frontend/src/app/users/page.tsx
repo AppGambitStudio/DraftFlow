@@ -26,21 +26,24 @@ interface Invitation {
 }
 
 export default function UsersPage() {
-    const { currentTenant } = useAuth();
+    const { currentTenant, refreshProfile } = useAuth();
     const [members, setMembers] = useState<Member[]>([]);
-    const [invitations, setInvitations] = useState<Invitation[]>([]);
+    const [invitations, setInvitations] = useState<Invitation[]>([]); // Outgoing
+    const [incomingInvitations, setIncomingInvitations] = useState<any[]>([]); // Incoming
     const [inviteEmail, setInviteEmail] = useState('');
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
 
     const fetchData = async () => {
         try {
-            const [membersRes, invitesRes] = await Promise.all([
+            const [membersRes, invitesRes, incomingRes] = await Promise.all([
                 api.get('/users'),
-                api.get('/invitations')
+                api.get('/invitations'),
+                api.get('/invitations/mine')
             ]);
             setMembers(membersRes.data);
             setInvitations(invitesRes.data);
+            setIncomingInvitations(incomingRes.data);
         } catch (error) {
             console.error('Failed to fetch data', error);
             toast.error('Failed to load team data');
@@ -92,6 +95,17 @@ export default function UsersPage() {
         }
     };
 
+    const handleAcceptInvite = async (token: string) => {
+        try {
+            await api.post('/invitations/accept', { token });
+            toast.success('Invitation accepted!');
+            await refreshProfile();
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to accept invitation');
+        }
+    };
+
     return (
         <div className="container mx-auto p-6 max-w-4xl space-y-8">
             <div className="flex justify-between items-center">
@@ -100,6 +114,31 @@ export default function UsersPage() {
                     Workspace: <span className="font-semibold text-foreground">{currentTenant?.name}</span>
                 </div>
             </div>
+
+            {/* Incoming Invitations */}
+            {incomingInvitations.length > 0 && (
+                <Card className="border-indigo-200 bg-indigo-50/30">
+                    <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2 text-indigo-700">
+                            <Mail className="h-5 w-5" />
+                            Invitations to Join Other Workspaces
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {incomingInvitations.map((invite) => (
+                            <div key={invite.id} className="flex items-center justify-between p-3 border border-indigo-100 rounded-lg bg-white shadow-sm">
+                                <div className="flex flex-col">
+                                    <span className="font-medium">{invite.tenant?.name || 'New Workspace'}</span>
+                                    <span className="text-xs text-muted-foreground">Role: {invite.role}</span>
+                                </div>
+                                <Button size="sm" onClick={() => handleAcceptInvite(invite.token)} className="bg-indigo-600 hover:bg-indigo-700">
+                                    Accept & Join
+                                </Button>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Invite Section */}
             <Card>

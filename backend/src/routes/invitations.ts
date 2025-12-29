@@ -1,10 +1,51 @@
 
 import express, { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { Invitation, TenantMember, User, Tenant } from '../db';
+import { Invitation, TenantMember, User, Tenant, sequelize } from '../db';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
+import { Op } from 'sequelize';
 
 const router = express.Router();
+
+// List invitations SENT TO the current user
+router.get('/mine', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const rawEmail = req.user?.email;
+        const userEmail = rawEmail?.toLowerCase();
+        console.log(`[INVITES_MINE_DEBUG] Raw Email from req.user: "${rawEmail}"`);
+        console.log(`[INVITES_MINE_DEBUG] Normalized Email: "${userEmail}"`);
+
+        const invitations = await Invitation.findAll({
+            where: {
+                [Op.and]: [
+                    sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), userEmail),
+                    { status: 'PENDING' }
+                ]
+            } as any,
+            include: [{ model: Tenant, attributes: ['name'] }]
+        });
+
+        console.log(`[INVITES_MINE] Found ${invitations.length} invitations for ${userEmail}`);
+
+        const formattedInvites = invitations.map(inv => {
+            const data = (inv as any).toJSON();
+            return {
+                id: data.id,
+                email: data.email,
+                role: data.role,
+                token: data.token,
+                tenant: {
+                    name: data.Tenant?.name || 'Unknown Workspace'
+                }
+            };
+        });
+
+        res.json(formattedInvites);
+    } catch (error) {
+        console.error('Fetch mine invites error:', error);
+        res.status(500).json({ error: 'Failed to fetch your invitations' });
+    }
+});
 
 // List invitations (Admin/Owner only?)
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {

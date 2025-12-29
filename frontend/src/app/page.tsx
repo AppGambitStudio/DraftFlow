@@ -5,12 +5,13 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Mail, CheckCircle } from "lucide-react";
 import { format, isToday, isAfter, startOfToday, endOfToday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PostDetailsModal } from "@/components/PostDetailsModal";
 import { DashboardAnalytics } from "@/components/DashboardAnalytics";
 import toast, { Toaster } from "react-hot-toast";
+import { useAuth } from "@/context/AuthContext";
 
 interface Post {
     id: number;
@@ -23,12 +24,15 @@ interface Post {
 
 export default function DashboardPage() {
     const [posts, setPosts] = useState<Post[]>([]);
+    const [invitations, setInvitations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const { refreshProfile } = useAuth();
 
     useEffect(() => {
         fetchPosts();
+        fetchInvitations();
     }, []);
 
     const fetchPosts = async () => {
@@ -40,6 +44,26 @@ export default function DashboardPage() {
             toast.error("Failed to load posts");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchInvitations = async () => {
+        try {
+            const res = await api.get("/invitations/mine");
+            setInvitations(res.data);
+        } catch (error) {
+            console.error("Failed to load invitations");
+        }
+    };
+
+    const handleAcceptInvite = async (token: string) => {
+        try {
+            await api.post('/invitations/accept', { token });
+            toast.success('Invitation accepted!');
+            setInvitations(prev => prev.filter(i => i.token !== token));
+            await refreshProfile();
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to accept invitation');
         }
     };
 
@@ -92,6 +116,34 @@ export default function DashboardPage() {
     return (
         <div className="space-y-8">
             <Toaster />
+            {/* Invitation Banner */}
+            {invitations.length > 0 && (
+                <div className="space-y-4">
+                    {invitations.map((invite) => (
+                        <div key={invite.id} className="bg-indigo-600 rounded-xl p-4 text-white flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-white/20 rounded-lg">
+                                    <Mail className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold">New Workspace Invitation</h3>
+                                    <p className="text-sm text-indigo-100">
+                                        You&apos;ve been invited to join <span className="font-semibold text-white">{invite.tenant?.name || 'a new workspace'}</span> as an {invite.role}.
+                                    </p>
+                                </div>
+                            </div>
+                            <Button
+                                onClick={() => handleAcceptInvite(invite.token)}
+                                className="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold"
+                            >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Accept & Join
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <div className="flex items-center justify-between">
                 <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                 <Link href="/create">

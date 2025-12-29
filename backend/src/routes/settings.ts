@@ -123,7 +123,7 @@ router.get('/linkedin/authors', authMiddleware, async (req: AuthRequest, res: Re
         const tenantId = req.tenantId!;
         const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) {
-            return res.status(401).json({ error: 'LinkedIn not connected' });
+            return res.json([]);
         }
 
         const accessToken = setting.linkedinAccessToken;
@@ -162,7 +162,7 @@ router.post('/linkedin/scan', authMiddleware, async (req: AuthRequest, res: Resp
         const tenantId = req.tenantId!;
         const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) {
-            return res.status(401).json({ error: 'LinkedIn not connected' });
+            return res.status(400).json({ error: 'LinkedIn not connected' });
         }
 
         const accessToken = setting.linkedinAccessToken;

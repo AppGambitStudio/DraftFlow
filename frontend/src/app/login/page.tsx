@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import Link from 'next/link';
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -67,10 +68,16 @@ export default function LoginPage() {
                             />
                         </div>
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="flex flex-col space-y-4">
                         <Button type="submit" className="w-full" disabled={loading}>
                             {loading ? 'Logging in...' : 'Login'}
                         </Button>
+                        <div className="text-sm text-center text-slate-500">
+                            Don't have an account?{' '}
+                            <Link href="/signup" className="text-primary hover:underline font-medium">
+                                Sign up
+                            </Link>
+                        </div>
                     </CardFooter>
                 </form>
             </Card>
