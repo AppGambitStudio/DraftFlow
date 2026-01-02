@@ -12,8 +12,6 @@ router.get('/mine', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const rawEmail = req.user?.email;
         const userEmail = rawEmail?.toLowerCase();
-        console.log(`[INVITES_MINE_DEBUG] Raw Email from req.user: "${rawEmail}"`);
-        console.log(`[INVITES_MINE_DEBUG] Normalized Email: "${userEmail}"`);
 
         const invitations = await Invitation.findAll({
             where: {
@@ -24,8 +22,6 @@ router.get('/mine', authMiddleware, async (req: AuthRequest, res: Response) => {
             } as any,
             include: [{ model: Tenant, attributes: ['name'] }]
         });
-
-        console.log(`[INVITES_MINE] Found ${invitations.length} invitations for ${userEmail}`);
 
         const formattedInvites = invitations.map(inv => {
             const data = (inv as any).toJSON();

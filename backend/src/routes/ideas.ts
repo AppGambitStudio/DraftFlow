@@ -131,7 +131,6 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
             Title: ${idea.title}
             Description: ${idea.description}
             
-            The post should be easy to understand and should break down complex topics into simple concepts.
             The post should be ready to publish, with appropriate hashtags.
         `;
 

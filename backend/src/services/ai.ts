@@ -153,10 +153,16 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
         }
 
         if (effortLevel) {
-            SYSTEM_PROMPT += `\n**Complexity Level:** "${effortLevel}"\n`;
-            if (effortLevel === '⚡ Quick') SYSTEM_PROMPT += `Keep it short, punchy, under 150 words. Focus on one single idea.\n`;
-            else if (effortLevel === '🧠 Medium') SYSTEM_PROMPT += `Balanced depth, standard length (150-250 words).\n`;
-            else if (effortLevel === '🧩 Deep') SYSTEM_PROMPT += `Go into detail, explain nuances, use a longer format (250-350 words).\n`;
+            SYSTEM_PROMPT += `\n**STRICT LENGTH CONSTRAINT - YOU MUST OBEY THIS:**\n`;
+            if (effortLevel === '⚡ Quick') {
+                SYSTEM_PROMPT += `MAXIMUM 80 WORDS. This is a HARD LIMIT. Use exactly ONE short paragraph or 3-4 very brief bullet points. NO intros, NO outros, NO "Here is your post". Just the punchy content. If you exceed 80 words, you have FAILED.\n`;
+            }
+            else if (effortLevel === '🧠 Medium') {
+                SYSTEM_PROMPT += `MAXIMUM 150 WORDS. Hard limit. Keep it concise and impactful.\n`;
+            }
+            else if (effortLevel === '🧩 Deep') {
+                SYSTEM_PROMPT += `MAXIMUM 300 WORDS. Detail is good but keep it tight.\n`;
+            }
         }
 
         if (keyTakeaway) {
