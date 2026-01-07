@@ -66,16 +66,18 @@ export default function CreatePostPage() {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent, status: string = 'SCHEDULED') => {
         e.preventDefault();
         if (!content) {
             toast.error("Content is required");
             return;
         }
-        if (!scheduledTime) {
-            toast.error("Scheduled time is required");
+
+        if (status === 'SCHEDULED' && !scheduledTime) {
+            toast.error("Scheduled time is required to schedule a post");
             return;
         }
+
         if (platforms.length === 0) {
             toast.error("Select at least one platform");
             return;
@@ -84,17 +86,26 @@ export default function CreatePostPage() {
         setLoading(true);
         try {
             const selectedAuthor = authors.find(a => a.urn === selectedAuthorUrn);
+            let finalScheduledTime = scheduledTime;
+
+            // If saving as draft and no time selected, use current time so it shows on dashboard
+            if (status === 'DRAFT' && !finalScheduledTime) {
+                finalScheduledTime = new Date().toISOString();
+            }
+
             await api.post("/posts", {
                 content,
-                scheduledTime,
+                scheduledTime: finalScheduledTime || undefined,
                 platforms,
                 authorUrn: selectedAuthorUrn,
-                authorName: selectedAuthor?.name || ""
+                authorName: selectedAuthor?.name || "",
+                status
             });
-            toast.success("Post scheduled successfully!");
+            toast.success(status === 'DRAFT' ? "Post saved as draft!" : "Post scheduled successfully!");
             setTimeout(() => router.push("/"), 1500);
-        } catch (error) {
-            toast.error("Failed to schedule post");
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.error || (status === 'DRAFT' ? "Failed to save draft" : "Failed to schedule post");
+            toast.error(errorMsg);
         } finally {
             setLoading(false);
         }
@@ -225,8 +236,19 @@ export default function CreatePostPage() {
                     </div>
 
                     <div className="flex gap-4">
-                        <Button type="submit" disabled={loading}>
+                        <Button type="submit" disabled={loading} onClick={(e) => {
+                            e.preventDefault();
+                            handleSubmit(e, 'SCHEDULED');
+                        }}>
                             {loading ? "Scheduling..." : "Schedule Post"}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={loading}
+                            onClick={(e) => handleSubmit(e, 'DRAFT')}
+                        >
+                            {loading ? "Saving..." : "Save as Draft"}
                         </Button>
                         <Button type="button" variant="outline" onClick={() => router.back()}>
                             Cancel

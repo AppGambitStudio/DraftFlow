@@ -39,7 +39,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
         const timeSeries = days.map((day: Date) => {
             const dayStr = format(day, 'yyyy-MM-dd');
-            const dayPosts = posts.filter(p => format(new Date(p.scheduledTime), 'yyyy-MM-dd') === dayStr);
+            const dayPosts = posts.filter(p => p.scheduledTime && format(new Date(p.scheduledTime), 'yyyy-MM-dd') === dayStr);
 
             return {
                 date: dayStr,

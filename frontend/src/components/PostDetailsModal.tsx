@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 interface Post {
     id: number;
     content: string;
-    scheduledTime: string;
+    scheduledTime: string | null;
     status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
     mediaUrls?: string;
     platforms?: string;
@@ -24,7 +24,7 @@ interface PostDetailsModalProps {
     post: Post | null;
     isOpen: boolean;
     onClose: () => void;
-    onSave: (id: number, data: { content: string; scheduledTime: string; authorUrn?: string; authorName?: string }) => Promise<void>;
+    onSave: (id: number, data: { content: string; scheduledTime: string | null; authorUrn?: string; authorName?: string, status?: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' }) => Promise<void>;
     onDelete: (id: number) => Promise<void>;
 }
 
@@ -48,12 +48,16 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         if (post) {
             setContent(post.content);
             try {
-                const date = new Date(post.scheduledTime);
-                const formatted = format(date, "yyyy-MM-dd'T'HH:mm");
-                setScheduledTime(formatted);
+                if (post.scheduledTime) {
+                    const date = new Date(post.scheduledTime);
+                    const formatted = format(date, "yyyy-MM-dd'T'HH:mm");
+                    setScheduledTime(formatted);
+                } else {
+                    setScheduledTime('');
+                }
             } catch (e) {
                 console.error("Error formatting date:", e);
-                setScheduledTime(post.scheduledTime);
+                setScheduledTime(post.scheduledTime || '');
             }
             setSelectedAuthorUrn(post.authorUrn || '');
             setShowDeleteConfirm(false);
@@ -124,15 +128,51 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         setIsLoading(true);
         try {
             const selectedAuthor = authors.find(a => a.urn === selectedAuthorUrn);
+            let finalScheduledTime = scheduledTime;
+
+            // If it's a draft and no time, use current
+            if (post.status === 'DRAFT' && !finalScheduledTime) {
+                finalScheduledTime = new Date().toISOString();
+            }
+
             await onSave(post.id, {
                 content,
-                scheduledTime,
+                scheduledTime: finalScheduledTime || null,
                 authorUrn: selectedAuthorUrn,
-                authorName: selectedAuthor?.name || ""
+                authorName: selectedAuthor?.name || "",
+                status: post.status // Maintain current status
             });
             onClose();
         } catch (error) {
             console.error('Failed to save:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleMoveToDraft = async () => {
+        setIsLoading(true);
+        try {
+            const selectedAuthor = authors.find(a => a.urn === selectedAuthorUrn);
+            let finalScheduledTime = scheduledTime;
+
+            // If moving to draft and no time, use current
+            if (!finalScheduledTime) {
+                finalScheduledTime = new Date().toISOString();
+            }
+
+            await onSave(post.id, {
+                content,
+                scheduledTime: finalScheduledTime || null,
+                authorUrn: selectedAuthorUrn,
+                authorName: selectedAuthor?.name || "",
+                status: 'DRAFT'
+            });
+            toast.success("Post moved to draft");
+            onClose();
+        } catch (error) {
+            console.error('Failed to move to draft:', error);
+            toast.error("Failed to move to draft");
         } finally {
             setIsLoading(false);
         }
@@ -299,6 +339,17 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
 
                             {!isPublished && (
                                 <>
+                                    {post.status === 'SCHEDULED' && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleMoveToDraft}
+                                            disabled={isLoading}
+                                            className="text-slate-600 border-slate-200 hover:bg-slate-50"
+                                        >
+                                            <Repeat className="mr-2 h-4 w-4" />
+                                            Move to Draft
+                                        </Button>
+                                    )}
                                     <Button
                                         onClick={handlePublishNow}
                                         disabled={isLoading}

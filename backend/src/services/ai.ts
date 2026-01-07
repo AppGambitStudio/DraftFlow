@@ -220,15 +220,20 @@ RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
 
         try {
             // Attempt to parse JSON response. 
-            // In case the model returns markdown code block, strip it.
-            const cleanResponse = response.replace(/```json/g, '').replace(/```/g, '').trim();
+            // Use regex to extract the JSON object even if there is text around it
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                console.error("[AIService] No JSON object found in response:", response);
+                throw new Error("No JSON object found in response");
+            }
+            const cleanResponse = jsonMatch[0];
             const parsed = JSON.parse(cleanResponse);
             return {
                 content: parsed.postContent || parsed.content, // Fallback just in case
                 summary: parsed.summary || "Summary not generated"
             };
         } catch (e) {
-            console.error("Failed to parse AI response as JSON", response);
+            console.error("[AIService] Failed to parse AI response as JSON. Raw response:", response);
             // Fallback: assume the entire response is the post content
             return {
                 content: response,

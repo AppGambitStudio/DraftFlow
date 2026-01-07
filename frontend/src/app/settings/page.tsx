@@ -15,7 +15,8 @@ import {
     History,
     Target,
     RefreshCw,
-    AlertCircle
+    AlertCircle,
+    Copy
 } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
@@ -47,6 +48,7 @@ export default function SettingsPage() {
         maxHistoryItems: 5,
         globalTone: "",
         accountTones: {} as Record<string, string>,
+        webhookSecret: "",
     });
 
     useEffect(() => {
@@ -73,6 +75,7 @@ export default function SettingsPage() {
                 maxHistoryItems: res.data.maxHistoryItems !== undefined ? res.data.maxHistoryItems : 5,
                 globalTone: res.data.globalTone || "",
                 accountTones: res.data.accountTones ? JSON.parse(res.data.accountTones) : {},
+                webhookSecret: res.data.webhookSecret || "",
             });
             setConfig({
                 isLinkedinConfigured: res.data.isLinkedinConfigured || false,
@@ -448,52 +451,86 @@ export default function SettingsPage() {
                         </div>
                     </CardHeader>
                     <CardContent className="pt-6 space-y-8">
-                        {/* Save Idea */}
-                        <div className="space-y-3">
-                            <h4 className="text-sm font-semibold flex items-center gap-2">
-                                <RefreshCw className="h-4 w-4 text-slate-400" />
-                                Idea Ingestion
-                            </h4>
-                            <div className="p-4 bg-slate-900 rounded-xl space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <code className="text-amber-400 text-xs font-mono">
-                                        POST /api/webhooks/idea
-                                    </code>
-                                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">Raw Payload</span>
+                        {/* Credentials */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Workspace ID (X-Tenant-ID)</Label>
+                                <div className="flex items-center gap-2">
+                                    <code className="flex-1 p-2 bg-white border rounded text-xs font-mono">{typeof window !== 'undefined' ? localStorage.getItem('tenantId') : ''}</code>
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => {
+                                        navigator.clipboard.writeText(localStorage.getItem('tenantId') || '');
+                                        toast.success("Copied Workspace ID");
+                                    }}><Copy className="h-3 w-3" /></Button>
                                 </div>
-                                <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
-                                    {`{
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Webhook Secret (X-Webhook-Secret)</Label>
+                                <div className="flex items-center gap-2">
+                                    <code className="flex-1 p-2 bg-white border rounded text-xs font-mono">{formData.webhookSecret || '••••••••••••••••'}</code>
+                                    <Button type="button" variant="ghost" size="sm" onClick={() => {
+                                        navigator.clipboard.writeText(formData.webhookSecret || '');
+                                        toast.success("Copied Webhook Secret");
+                                    }}><Copy className="h-3 w-3" /></Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* Save Idea */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-semibold flex items-center gap-2">
+                                    <RefreshCw className="h-4 w-4 text-slate-400" />
+                                    Idea Ingestion
+                                </h4>
+                                <div className="p-4 bg-slate-900 rounded-xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <code className="text-amber-400 text-xs font-mono">
+                                            POST /api/webhooks/idea
+                                        </code>
+                                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">Headers Required</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2 text-[10px] font-mono text-slate-400">
+                                        <div>X-Tenant-ID: {typeof window !== 'undefined' ? localStorage.getItem('tenantId') : ''}</div>
+                                        <div>X-Webhook-Secret: {formData.webhookSecret || 'YOUR_SECRET'}</div>
+                                    </div>
+                                    <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
+                                        {`{
   "title": "Scaling Node.js apps",
   "summary": "Context about memory limits...",
   "tags": ["cloud", "devops"]
 }`}
-                                </pre>
-                            </div>
-                            <p className="text-xs text-muted-foreground italic">
-                                Automatically creates a persistent idea on your board.
-                            </p>
-                        </div>
-
-                        {/* Direct Schedule */}
-                        <div className="space-y-3">
-                            <h4 className="text-sm font-semibold flex items-center gap-2">
-                                <RefreshCw className="h-4 w-4 text-slate-400" />
-                                Instant Scheduler
-                            </h4>
-                            <div className="p-4 bg-slate-900 rounded-xl space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <code className="text-indigo-400 text-xs font-mono">
-                                        POST /api/webhooks/schedule
-                                    </code>
-                                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">API Context</span>
+                                    </pre>
                                 </div>
-                                <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
-                                    {`{
+                                <p className="text-xs text-muted-foreground italic">
+                                    Automatically creates a persistent idea on your board.
+                                </p>
+                            </div>
+
+                            {/* Direct Schedule */}
+                            <div className="space-y-3">
+                                <h4 className="text-sm font-semibold flex items-center gap-2">
+                                    <RefreshCw className="h-4 w-4 text-slate-400" />
+                                    Instant Scheduler
+                                </h4>
+                                <div className="p-4 bg-slate-900 rounded-xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <code className="text-indigo-400 text-xs font-mono">
+                                            POST /api/webhooks/schedule
+                                        </code>
+                                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">API Context</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2 text-[10px] font-mono text-slate-400">
+                                        <div>X-Tenant-ID: {typeof window !== 'undefined' ? localStorage.getItem('tenantId') : ''}</div>
+                                        <div>X-Webhook-Secret: {formData.webhookSecret || 'YOUR_SECRET'}</div>
+                                    </div>
+                                    <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
+                                        {`{
   "content": "Fully written post logic...",
   "scheduledTime": "ISO-TIMESTAMP",
   "platforms": ["LINKEDIN"]
 }`}
-                                </pre>
+                                    </pre>
+                                </div>
                             </div>
                         </div>
                     </CardContent>

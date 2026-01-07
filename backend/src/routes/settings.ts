@@ -34,7 +34,8 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             isLinkedinConfigured,
             isTwitterConfigured,
             isLinkedinConnected,
-            isTwitterConnected
+            isTwitterConnected,
+            webhookSecret: data.webhookSecret // Expose this
         };
 
         res.json(safeSettings);

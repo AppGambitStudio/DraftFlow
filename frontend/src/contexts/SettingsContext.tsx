@@ -10,6 +10,7 @@ interface Settings {
     maxHistoryItems: number;
     globalTone: string;
     accountTones: Record<string, string>;
+    isOpenRouterConfigured: boolean;
 }
 
 interface SettingsContextType {
@@ -26,7 +27,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         targetAudiences: [],
         maxHistoryItems: 5,
         globalTone: "",
-        accountTones: {}
+        accountTones: {},
+        isOpenRouterConfigured: true // Default to true to avoid flash
     });
     const [loading, setLoading] = useState(true);
 
@@ -52,7 +54,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 targetAudiences: audiences,
                 maxHistoryItems: res.data.maxHistoryItems !== undefined ? res.data.maxHistoryItems : 5,
                 globalTone: res.data.globalTone || "",
-                accountTones
+                accountTones,
+                isOpenRouterConfigured: !!res.data.openRouterApiKey
             });
         } catch (error) {
             console.error('Failed to fetch settings:', error);
@@ -69,7 +72,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 targetAudiences: [],
                 maxHistoryItems: 5,
                 globalTone: "",
-                accountTones: {}
+                accountTones: {},
+                isOpenRouterConfigured: true
             });
             setLoading(false);
         }

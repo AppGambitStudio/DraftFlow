@@ -22,7 +22,7 @@ import toast from "react-hot-toast";
 interface Post {
     id: number;
     content: string;
-    scheduledTime: string;
+    scheduledTime: string | null;
     status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
 }
 
@@ -52,14 +52,14 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
         if (!draggedPost) return;
 
         // Don't do anything if dropped on the same day
-        if (isSameDay(new Date(draggedPost.scheduledTime), date)) {
+        if (draggedPost.scheduledTime && isSameDay(new Date(draggedPost.scheduledTime), date)) {
             setDraggedPost(null);
             return;
         }
 
         try {
             // Preserve the original time, just change the date
-            const originalDate = new Date(draggedPost.scheduledTime);
+            const originalDate = draggedPost.scheduledTime ? new Date(draggedPost.scheduledTime) : new Date();
             const newDate = new Date(date);
             newDate.setHours(originalDate.getHours(), originalDate.getMinutes(), 0, 0);
 
@@ -87,7 +87,7 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
     });
 
     const getPostsForDay = (day: Date) => {
-        return posts.filter((post) => isSameDay(new Date(post.scheduledTime), day));
+        return posts.filter((post) => post.scheduledTime && isSameDay(new Date(post.scheduledTime), day));
     };
 
     const handleSavePost = async (id: number, updates: Partial<Post>) => {
@@ -184,14 +184,17 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                                                 post.status === "DRAFT" && "text-slate-600 dark:text-slate-400",
                                                 post.status === "SCHEDULED" && "text-blue-700 dark:text-blue-400"
                                             )}
-                                            title={`${post.status} - ${format(new Date(post.scheduledTime), "HH:mm")}: ${post.content}`}
+                                            title={`${post.status}${post.scheduledTime ? ` - ${format(new Date(post.scheduledTime), "HH:mm")}` : ""}: ${post.content}`}
                                         >
                                             {post.status === "PUBLISHED" && <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
                                             {post.status === "FAILED" && <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
                                             {post.status === "DRAFT" && <FileText className="h-3.5 w-3.5 shrink-0" />}
                                             {post.status === "SCHEDULED" && <Clock className="h-3.5 w-3.5 shrink-0" />}
 
-                                            <span className="truncate">{format(new Date(post.scheduledTime), "HH:mm")} {post.content}</span>
+                                            <span className="truncate">
+                                                {post.scheduledTime && <span>{format(new Date(post.scheduledTime), "HH:mm")} </span>}
+                                                {post.content}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>

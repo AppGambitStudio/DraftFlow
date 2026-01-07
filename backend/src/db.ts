@@ -1,4 +1,5 @@
 import { Sequelize, DataTypes, Model, InferAttributes, InferCreationAttributes, CreationOptional, ForeignKey } from 'sequelize';
+import * as crypto from 'crypto';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 
@@ -185,6 +186,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare maxHistoryItems: CreationOptional<number>;
     declare globalTone: string | null;
     declare accountTones: string | null; // JSON string mapping urn -> instructions
+    declare webhookSecret: CreationOptional<string | null>; // Added
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -237,6 +239,10 @@ Settings.init({
         type: DataTypes.TEXT,
         defaultValue: '{}',
     },
+    webhookSecret: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -255,7 +261,7 @@ export class Post extends Model<InferAttributes<Post>, InferCreationAttributes<P
     declare tenantId: ForeignKey<Tenant['id']> | null; // Added
     declare content: string;
     declare mediaUrls: string | null; // JSON string
-    declare scheduledTime: Date;
+    declare scheduledTime: Date | null;
     declare status: string; // DRAFT, SCHEDULED, PUBLISHED, FAILED
     declare platforms: string; // JSON string: ["LINKEDIN", "TWITTER"]
     declare linkedinPostId: string | null;
@@ -296,7 +302,7 @@ Post.init({
     },
     scheduledTime: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
     },
     status: {
         type: DataTypes.STRING,
@@ -529,8 +535,18 @@ export const initDB = async () => {
             await Settings.create({
                 userId: defaultUser.id,
                 linkedinOrganizations: '[]',
+                webhookSecret: crypto.randomBytes(16).toString('hex'),
             });
             console.log('Default settings created for the user.');
+        }
+
+        // 4. Ensure all settings have a webhookSecret (self-healing)
+        const allSettings = await Settings.findAll({ where: { webhookSecret: null } });
+        for (const s of allSettings) {
+            await s.update({ webhookSecret: crypto.randomBytes(16).toString('hex') });
+        }
+        if (allSettings.length > 0) {
+            console.log(`Generated webhook secrets for ${allSettings.length} settings records.`);
         }
 
     } catch (error) {

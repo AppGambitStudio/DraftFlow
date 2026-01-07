@@ -22,23 +22,31 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // Create a post
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const userId = req.user!.id;
-    const tenantId = req.tenantId!;
-    const { content, scheduledTime, platforms } = req.body;
     try {
+        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
+        const { content, scheduledTime, platforms, status } = req.body;
+
+        console.log('Creating post for tenant:', tenantId, 'Status:', status);
+
         const post = await Post.create({
             userId,
             tenantId,
             content,
-            scheduledTime: new Date(scheduledTime),
-            status: 'SCHEDULED',
+            scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
+            status: status || (scheduledTime ? 'SCHEDULED' : 'DRAFT'),
             platforms: platforms ? JSON.stringify(platforms) : JSON.stringify(['LINKEDIN']),
             authorUrn: req.body.authorUrn,
             authorName: req.body.authorName,
         });
         res.json(post);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to create post' });
+    } catch (error: any) {
+        console.error('CREATE POST ERROR:', error);
+        if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+            const messages = error.errors?.map((e: any) => e.message).join(', ') || 'No specific messages';
+            return res.status(400).json({ error: `Validation error: ${messages}` });
+        }
+        res.status(500).json({ error: 'Failed to create post: ' + error.message });
     }
 });
 
@@ -59,16 +67,21 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
         post.authorUrn = req.body.authorUrn !== undefined ? req.body.authorUrn : post.authorUrn;
         post.authorName = req.body.authorName !== undefined ? req.body.authorName : post.authorName;
 
+        const oldStatus = post.status;
         // If status is provided, use it. Otherwise, if it was FAILED and we're updating, reset to SCHEDULED.
         if (status !== undefined) {
             post.status = status;
-        } else {
-            // Auto-transition logic
-            if (post.status === 'FAILED' && (scheduledTime || content)) {
-                post.status = 'SCHEDULED';
-                post.error = null; // Clear error
-            } else if (post.status === 'DRAFT' && post.scheduledTime > new Date()) {
-                // If it's a draft and has a future time, automatically schedule it
+        }
+
+        // Auto-transition logic: ensure we don't stay in DRAFT if we have a scheduled time
+        if (post.status === 'FAILED' && (scheduledTime || content)) {
+            post.status = 'SCHEDULED';
+            post.error = null; // Clear error
+        } else if (post.status === 'DRAFT' && post.scheduledTime && post.scheduledTime > new Date()) {
+            // Only auto-upgrade if we didn't JUST explicitly move it TO draft from something else (like SCHEDULED)
+            // If the user clicks "Save Changes" on an existing draft, status is 'DRAFT' and oldStatus is 'DRAFT'.
+            // If the user clicks "Move to Draft", status is 'DRAFT' and oldStatus is 'SCHEDULED'.
+            if (status === undefined || (status === 'DRAFT' && oldStatus === 'DRAFT')) {
                 post.status = 'SCHEDULED';
             }
         }
