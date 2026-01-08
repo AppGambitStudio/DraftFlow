@@ -127,19 +127,22 @@ Your task is to create a compelling, high-performing LinkedIn post from scratch 
             SYSTEM_PROMPT += `\n**Post Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;
         }
 
-        if (additionalContext) {
-            SYSTEM_PROMPT += `\n**Additional User Instructions:** ${additionalContext}\nFollow these specific instructions for the post generation.\n`;
-        }
+        SYSTEM_PROMPT += `\n### MANDATORY CONSTRAINTS & INSTRUCTIONS ###\n`;
+        SYSTEM_PROMPT += `You MUST strictly adhere to the following constraints. They take precedence over all other general guidelines.\n`;
 
-        if (toneInstructions) {
-            SYSTEM_PROMPT += `\n**Tone & Writing Style Instructions:**\n${toneInstructions}\nYou MUST strictly follow these specific style guidelines.\n`;
+        if (additionalContext) {
+            SYSTEM_PROMPT += `\n**SPECIFIC USER INSTRUCTIONS (CRITICAL SOURCE OF TRUTH):**\n"${additionalContext}"\n-> You MUST incorporate these specific details, use cases, or stylistic requests accurately. These are your primary instructions.\n`;
         }
 
         if (antiGoals) {
-            SYSTEM_PROMPT += `\n**Anti-Goals (Strict constraints - what to AVOID):**\n"${antiGoals}"\n(You must ensure the post does NOT violate these constraints.)\n`;
+            SYSTEM_PROMPT += `\n**ANTI-GOALS (STRICTLY AVOID):**\n"${antiGoals}"\n-> You must ensure the post does NOT violate these constraints.\n`;
         }
 
-        // New Fields Logic
+        SYSTEM_PROMPT += `\n### CONTENT STRATEGY ###\n`;
+
+        if (toneInstructions) {
+            SYSTEM_PROMPT += `\n**TONE & WRITING STYLE:**\n${toneInstructions}\n`;
+        }
         if (postShape) {
             SYSTEM_PROMPT += `\n**Post Shape/Format Strategy:**\nYou must structure the post as a "${postShape}".\n`;
             if (postShape === 'Hot take') SYSTEM_PROMPT += `Be bold, controversial, and start with a strong opinion.\n`;
@@ -187,8 +190,9 @@ Unless the "Post Shape" instruction above dictates otherwise, follow this high-l
 
 **Topics & Focus:**
 - STRICTLY focus on the topics provided in the "Idea Title", "Core Concept", and "Tags".
-- Do NOT force unrelated topics (like generic AI or Cloud concepts) unless they are part of the input.
-- If the input is broad, narrow it down to a specific, actionable angle.
+- **Primary Anchor:** If "SPECIFIC USER INSTRUCTIONS" were provided above, they are your primary source of truth for the post's angle and content.
+- Do NOT force unrelated topics unless they are part of the input.
+- If the input is broad, narrow it down to the specific angle requested by the user.
 
 **Tone & Style (Default)**:
 - Professional yet conversational (like a smart colleague, not a textbook).

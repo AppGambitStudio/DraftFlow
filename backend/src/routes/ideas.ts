@@ -119,6 +119,7 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
         const tenantId = req.tenantId!;
         const { id } = req.params;
         const { platform, targetAudience, additionalContext } = req.body; // 'LINKEDIN' or 'TWITTER'
+        console.log(`[Idea Generate] id=${id}, platform=${platform}, additionalContext="${additionalContext || 'none'}"`);
         const idea = await Idea.findOne({ where: { id, tenantId } });
 
         if (!idea) {
