@@ -48,6 +48,7 @@ export default function SettingsPage() {
         maxHistoryItems: 5,
         globalTone: "",
         accountTones: {} as Record<string, string>,
+        aiPersona: "",
         webhookSecret: "",
     });
 
@@ -75,6 +76,7 @@ export default function SettingsPage() {
                 maxHistoryItems: res.data.maxHistoryItems !== undefined ? res.data.maxHistoryItems : 5,
                 globalTone: res.data.globalTone || "",
                 accountTones: res.data.accountTones ? JSON.parse(res.data.accountTones) : {},
+                aiPersona: res.data.aiPersona || "",
                 webhookSecret: res.data.webhookSecret || "",
             });
             setConfig({
@@ -404,6 +406,20 @@ export default function SettingsPage() {
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     The default style used whenever you generate a post.
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">AI Assistant Persona & Objective</Label>
+                                <textarea
+                                    name="aiPersona"
+                                    value={formData.aiPersona}
+                                    onChange={(e) => setFormData({ ...formData, aiPersona: e.target.value })}
+                                    className="flex min-h-[120px] w-full rounded-xl border border-input bg-slate-50/30 px-4 py-3 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                                    placeholder="Describe who the AI should act as (e.g. 'You are an expert LinkedIn strategist specializing in Fintech...')"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    This defines the AI's background and expertise during post generation.
                                 </p>
                             </div>
 

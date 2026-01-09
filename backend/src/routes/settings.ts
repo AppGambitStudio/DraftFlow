@@ -50,7 +50,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const {
         openRouterApiKey, openRouterModelId, targetAudiences, maxHistoryItems,
-        globalTone, accountTones
+        globalTone, accountTones, aiPersona
     } = req.body;
     console.log('Received settings update for tenant:', tenantId);
 
@@ -66,6 +66,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
                 maxHistoryItems: maxHistoryItems || 5,
                 globalTone,
                 accountTones: accountTones ? JSON.stringify(accountTones) : '{}',
+                aiPersona,
             },
         });
 
@@ -76,6 +77,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             maxHistoryItems: maxHistoryItems !== undefined ? maxHistoryItems : setting.maxHistoryItems,
             globalTone,
             accountTones: accountTones ? JSON.stringify(accountTones) : setting.accountTones,
+            aiPersona: aiPersona !== undefined ? aiPersona : setting.aiPersona,
         });
 
         res.json(setting);

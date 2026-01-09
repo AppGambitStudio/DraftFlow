@@ -2,11 +2,12 @@ import axios from 'axios';
 import { Settings } from '../db';
 
 export class AIService {
-    private static async getSettings(tenantId: string): Promise<{ apiKey: string | null, modelId: string | null }> {
+    private static async getSettings(tenantId: string): Promise<{ apiKey: string | null, modelId: string | null, aiPersona: string | null }> {
         const settings = await Settings.findOne({ where: { tenantId } });
         return {
             apiKey: settings?.openRouterApiKey || null,
-            modelId: settings?.openRouterModelId || null
+            modelId: settings?.openRouterModelId || null,
+            aiPersona: settings?.aiPersona || null
         };
     }
 
@@ -51,11 +52,11 @@ export class AIService {
     }
 
     static async improvise(tenantId: string, content: string, targetAudience?: string, toneInstructions?: string): Promise<string> {
-        let SYSTEM_PROMPT = `
-            You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.
+        const { aiPersona } = await this.getSettings(tenantId);
 
-Your task is to refine and enhance an existing LinkedIn post draft while preserving the author's core message and voice.
-`;
+        let SYSTEM_PROMPT = aiPersona || `You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.`;
+
+        SYSTEM_PROMPT += `\n\nYour task is to refine and enhance an existing LinkedIn post draft while preserving the author's core message and voice. If first line has the exact instructions from the author, then follow them.\n`;
 
         if (targetAudience) {
             SYSTEM_PROMPT += `\n**Post Audience:** ${targetAudience}\nEnsure the tone, complexity, and value proposition resonate specifically with this audience.\n`;
@@ -100,6 +101,10 @@ Your task is to refine and enhance an existing LinkedIn post draft while preserv
 
 Return ONLY the refined LinkedIn post, formatted and ready to publish. No explanations or meta-commentary.
 `;
+
+        console.log(`[AIService] Improving LinkedIn post:\n\n${content}`);
+        console.log(`[AIService] System Prompt:\n\n${SYSTEM_PROMPT}`);
+
         return this.callOpenRouter(tenantId, SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
     }
 
@@ -115,13 +120,11 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         keyTakeaway?: string,
         antiGoals?: string
     ): Promise<{ content: string; summary: string }> {
-        console.log(`[AIService] Generating with options: Shape="${postShape}", Effort="${effortLevel}", Takeaway="${keyTakeaway ? 'Yes' : 'No'}", AntiGoals="${antiGoals ? 'Yes' : 'No'}"`);
+        const { aiPersona } = await this.getSettings(tenantId);
 
-        let SYSTEM_PROMPT = `
-            You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.
+        let SYSTEM_PROMPT = aiPersona || `You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.`;
 
-Your task is to create a compelling, high-performing LinkedIn post from scratch based on the provided idea or topic.
-`;
+        SYSTEM_PROMPT += `\n\nYour task is to create a compelling, high-performing LinkedIn post from scratch based on the provided idea or topic.\n`;
 
         if (targetAudience) {
             SYSTEM_PROMPT += `\n**Post Audience:** ${targetAudience}\nEnsure the content, examples, and takeaways are highly relevant to this group.\n`;

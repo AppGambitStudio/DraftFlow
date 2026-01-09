@@ -186,6 +186,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare maxHistoryItems: CreationOptional<number>;
     declare globalTone: string | null;
     declare accountTones: string | null; // JSON string mapping urn -> instructions
+    declare aiPersona: string | null; // Added
     declare webhookSecret: CreationOptional<string | null>; // Added
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
@@ -238,6 +239,10 @@ Settings.init({
     accountTones: {
         type: DataTypes.TEXT,
         defaultValue: '{}',
+    },
+    aiPersona: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     webhookSecret: {
         type: DataTypes.STRING,
