@@ -62,7 +62,8 @@ export const startScheduler = () => {
                 if (platforms.includes('LINKEDIN')) {
                     try {
                         const contentToPublish = markdownToUnicode(post.content);
-                        const linkedinId = await linkedinService.publishPost(post.tenantId as string, contentToPublish, post.authorUrn || undefined);
+                        const attachments = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+                        const linkedinId = await linkedinService.publishPost(post.tenantId as string, contentToPublish, post.authorUrn || undefined, attachments);
                         await post.update({ linkedinPostId: linkedinId });
                         results.push('LinkedIn');
                     } catch (error: any) {
@@ -74,7 +75,8 @@ export const startScheduler = () => {
                 // Publish to Twitter
                 if (platforms.includes('TWITTER')) {
                     try {
-                        const twitterId = await twitterService.publishTweet(post.tenantId as string, post.content);
+                        const attachments = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+                        const twitterId = await twitterService.publishTweet(post.tenantId as string, post.content, attachments);
                         await post.update({ twitterPostId: twitterId });
                         results.push('Twitter');
                     } catch (error: any) {

@@ -1,8 +1,9 @@
 import axios from 'axios';
+import fs from 'fs';
 import { Settings } from '../db';
 
 class LinkedInService {
-    async publishPost(tenantId: string, content: string, authorUrn?: string) {
+    async publishPost(tenantId: string, content: string, authorUrn?: string, attachments?: any[]) {
         const setting = await Settings.findOne({ where: { tenantId } });
 
         if (!setting || !setting.linkedinAccessToken) {
@@ -34,7 +35,57 @@ class LinkedInService {
             }
         }
 
-        const body = {
+        let mediaCategory = 'NONE';
+        let media: any[] = [];
+
+        if (attachments && attachments.length > 0) {
+            try {
+                // Determine if we have multiple attachments or mixed types
+                const images = attachments.filter(a => a.type.startsWith('image/'));
+                const documents = attachments.filter(a => !a.type.startsWith('image/'));
+
+                if (images.length > 0 && documents.length === 0) {
+                    mediaCategory = 'IMAGE';
+                    for (const attachment of images) {
+                        const assetUrn = await this.uploadMedia(accessToken, finalAuthorUrn as string, attachment);
+                        media.push({
+                            status: 'READY',
+                            media: assetUrn,
+                            title: { text: attachment.name },
+                            description: { text: attachment.name }
+                        });
+                    }
+                } else if (documents.length > 0 && images.length === 0) {
+                    // LinkedIn only supports ONE document per post via ugcPosts
+                    // Using the first document
+                    const attachment = documents[0];
+                    mediaCategory = 'DOCUMENT';
+                    const assetUrn = await this.uploadMedia(accessToken, finalAuthorUrn as string, attachment);
+                    media.push({
+                        status: 'READY',
+                        media: assetUrn,
+                        title: { text: attachment.name }
+                    });
+                } else if (images.length > 0 && documents.length > 0) {
+                    // Mixed media: Prioritize images in LinkedIn for now as it doesn't support mixed IMAGE + DOCUMENT in one go easily
+                    mediaCategory = 'IMAGE';
+                    for (const attachment of images) {
+                        const assetUrn = await this.uploadMedia(accessToken, finalAuthorUrn as string, attachment);
+                        media.push({
+                            status: 'READY',
+                            media: assetUrn,
+                            title: { text: attachment.name },
+                            description: { text: attachment.name }
+                        });
+                    }
+                }
+            } catch (error: any) {
+                console.error('LinkedIn Media Upload Error:', error.message);
+                throw new Error(`Failed to upload media to LinkedIn: ${error.message}`);
+            }
+        }
+
+        const body: any = {
             author: finalAuthorUrn,
             lifecycleState: 'PUBLISHED',
             specificContent: {
@@ -42,13 +93,17 @@ class LinkedInService {
                     shareCommentary: {
                         text: content,
                     },
-                    shareMediaCategory: 'NONE', // Default to text only for now
+                    shareMediaCategory: mediaCategory,
                 },
             },
             visibility: {
                 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
             },
         };
+
+        if (mediaCategory !== 'NONE') {
+            body.specificContent['com.linkedin.ugc.ShareContent'].media = media;
+        }
 
         try {
             const response = await axios.post('https://api.linkedin.com/v2/ugcPosts', body, {
@@ -62,6 +117,52 @@ class LinkedInService {
             console.error('LinkedIn API Error:', error.response?.data || error.message);
             throw error;
         }
+    }
+
+    private async uploadMedia(accessToken: string, authorUrn: string, attachment: any): Promise<string> {
+        const isImage = attachment.type.startsWith('image/');
+        const action = isImage ? 'registerUpload' : 'registerUpload'; // Both use same for assets API
+        const recipe = isImage ? 'urn:li:digitalmediaRecipe:feedshare-image' : 'urn:li:digitalmediaRecipe:feedshare-document';
+        const service = isImage ? 'IMAGE' : 'DOCUMENT';
+
+        const registerBody = {
+            registerUploadRequest: {
+                recipes: [recipe],
+                owner: authorUrn,
+                serviceRelationships: [
+                    {
+                        relationshipType: 'OWNER',
+                        identifier: 'urn:li:userGeneratedContent',
+                    },
+                ],
+            },
+        };
+
+        const registerResponse = await axios.post('https://api.linkedin.com/v2/assets?action=registerUpload', registerBody, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'X-Restli-Protocol-Version': '2.0.0',
+            },
+        });
+
+        const uploadUrl = registerResponse.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+        const assetUrn = registerResponse.data.value.asset;
+
+        // Read file from uploads directory
+        const filePath = attachment.url.startsWith('/')
+            ? `./${attachment.url.substring(1)}` // Remove leading /
+            : attachment.url;
+
+        const fileData = fs.readFileSync(filePath);
+
+        await axios.put(uploadUrl, fileData, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': attachment.type,
+            },
+        });
+
+        return assetUrn;
     }
 
     async getPostStats(tenantId: string, postUrns: string[], authorUrn?: string) {

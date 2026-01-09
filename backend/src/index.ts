@@ -11,7 +11,9 @@ import userAuthRoutes from './routes/userAuth';
 import analyticsRoutes from './routes/analytics';
 import invitationRoutes from './routes/invitations';
 import userRoutes from './routes/users';
+import uploadRoutes from './routes/uploads';
 import { startScheduler } from './services/scheduler';
+import path from 'path';
 import { initDB } from './db';
 
 dotenv.config();
@@ -33,6 +35,10 @@ app.use('/api/user-auth', userAuthRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/uploads', uploadRoutes);
+
+// Serve uploads directory
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // The /health endpoint was removed in the provided edit snippet.
 // app.get('/health', (req, res) => {

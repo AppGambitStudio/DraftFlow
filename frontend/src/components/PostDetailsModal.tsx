@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Trash2, Save, Sparkles, Send, Repeat } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ interface PostDetailsModalProps {
     post: Post | null;
     isOpen: boolean;
     onClose: () => void;
-    onSave: (id: number, data: { content: string; scheduledTime: string | null; authorUrn?: string; authorName?: string, status?: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' }) => Promise<void>;
+    onSave: (id: number, data: { content: string; scheduledTime: string | null; authorUrn?: string; authorName?: string, status?: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED', mediaUrls?: any[] }) => Promise<void>;
     onDelete: (id: number) => Promise<void>;
 }
 
@@ -43,6 +43,9 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [selectedAuthorUrn, setSelectedAuthorUrn] = useState<string>('');
     const [selectedAudience, setSelectedAudience] = useState<string>('');
+    const [attachments, setAttachments] = useState<any[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (post) {
@@ -60,6 +63,21 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                 setScheduledTime(post.scheduledTime || '');
             }
             setSelectedAuthorUrn(post.authorUrn || '');
+            if (post.mediaUrls) {
+                try {
+                    let parsed = typeof post.mediaUrls === 'string' ? JSON.parse(post.mediaUrls) : post.mediaUrls;
+                    // Handle double-stringification if it somehow happened in the past
+                    if (typeof parsed === 'string') {
+                        parsed = JSON.parse(parsed);
+                    }
+                    setAttachments(Array.isArray(parsed) ? parsed : []);
+                } catch (e) {
+                    console.error("Error parsing mediaUrls:", e);
+                    setAttachments([]);
+                }
+            } else {
+                setAttachments([]);
+            }
             setShowDeleteConfirm(false);
         }
     }, [post]);
@@ -97,6 +115,20 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         }
     };
 
+    const removeAttachment = (index: number) => {
+        setAttachments(attachments.filter((_, i) => i !== index));
+    };
+
+    const moveAttachment = (index: number, direction: 'up' | 'down') => {
+        const newAttachments = [...attachments];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+        if (targetIndex < 0 || targetIndex >= newAttachments.length) return;
+
+        [newAttachments[index], newAttachments[targetIndex]] = [newAttachments[targetIndex], newAttachments[index]];
+        setAttachments(newAttachments);
+    };
+
     const handlePublishNow = async () => {
         setIsLoading(true);
         try {
@@ -107,7 +139,8 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                 content,
                 scheduledTime,
                 authorUrn: selectedAuthorUrn,
-                authorName: selectedAuthor?.name || ""
+                authorName: selectedAuthor?.name || "",
+                mediaUrls: attachments
             });
 
             // Then trigger publish
@@ -140,7 +173,8 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                 scheduledTime: finalScheduledTime || null,
                 authorUrn: selectedAuthorUrn,
                 authorName: selectedAuthor?.name || "",
-                status: post.status // Maintain current status
+                status: post.status, // Maintain current status
+                mediaUrls: attachments
             });
             onClose();
         } catch (error) {
@@ -166,7 +200,8 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                 scheduledTime: finalScheduledTime || null,
                 authorUrn: selectedAuthorUrn,
                 authorName: selectedAuthor?.name || "",
-                status: 'DRAFT'
+                status: 'DRAFT',
+                mediaUrls: attachments
             });
             toast.success("Post moved to draft");
             onClose();
@@ -198,9 +233,36 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const handleRepost = () => {
         if (!post) return;
         localStorage.setItem('draftPostContent', post.content);
+        localStorage.setItem('draftPostAttachments', JSON.stringify(attachments));
         // Force a small delay to ensure modal close animation doesn't conflict
         onClose();
         router.push('/create?source=repost');
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Reset input
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await api.post('/uploads', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            setAttachments([...attachments, res.data]);
+            toast.success("File uploaded successfully");
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || "Failed to upload file");
+        } finally {
+            setUploading(false);
+        }
     };
 
     return (
@@ -275,7 +337,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                                 value={selectedAudience}
                                                 onChange={(e) => setSelectedAudience(e.target.value)}
                                                 disabled={isPublished || isLoading}
-                                                className="h-8 w-[180px] rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                                className="h-8 w-[180px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 <option value="">Post Audience (Optional)</option>
                                                 {settings.targetAudiences.map((audience, index) => (
@@ -330,6 +392,94 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                 onChange={(e) => setScheduledTime(e.target.value)}
                                 disabled={isPublished || isLoading}
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label>Attachments</Label>
+                                {!isPublished && (
+                                    <>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploading || isLoading}
+                                        >
+                                            {uploading ? (
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Paperclip className="mr-2 h-4 w-4" />
+                                            )}
+                                            Add Attachment
+                                        </Button>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            onChange={handleFileUpload}
+                                        />
+                                    </>
+                                )}
+                            </div>
+                            {Array.isArray(attachments) && attachments.length > 0 && (
+                                <div className="grid grid-cols-1 gap-2">
+                                    {attachments.map((file: any, index: number) => (
+                                        <div key={index} className="flex items-center justify-between p-2 rounded-md border border-slate-200 bg-slate-50">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                {file.type.startsWith('image/') ? (
+                                                    <div className="h-8 w-8 rounded overflow-hidden flex-shrink-0">
+                                                        <img
+                                                            src={file.url.startsWith('http') ? file.url : `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:5002${file.url}`}
+                                                            alt={file.name}
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <FileText className="h-8 w-8 text-blue-500 flex-shrink-0" />
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-sm font-medium truncate">{file.name}</div>
+                                                    <div className="text-xs text-slate-500">{Math.round(file.size / 1024)} KB</div>
+                                                </div>
+                                            </div>
+                                            {!isPublished && (
+                                                <div className="flex items-center gap-1">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => moveAttachment(index, 'up')}
+                                                        disabled={index === 0}
+                                                        className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
+                                                    >
+                                                        <ArrowUp className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => moveAttachment(index, 'down')}
+                                                        disabled={index === attachments.length - 1}
+                                                        className="h-8 w-8 p-0 text-slate-400 hover:text-primary"
+                                                    >
+                                                        <ArrowDown className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => removeAttachment(index)}
+                                                        className="h-8 w-8 p-0 text-slate-400 hover:text-red-500"
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
@@ -387,3 +537,4 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         </>
     );
 }
+

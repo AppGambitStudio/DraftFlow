@@ -25,7 +25,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
         const tenantId = req.tenantId!;
-        const { content, scheduledTime, platforms, status } = req.body;
+        const { content, scheduledTime, platforms, status, mediaUrls } = req.body;
 
         console.log('Creating post for tenant:', tenantId, 'Status:', status);
 
@@ -36,6 +36,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
             status: status || (scheduledTime ? 'SCHEDULED' : 'DRAFT'),
             platforms: platforms ? JSON.stringify(platforms) : JSON.stringify(['LINKEDIN']),
+            mediaUrls: mediaUrls ? JSON.stringify(mediaUrls) : null,
             authorUrn: req.body.authorUrn,
             authorName: req.body.authorName,
         });
@@ -63,7 +64,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
         post.content = content !== undefined ? content : post.content;
         post.scheduledTime = scheduledTime ? new Date(scheduledTime) : post.scheduledTime;
-        post.mediaUrls = mediaUrls ? JSON.stringify(mediaUrls) : post.mediaUrls;
+        post.mediaUrls = mediaUrls !== undefined ? JSON.stringify(mediaUrls) : post.mediaUrls;
         post.authorUrn = req.body.authorUrn !== undefined ? req.body.authorUrn : post.authorUrn;
         post.authorName = req.body.authorName !== undefined ? req.body.authorName : post.authorName;
 
@@ -119,8 +120,8 @@ router.post('/:id/publish', authMiddleware, async (req: AuthRequest, res: Respon
         }
 
         const contentToPublish = markdownToUnicode(post.content);
-        // Note: We pass tenantId instead of userId now
-        const linkedinId = await linkedinService.publishPost(tenantId, contentToPublish, post.authorUrn || undefined);
+        const attachments = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
+        const linkedinId = await linkedinService.publishPost(tenantId, contentToPublish, post.authorUrn || undefined, attachments);
 
         post.linkedinPostId = linkedinId;
 

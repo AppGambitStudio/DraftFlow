@@ -81,7 +81,7 @@ export class TwitterService {
         return accessToken;
     }
 
-    async publishTweet(tenantId: string, content: string) {
+    async publishTweet(tenantId: string, content: string, attachments?: any[]) {
         // Re-initialize to ensure we have the latest token
         await this.initializeClient(tenantId);
 
@@ -97,7 +97,28 @@ export class TwitterService {
         }
 
         try {
-            const { data } = await this.client.v2.tweet(content);
+            let mediaIds: string[] = [];
+            if (attachments && attachments.length > 0) {
+                // Twitter supports up to 4 images, 1 video, or 1 GIF
+                // We'll prioritize images and videos.
+                for (const attachment of attachments.slice(0, 4)) {
+                    if (attachment.type.startsWith('image/') || attachment.type.startsWith('video/')) {
+                        const filePath = attachment.url.startsWith('/')
+                            ? `./${attachment.url.substring(1)}`
+                            : attachment.url;
+
+                        const mediaId = await this.client.v1.uploadMedia(filePath, { mimeType: attachment.type });
+                        mediaIds.push(mediaId);
+                    }
+                }
+            }
+
+            const tweetBody: any = { text: content };
+            if (mediaIds.length > 0) {
+                tweetBody.media = { media_ids: mediaIds };
+            }
+
+            const { data } = await this.client.v2.tweet(tweetBody);
             return data.id;
         } catch (error) {
             console.error('Error publishing tweet:', error);
