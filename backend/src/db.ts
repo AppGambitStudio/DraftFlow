@@ -362,18 +362,18 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare tenantId: ForeignKey<Tenant['id']> | null; // Added
     declare title: string;
     declare description: string | null;
-    declare tags: string; // JSON string
-    declare status: string; // NEW, DRAFTED, ARCHIVED
+    declare tags: CreationOptional<string>; // JSON string
+    declare status: CreationOptional<string>; // NEW, DRAFTED, ARCHIVED
     declare source: string | null;
     declare contentHash: string | null;
-    declare isRecurring: boolean;
+    declare isRecurring: CreationOptional<boolean>;
     declare frequency: string | null;
     declare lastGeneratedAt: Date | null;
     declare authorUrn: string | null;
     declare authorName: string | null;
     declare targetAudience: string | null;
-    declare generatedSummaries: string; // JSON string array of last 5 summaries
-    declare sourceLinks: string; // JSON string array of reference links
+    declare generatedSummaries: CreationOptional<string>; // JSON string array of last 5 summaries
+    declare sourceLinks: CreationOptional<string>; // JSON string array of reference links
     declare scheduleTime: string | null;
     declare scheduleDayOfWeek: number | null;
     declare scheduleDayOfMonth: number | null;
@@ -381,6 +381,7 @@ export class Idea extends Model<InferAttributes<Idea>, InferCreationAttributes<I
     declare effortLevel: string | null;
     declare keyTakeaway: string | null;
     declare antiGoals: string | null;
+    declare attachments: CreationOptional<string>; // JSON string array of { name, url, size }
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -444,6 +445,10 @@ Idea.init({
         defaultValue: '[]',
     },
     sourceLinks: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
+    attachments: {
         type: DataTypes.TEXT,
         defaultValue: '[]',
     },

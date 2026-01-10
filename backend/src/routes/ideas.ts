@@ -24,7 +24,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
         const tenantId = req.tenantId!;
-        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals } = req.body;
+        const { title, description, tags, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals, attachments } = req.body;
         const idea = await Idea.create({
             userId,
             tenantId,
@@ -40,6 +40,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             targetAudience: targetAudience || null,
             generatedSummaries: '[]',
             sourceLinks: JSON.stringify(req.body.sourceLinks || []),
+            attachments: JSON.stringify(attachments || []),
             scheduleTime: scheduleTime || null,
             scheduleDayOfWeek: scheduleDayOfWeek !== undefined ? scheduleDayOfWeek : null,
             scheduleDayOfMonth: scheduleDayOfMonth || null,
@@ -59,7 +60,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
         const { id } = req.params;
-        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals } = req.body;
+        const { title, description, tags, status, isRecurring, frequency, authorUrn, authorName, targetAudience, scheduleTime, scheduleDayOfWeek, scheduleDayOfMonth, postShape, effortLevel, keyTakeaway, antiGoals, attachments } = req.body;
         const idea = await Idea.findOne({ where: { id, tenantId } });
 
         if (!idea) {
@@ -76,6 +77,7 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
         if (authorName !== undefined) idea.authorName = authorName;
         if (targetAudience !== undefined) idea.targetAudience = targetAudience;
         if (req.body.sourceLinks !== undefined) idea.sourceLinks = JSON.stringify(req.body.sourceLinks);
+        if (attachments !== undefined) idea.attachments = JSON.stringify(attachments);
 
         if (scheduleTime !== undefined) idea.scheduleTime = scheduleTime;
         if (scheduleDayOfWeek !== undefined) idea.scheduleDayOfWeek = scheduleDayOfWeek;
@@ -170,6 +172,49 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
 
         const fullPrompt = prompt + contextFromLinks;
 
+        let contextFromAttachments = '';
+        try {
+            const attachments = JSON.parse(idea.attachments || '[]');
+            if (attachments.length > 0) {
+                console.log('Reading content from attachments:', attachments.map((a: any) => a.name));
+                const fs = require('fs');
+                const path = require('path');
+
+                const attachmentContents = await Promise.all(attachments.map(async (att: any) => {
+                    if (!att.url) return '';
+                    try {
+                        // Resolve the local path from the URL
+                        const relativePath = att.url.startsWith('/') ? att.url.slice(1) : att.url;
+                        const absolutePath = path.join(process.cwd(), relativePath);
+
+                        if (fs.existsSync(absolutePath)) {
+                            // Only read text files (.md, .txt)
+                            const ext = path.extname(att.name).toLowerCase();
+                            if (['.md', '.txt'].includes(ext)) {
+                                const text = fs.readFileSync(absolutePath, 'utf8');
+                                // Truncate individual attachments to avoid huge context, but allow more than links
+                                return `[Content from Attachment: ${att.name}]:\n${text.substring(0, 5000)}...\n`;
+                            } else {
+                                return `[Attachment ${att.name} is not a text file, skipping content extraction]\n`;
+                            }
+                        } else {
+                            console.error(`Attachment file not found: ${absolutePath}`);
+                            return `[Attachment ${att.name} not found on server]\n`;
+                        }
+                    } catch (err: any) {
+                        console.error(`Failed to read attachment ${att.name}:`, err.message);
+                        return `[Failed to read attachment ${att.name}]\n`;
+                    }
+                }));
+
+                contextFromAttachments = '\n\nAdditional Context from Attachments:\n' + attachmentContents.join('\n');
+            }
+        } catch (e) {
+            console.error('Error processing attachments:', e);
+        }
+
+        const promptWithAllContext = fullPrompt + contextFromAttachments;
+
         let previousSummaries: string[] = [];
         try {
             previousSummaries = JSON.parse(idea.generatedSummaries || '[]');
@@ -207,7 +252,7 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
             // BUT, my migration updated `Settings.tenantId`.
             // So I MUST update AIService to look up by `tenantId`.
             // I will do that in the next step. For now, passing tenantId here implies the service expects it.
-            fullPrompt,
+            promptWithAllContext,
             targetAudience,
             previousSummaries,
             additionalContext,

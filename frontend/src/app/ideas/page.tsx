@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List, Timer, CheckCircle2 } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List, Timer, CheckCircle2, FileText, Paperclip, Download, Check } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -33,6 +33,7 @@ interface Idea {
     effortLevel?: string;
     keyTakeaway?: string;
     antiGoals?: string;
+    attachments?: string; // JSON string array of { name, url, size }
 }
 
 import { useSettings } from "@/contexts/SettingsContext";
@@ -62,7 +63,8 @@ export default function IdeasPage() {
         postShape: "Hot take",
         effortLevel: "🧠 Medium",
         keyTakeaway: "",
-        antiGoals: ""
+        antiGoals: "",
+        attachments: [] as { name: string, url: string, size: number }[]
     });
     const [generatingId, setGeneratingId] = useState<number | null>(null);
     const [isEnhancing, setIsEnhancing] = useState(false);
@@ -72,6 +74,10 @@ export default function IdeasPage() {
     const [additionalContext, setAdditionalContext] = useState("");
     const [pendingIdea, setPendingIdea] = useState<Idea | null>(null);
     const [tagsInputValue, setTagsInputValue] = useState("");
+    const [sourceLinksInputValue, setSourceLinksInputValue] = useState("");
+    const [isUploading, setIsUploading] = useState(false);
+    const [promptModalOpen, setPromptModalOpen] = useState(false);
+    const [promptToCopy] = useState("Please convert the following document into a high-fidelity Markdown file. Preserve all text, tables, and logical structure. Remove images and aesthetic styling. Ensure the output is clean, properly formatted, and captures all key details including data points and technical arguments.");
 
     useEffect(() => {
         fetchIdeas();
@@ -110,6 +116,7 @@ export default function IdeasPage() {
                 authorName: idea.authorName || (authors.length > 0 ? authors[0].name : ""),
                 targetAudience: idea.targetAudience || "",
                 sourceLinks: JSON.parse(idea.sourceLinks || '[]'),
+                attachments: JSON.parse(idea.attachments || '[]'),
                 tags: JSON.parse(idea.tags || '[]'),
                 scheduleTime: idea.scheduleTime || "",
                 scheduleDayOfWeek: idea.scheduleDayOfWeek || 1,
@@ -121,6 +128,8 @@ export default function IdeasPage() {
             });
             const existingTags = JSON.parse(idea.tags || '[]');
             setTagsInputValue(existingTags.join(', '));
+            const existingLinks = JSON.parse(idea.sourceLinks || '[]');
+            setSourceLinksInputValue(existingLinks.join('\n'));
         } else {
             setCurrentIdea(null);
             setFormData({
@@ -132,6 +141,7 @@ export default function IdeasPage() {
                 authorName: authors.length > 0 ? authors[0].name : "",
                 targetAudience: "",
                 sourceLinks: [],
+                attachments: [],
                 tags: [],
                 scheduleTime: "",
                 scheduleDayOfWeek: 1,
@@ -142,8 +152,53 @@ export default function IdeasPage() {
                 antiGoals: ""
             });
             setTagsInputValue("");
+            setSourceLinksInputValue("");
         }
         setIsModalOpen(true);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Large file detection (1MB)
+        if (file.size > 1 * 1024 * 1024) {
+            setPromptModalOpen(true);
+            return;
+        }
+
+        setIsUploading(true);
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', file);
+
+        try {
+            const res = await api.post('/uploads', formDataUpload, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            setFormData(prev => ({
+                ...prev,
+                attachments: [...prev.attachments, {
+                    name: res.data.name,
+                    url: res.data.url,
+                    size: res.data.size
+                }]
+            }));
+            toast.success("File uploaded!");
+        } catch (error) {
+            console.error("Upload failed", error);
+            toast.error("Failed to upload file");
+        } finally {
+            setIsUploading(false);
+            e.target.value = ''; // Reset input
+        }
+    };
+
+    const handleRemoveAttachment = (url: string) => {
+        setFormData(prev => ({
+            ...prev,
+            attachments: prev.attachments.filter(a => a.url !== url)
+        }));
     };
 
     const handleSave = async () => {
@@ -595,11 +650,80 @@ export default function IdeasPage() {
                                 <Textarea
                                     placeholder="https://example.com/article&#10;https://another-source.com"
                                     className="min-h-[80px]"
-                                    value={formData.sourceLinks.join('\n')}
-                                    onChange={(e) => setFormData({ ...formData, sourceLinks: e.target.value.split('\n').filter(l => l.trim()) })}
+                                    value={sourceLinksInputValue}
+                                    onChange={(e) => {
+                                        setSourceLinksInputValue(e.target.value);
+                                        setFormData({
+                                            ...formData,
+                                            sourceLinks: e.target.value.split('\n').map(l => l.trim()).filter(Boolean)
+                                        });
+                                    }}
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     Content from these links will be fetched and used as context for AI generation.
+                                </p>
+                            </div>
+
+                            <div className="space-y-3 pt-4 border-t">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-sm font-semibold">Attachments (Markdown / Text)</Label>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8"
+                                        onClick={() => document.getElementById('file-upload')?.click()}
+                                        disabled={isUploading}
+                                    >
+                                        <Paperclip className="mr-2 h-3.5 w-3.5" />
+                                        {isUploading ? "Uploading..." : "Add File"}
+                                    </Button>
+                                    <input
+                                        id="file-upload"
+                                        type="file"
+                                        className="hidden"
+                                        accept=".md,.txt"
+                                        onChange={handleFileUpload}
+                                    />
+                                </div>
+
+                                {formData.attachments.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {formData.attachments.map((file, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 group hover:border-primary/30 transition-colors">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <FileText className="h-4 w-4 text-blue-500 shrink-0" />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-medium truncate max-w-[200px]">{file.name}</span>
+                                                        <span className="text-[10px] text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <a href={file.url} download={file.name} target="_blank" rel="noopener noreferrer">
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary">
+                                                            <Download className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </a>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 text-muted-foreground hover:text-red-500"
+                                                        onClick={() => handleRemoveAttachment(file.url)}
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-6 border-2 border-dashed rounded-lg bg-muted/10">
+                                        <FileText className="h-8 w-8 text-muted-foreground opacity-20 mb-2" />
+                                        <p className="text-xs text-muted-foreground">No files attached. Best for .md or .txt files.</p>
+                                    </div>
+                                )}
+                                <p className="text-[11px] text-muted-foreground bg-blue-50/50 p-2 rounded border border-blue-100/50">
+                                    <strong>Tip:</strong> For large PDFs, convert them to Markdown using Claude/ChatGPT and upload the .md file to preserve high-fidelity context while saving tokens.
                                 </p>
                             </div>
 
@@ -850,6 +974,54 @@ export default function IdeasPage() {
                                 <Button onClick={confirmGeneration}>
                                     <Sparkles className="mr-2 h-4 w-4" />
                                     Generate
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Large File Detected Modal */}
+            {promptModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4">
+                            <div className="flex items-center gap-2 text-amber-600 mb-2">
+                                <Timer className="h-5 w-5" />
+                                <h2 className="text-xl font-bold">Large File Detected</h2>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                This file is large (&gt;1MB). To preserve token efficiency and context fidelity, we recommend converting it to Markdown before uploading.
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="p-4 bg-muted/50 rounded-lg border text-sm font-mono relative group">
+                                <p className="text-foreground/80 leading-relaxed pr-8">
+                                    {promptToCopy}
+                                </p>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute top-2 right-2 h-8 w-8 text-muted-foreground hover:text-primary"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(promptToCopy);
+                                        toast.success("Prompt copied to clipboard!");
+                                    }}
+                                >
+                                    <Check className="h-4 w-4" />
+                                </Button>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button variant="outline" onClick={() => setPromptModalOpen(false)}>
+                                    Close
+                                </Button>
+                                <Button onClick={() => {
+                                    navigator.clipboard.writeText(promptToCopy);
+                                    toast.success("Prompt copied!");
+                                }}>
+                                    Copy Prompt & Close
                                 </Button>
                             </div>
                         </div>
