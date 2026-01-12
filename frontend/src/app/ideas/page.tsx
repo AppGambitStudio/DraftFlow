@@ -181,7 +181,8 @@ export default function IdeasPage() {
                 attachments: [...prev.attachments, {
                     name: res.data.name,
                     url: res.data.url,
-                    size: res.data.size
+                    size: res.data.size,
+                    type: res.data.type
                 }]
             }));
             toast.success("File uploaded!");
@@ -278,6 +279,7 @@ export default function IdeasPage() {
 
             // Redirect to create page with content
             localStorage.setItem('draftPostContent', content);
+            localStorage.setItem('draftPostAttachments', idea.attachments || '[]');
             router.push('/create?source=idea');
         } catch (error) {
             toast.error("Failed to generate post");

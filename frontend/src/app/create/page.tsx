@@ -45,14 +45,12 @@ export default function CreatePostPage() {
                 setContent(draftContent);
             }
 
-            if (searchParams.get('source') === 'repost') {
-                const draftAttachments = localStorage.getItem('draftPostAttachments');
-                if (draftAttachments) {
-                    try {
-                        setAttachments(JSON.parse(draftAttachments));
-                    } catch (e) {
-                        console.error('Failed to parse draft attachments', e);
-                    }
+            const draftAttachments = localStorage.getItem('draftPostAttachments');
+            if (draftAttachments) {
+                try {
+                    setAttachments(JSON.parse(draftAttachments));
+                } catch (e) {
+                    console.error('Failed to parse draft attachments', e);
                 }
             }
 

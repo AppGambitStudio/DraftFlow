@@ -181,51 +181,11 @@ const checkRecurringIdeas = async () => {
 
                     console.log(`[Scheduler] Generation triggered for Idea ${idea.id}: "${idea.title}" (${idea.frequency})`);
 
-                    const prompt = `
-                    Write a fresh, engaging LinkedIn post based on this core idea. 
-                    Make it distinct from previous variations if possible.
-                    
-                    Title: ${idea.title}
-                    Core Concept: ${idea.description}
-                    Tags: ${idea.tags}
-                    `;
-
-                    let previousSummaries: string[] = [];
-                    try {
-                        previousSummaries = JSON.parse(idea.generatedSummaries || '[]');
-                    } catch (e) {
-                        previousSummaries = [];
-                    }
-
-                    // Fetch tenant settings
-                    const settings = await Settings.findOne({ where: { tenantId: idea.tenantId } });
-                    const maxHistory = settings?.maxHistoryItems !== undefined ? settings.maxHistoryItems : 5;
-
-                    // Determine Tone Instructions
-                    let toneInstructions = settings?.globalTone || undefined;
-                    if (settings?.accountTones && idea.authorUrn) {
-                        try {
-                            const accountTones = JSON.parse(settings.accountTones);
-                            if (accountTones[idea.authorUrn]) {
-                                toneInstructions = accountTones[idea.authorUrn];
-                            }
-                        } catch (e) {
-                            console.error('Error parsing accountTones:', e);
-                        }
-                    }
-
-                    // Generate content and summary
-                    const { content, summary } = await AIService.generate(
+                    // Generate content and summary using consolidated logic
+                    const { content, summary } = await AIService.generateForIdea(
                         idea.tenantId as string,
-                        prompt,
-                        idea.targetAudience || undefined,
-                        previousSummaries,
-                        undefined,
-                        toneInstructions,
-                        idea.postShape || undefined,
-                        idea.effortLevel || undefined,
-                        idea.keyTakeaway || undefined,
-                        idea.antiGoals || undefined
+                        idea,
+                        'LinkedIn'
                     );
 
                     // Calculate next scheduled time for the post
@@ -251,21 +211,8 @@ const checkRecurringIdeas = async () => {
                         platforms: JSON.stringify(['LINKEDIN']),
                         authorUrn: idea.authorUrn,
                         authorName: idea.authorName,
+                        mediaUrls: idea.attachments, // Carry over physical attachments
                     });
-
-                    // Update lastGeneratedAt and history ONLY after success
-                    if (maxHistory > 0) {
-                        const newSummaries = [...previousSummaries, summary].slice(-maxHistory);
-                        await idea.update({
-                            lastGeneratedAt: now,
-                            generatedSummaries: JSON.stringify(newSummaries)
-                        });
-                    } else {
-                        await idea.update({
-                            lastGeneratedAt: now,
-                            generatedSummaries: '[]'
-                        });
-                    }
 
                     console.log(`[Scheduler] Successfully generated draft for Idea ${idea.id}`);
                 }

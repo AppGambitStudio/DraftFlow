@@ -15,21 +15,7 @@ router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response
             return;
         }
 
-        const settings = await Settings.findOne({ where: { tenantId } });
-        let toneInstructions = settings?.globalTone || undefined;
-
-        if (settings?.accountTones && authorUrn) {
-            try {
-                const accountTones = JSON.parse(settings.accountTones);
-                if (accountTones[authorUrn]) {
-                    toneInstructions = accountTones[authorUrn];
-                }
-            } catch (e) {
-                console.error('Error parsing accountTones:', e);
-            }
-        }
-
-        const improvedContent = await AIService.improvise(tenantId, content, targetAudience, toneInstructions);
+        const improvedContent = await AIService.improvise(tenantId, content, authorUrn, targetAudience);
         res.json({ content: improvedContent });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
