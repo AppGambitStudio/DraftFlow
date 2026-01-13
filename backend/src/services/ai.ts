@@ -105,11 +105,11 @@ export class AIService {
 - Business value emphasis over pure technical features
 
 **Tone Guidelines:**
-- Professional yet conversational
-- Trusted advisor, not corporate spokesperson
-- Focus on outcomes and ROI
-- Inject personality while maintaining authority
-- Keep the language simple and easy to understand even for non-technical audience
+${effectiveTone ? `**PRIMARY STYLE (STRICTLY FOLLOW):**\n${effectiveTone}` : `- Professional yet conversational\n- Trusted advisor, not corporate spokesperson\n- Focus on outcomes and ROI\n- Inject personality while maintaining authority\n- Keep the language simple and easy to understand even for non-technical audience`}
+
+${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCase().includes('collective reference') || effectiveTone?.toLowerCase().includes('instead of "i"'))
+                ? '**CRITICAL PERSPECTIVE RULE:** You MUST use "We" (collective reference) instead of "I" (individual reference) throughout the post. This is a hard constraint.'
+                : ''}
 
 **Do NOT:**
 - Change the fundamental message or argument
@@ -215,11 +215,14 @@ Unless the "Post Shape" instruction above dictates otherwise, follow this high-l
 - Do NOT force unrelated topics unless they are part of the input.
 - If the input is broad, narrow it down to the specific angle requested by the user.
 
-**Tone & Style (Default)**:
-- Professional yet conversational (like a smart colleague, not a textbook).
+**Tone & Style**:
+${effectiveTone ? `**IMPORTANT: You MUST strictly follow these specific style guidelines:**\n${effectiveTone}` : `- Professional yet conversational (like a smart colleague, not a textbook).
 - Authentic and human (avoid corporate jargon like "synergy" or "paradigm shift").
-- Confident but humble (share expertise without arrogance).
-*(Note: If specific "Tone Instructions" were provided above, they override these defaults.)*
+- Confident but humble (share expertise without arrogance).`}
+
+${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCase().includes('collective reference') || effectiveTone?.toLowerCase().includes('instead of "i"'))
+                ? '**CRITICAL PERSPECTIVE RULE:** You MUST use "We" (collective reference) instead of "I" (individual reference) throughout the post. This is a hard constraint.'
+                : ''}
 
 **Formatting Best Practices:**
 - Use short paragraphs (1-3 lines max) for readability.
@@ -238,27 +241,92 @@ Return a JSON object with the following structure:
     "postContent": "The complete LinkedIn post content...",
     "summary": "A 3-5 line summary of the post's core message and angle...",
 }
-RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
+**CRITICAL:** 
+1. RETURN ONLY THE VALID JSON. 
+2. NO MARKDOWN BLOCKS (e.g., no \`\`\`json). 
+3. NO CONVERSATIONAL FILLER. 
+4. DO NOT include any text before or after the JSON.
+5. If you include newlines in the postContent, you MUST escape them as "\\n" so the JSON remains valid. Double check that every " in your content is escaped as \\" if it's not a delimiter.
 `;
 
         const response = await this.callOpenRouter(config, SYSTEM_PROMPT, prompt);
 
         try {
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) throw new Error("No JSON object found in response");
-            const cleanResponse = jsonMatch[0];
-            const parsed = JSON.parse(cleanResponse);
+            const parsed = this.extractAndParseJson(response);
             return {
                 content: parsed.postContent || parsed.content,
                 summary: parsed.summary || "Summary not generated"
             };
-        } catch (e) {
-            console.error("[AIService] Failed to parse AI response as JSON. Raw response:", response);
+        } catch (e: any) {
+            console.error("[AIService] Failed to parse AI response as JSON:", e.message);
             return {
                 content: response,
                 summary: "Summary parsing failed"
             };
         }
+    }
+
+    private static extractAndParseJson(response: string): any {
+        let cleanText = response.trim();
+
+        // Remove markdown code blocks if present
+        cleanText = cleanText.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
+
+        try {
+            // Attempt 1: Direct parse
+            return JSON.parse(cleanText);
+        } catch (e) {
+            // Attempt 2: Extract JSON from between first and last braces
+            const match = cleanText.match(/\{[\s\S]*\}/);
+            if (match) {
+                const candidate = match[0];
+                try {
+                    return JSON.parse(candidate);
+                } catch (innerE) {
+                    // Attempt 3: Heuristic newline escaping for poorly formatted LLM output
+                    try {
+                        // This handles unescaped newlines in the middle of string values
+                        const lines = candidate.split('\n');
+                        let reconstructed = '';
+                        for (let i = 0; i < lines.length; i++) {
+                            const line = lines[i]?.trim() ?? '';
+                            // If line doesn't look like the start of a new key-value pair, it's likely a continuation
+                            if (i > 0 && !line.startsWith('"') && !line.startsWith('}')) {
+                                reconstructed += '\\n' + lines[i];
+                            } else {
+                                reconstructed += (i > 0 ? '\n' : '') + lines[i];
+                            }
+                        }
+                        return JSON.parse(reconstructed);
+                    } catch (lastE) {
+                        // Attempt 4: Last Resort - Regex based extraction of fields
+                        console.warn("[AIService] JSON.parse failed all attempts, falling back to regex extraction.");
+                        const extractedContent = this.extractRegexField(candidate, "postContent") || this.extractRegexField(candidate, "content");
+                        const extractedSummary = this.extractRegexField(candidate, "summary");
+
+                        if (extractedContent) {
+                            return {
+                                postContent: extractedContent,
+                                summary: extractedSummary || "Summary extraction failed"
+                            };
+                        }
+                        throw lastE;
+                    }
+                }
+            }
+            throw e;
+        }
+    }
+
+    private static extractRegexField(text: string, fieldName: string): string | null {
+        // Look for "fieldName": "..." handling some variations in spacing and trailing commas
+        const regex = new RegExp(`"${fieldName}"\\s*:\\s*"([\\s\\S]*?)"(?:\\s*,|\\s*})`);
+        const match = text.match(regex);
+        if (match && match[1]) {
+            // Clean up common LLM "escaping" that isn't valid in JS strings but helpful in raw text
+            return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').trim();
+        }
+        return null;
     }
 
     static async enhanceIdeaDescription(tenantId: string, title: string, description: string): Promise<string> {
@@ -387,7 +455,7 @@ RETURN ONLY THE VALID JSON. NO MARKDOWN BLOCK.
             idea.antiGoals || undefined
         );
 
-        if (summary) {
+        if (summary && summary !== "Summary parsing failed") {
             const newSummaries = config.maxHistoryItems > 0
                 ? [...previousSummaries, summary].slice(-config.maxHistoryItems)
                 : [];
