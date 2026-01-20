@@ -863,8 +863,8 @@ export default function IdeasPage() {
                                         });
                                     }}
                                 >
-                                    {authors.map((author) => (
-                                        <option key={author.urn} value={author.urn}>
+                                    {authors.map((author, index) => (
+                                        <option key={author.urn || index} value={author.urn}>
                                             {author.name}
                                         </option>
                                     ))}
@@ -882,10 +882,11 @@ export default function IdeasPage() {
                                     >
                                         <option value="">No Post Audience</option>
                                         {settings.targetAudiences.map((audience, index) => (
-                                            <option key={index} value={audience}>
+                                            <option key={`${audience}-${index}`} value={audience}>
                                                 {audience}
                                             </option>
                                         ))}
+
                                     </select>
                                 </div>
                             )}

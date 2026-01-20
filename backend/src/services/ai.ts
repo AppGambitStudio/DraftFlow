@@ -195,9 +195,26 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
 
         if (previousSummaries.length > 0) {
             SYSTEM_PROMPT += `
-**Context to Avoid: **
-The following are summaries of posts already generated for this idea. Do NOT generate similar content. Find a fresh angle, a different takeaway, or a unique perspective.
-${previousSummaries.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+### DEDUPLICATION & RADICAL FRESHNESS (MANDATORY) ###
+The following are summaries of posts already generated for this exact topic. 
+Previous Content Summaries:
+${previousSummaries.map((s, i) => `[Post ${i + 1}] ${s}`).join('\n')}
+
+**Deduplication Strategy (Chain-of-Thought):**
+Before generating the post, you MUST identify the "Primary Arguments" and "Key Keywords" used in the previous posts.
+You are PROHIBITED from using these same arguments or focal points. 
+*Example: If previous posts focused on "Cost Scaling" and "Auto-provisioning", you MUST pivot to "Developer Burnout", "Security Simplification", or "Legacy Migration Challenges" even if the source text heavily mentions cost.*
+
+**Negative Constraints - DO NOT USE THESE CONCEPTS IF THEY APPEAR ABOVE:**
+- Identifying repeated themes... (AI must do this internally)
+- Do NOT use the exact same hook structure as any previous post.
+- Do NOT use the same "Key Takeaway" if it has been used >2 times.
+
+**Suggested Fresh Angles:**
+- **The "Contrarian"**: Argue against a common assumption in the source material.
+- **The "Case Study"**: Zoom in on one tiny, specific technical detail or human error.
+- **The "Strategic Pivot"**: How this changes the 5-year outlook for a company.
+- **The "Developer POV"**: Focus on the tools, the IDE experience, or the debugging pain.
 `;
         }
 
@@ -238,33 +255,40 @@ ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCa
 **Response Format:**
 Return a JSON object with the following structure:
 {
+    "themeAnalysis": "A 1-sentence reflection: What core themes did I identify in previous posts, and what UNUSUAL angle will I take to avoid them?",
     "postContent": "The complete LinkedIn post content...",
-    "summary": "A 3-5 line summary of the post's core message and angle...",
+    "summary": "A 2-line summary focusing ONLY on the specific technical/business unique angle used this time."
 }
 **CRITICAL:** 
 1. RETURN ONLY THE VALID JSON. 
 2. NO MARKDOWN BLOCKS (e.g., no \`\`\`json). 
 3. NO CONVERSATIONAL FILLER. 
 4. DO NOT include any text before or after the JSON.
-5. If you include newlines in the postContent, you MUST escape them as "\\n" so the JSON remains valid. Double check that every " in your content is escaped as \\" if it's not a delimiter.
+5. If you include newlines in the postContent, you MUST escape them as "\\n" so the JSON remains valid.
 `;
+
+
+        console.log("[AIService] SYSTEM_PROMPT:", SYSTEM_PROMPT);
+        console.log("[AIService] Prompt:", prompt);
 
         const response = await this.callOpenRouter(config, SYSTEM_PROMPT, prompt);
 
         try {
             const parsed = this.extractAndParseJson(response);
             return {
-                content: parsed.postContent || parsed.content,
-                summary: parsed.summary || "Summary not generated"
+                content: parsed.postContent || parsed.content || response,
+                summary: parsed.summary || "Summary generation failed or returned empty"
             };
         } catch (e: any) {
             console.error("[AIService] Failed to parse AI response as JSON:", e.message);
+            // Fallback - try to extract anything that looks like a post if parsing fails
             return {
-                content: response,
+                content: response.length > 100 ? response : "Failed to generate valid post content.",
                 summary: "Summary parsing failed"
             };
         }
     }
+
 
     private static extractAndParseJson(response: string): any {
         let cleanText = response.trim();
@@ -272,51 +296,68 @@ Return a JSON object with the following structure:
         // Remove markdown code blocks if present
         cleanText = cleanText.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
 
+        // LLM sometimes prepends text before the JSON or appends after it
+        // We look for the first '{' and the last '}'
+        const firstBrace = cleanText.indexOf('{');
+        const lastBrace = cleanText.lastIndexOf('}');
+
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            cleanText = cleanText.substring(firstBrace, lastBrace + 1);
+        }
+
         try {
             // Attempt 1: Direct parse
             return JSON.parse(cleanText);
         } catch (e) {
-            // Attempt 2: Extract JSON from between first and last braces
-            const match = cleanText.match(/\{[\s\S]*\}/);
-            if (match) {
-                const candidate = match[0];
-                try {
-                    return JSON.parse(candidate);
-                } catch (innerE) {
-                    // Attempt 3: Heuristic newline escaping for poorly formatted LLM output
-                    try {
-                        // This handles unescaped newlines in the middle of string values
-                        const lines = candidate.split('\n');
-                        let reconstructed = '';
-                        for (let i = 0; i < lines.length; i++) {
-                            const line = lines[i]?.trim() ?? '';
-                            // If line doesn't look like the start of a new key-value pair, it's likely a continuation
-                            if (i > 0 && !line.startsWith('"') && !line.startsWith('}')) {
-                                reconstructed += '\\n' + lines[i];
-                            } else {
-                                reconstructed += (i > 0 ? '\n' : '') + lines[i];
-                            }
-                        }
-                        return JSON.parse(reconstructed);
-                    } catch (lastE) {
-                        // Attempt 4: Last Resort - Regex based extraction of fields
-                        console.warn("[AIService] JSON.parse failed all attempts, falling back to regex extraction.");
-                        const extractedContent = this.extractRegexField(candidate, "postContent") || this.extractRegexField(candidate, "content");
-                        const extractedSummary = this.extractRegexField(candidate, "summary");
-
-                        if (extractedContent) {
-                            return {
-                                postContent: extractedContent,
-                                summary: extractedSummary || "Summary extraction failed"
-                            };
-                        }
-                        throw lastE;
+            try {
+                // Attempt 2: Heuristic newline escaping for poorly formatted LLM output
+                // Many LLMs fail to escape \n and instead produce literal newlines inside strings
+                const lines = cleanText.split('\n');
+                let reconstructed = '';
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i]?.trim() ?? '';
+                    // If line doesn't look like the start of a new key-value pair or a bracket, it's likely a continuation
+                    if (i > 0 && !line.startsWith('"') && !line.startsWith('}') && !line.startsWith(']')) {
+                        reconstructed += '\\n' + lines[i];
+                    } else {
+                        reconstructed += (i > 0 ? '\n' : '') + lines[i];
                     }
                 }
+                return JSON.parse(reconstructed);
+            } catch (innerE) {
+                // Attempt 3: Aggressive cleanup of control characters and common JSON syntax errors
+                try {
+                    const extraClean = cleanText
+                        .replace(/\n/g, '\\n') // Escape actual newlines
+                        .replace(/\r/g, '\\r')
+                        .replace(/\t/g, '\\t')
+                        .replace(/\\"/g, '"') // Unescape all quotes
+                        .replace(/"/g, '\\"') // Escape all quotes
+                        .replace(/^\\"/, '"') // Unescape first quote
+                        .replace(/\\"$/, '"') // Unescape last quote
+                        .replace(/\\":\\"/g, '":"') // Fix key-value separator
+                        .replace(/\\",\\"/g, '","') // Fix comma separator
+                        .replace(/{\\"/g, '{"') // Fix start
+                        .replace(/\\"}/g, '"}'); // Fix end
+
+                    return JSON.parse(extraClean);
+                } catch (lastE) {
+                    console.warn("[AIService] JSON.parse failed all attempts, falling back to regex extraction.");
+                    const extractedContent = this.extractRegexField(cleanText, "postContent") || this.extractRegexField(cleanText, "content");
+                    const extractedSummary = this.extractRegexField(cleanText, "summary");
+
+                    if (extractedContent) {
+                        return {
+                            postContent: extractedContent,
+                            summary: extractedSummary || "Summary extraction failed"
+                        };
+                    }
+                    throw lastE;
+                }
             }
-            throw e;
         }
     }
+
 
     private static extractRegexField(text: string, fieldName: string): string | null {
         // Look for "fieldName": "..." handling some variations in spacing and trailing commas
