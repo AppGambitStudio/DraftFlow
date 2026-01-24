@@ -427,7 +427,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                     {attachments.map((file: any, index: number) => (
                                         <div key={index} className="flex items-center justify-between p-2 rounded-md border border-slate-200 bg-slate-50">
                                             <div className="flex items-center gap-2 min-w-0">
-                                                {file.type.startsWith('image/') ? (
+                                                {file.type && file.type.startsWith('image/') ? (
                                                     <div className="h-8 w-8 rounded overflow-hidden flex-shrink-0">
                                                         <img
                                                             src={file.url.startsWith('http') ? file.url : `http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:5002${file.url}`}

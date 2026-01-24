@@ -279,7 +279,7 @@ export default function IdeasPage() {
 
             // Redirect to create page with content
             localStorage.setItem('draftPostContent', content);
-            localStorage.setItem('draftPostAttachments', idea.attachments || '[]');
+            localStorage.setItem('draftPostAttachments', '[]'); // Do not carry over reference documents
             router.push('/create?source=idea');
         } catch (error) {
             toast.error("Failed to generate post");
@@ -668,7 +668,7 @@ export default function IdeasPage() {
 
                             <div className="space-y-3 pt-4 border-t">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-sm font-semibold">Attachments (Markdown / Text)</Label>
+                                    <Label className="text-sm font-semibold">Reference Attachments (Markdown / Text)</Label>
                                     <Button
                                         type="button"
                                         variant="outline"

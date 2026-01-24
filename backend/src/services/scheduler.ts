@@ -211,7 +211,7 @@ const checkRecurringIdeas = async () => {
                         platforms: JSON.stringify(['LINKEDIN']),
                         authorUrn: idea.authorUrn,
                         authorName: idea.authorName,
-                        mediaUrls: idea.attachments, // Carry over physical attachments
+                        mediaUrls: '[]', // Do not carry over reference documents as post media
                     });
 
                     console.log(`[Scheduler] Successfully generated draft for Idea ${idea.id}`);
