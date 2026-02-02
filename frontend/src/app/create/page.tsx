@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PostPreview } from "@/components/PostPreview";
 import toast, { Toaster } from "react-hot-toast";
 
-import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown } from "lucide-react";
+import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown } from "lucide-react";
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -36,6 +36,25 @@ export default function CreatePostPage() {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [selectedAuthorUrn, setSelectedAuthorUrn] = useState<string>('');
     const [selectedAudience, setSelectedAudience] = useState<string>('');
+    const [contentHistory, setContentHistory] = useState<string[]>([]);
+    const [improviseDirection, setImproviseDirection] = useState<string>('');
+    const [customDirection, setCustomDirection] = useState<string>('');
+    const [showDirectionDropdown, setShowDirectionDropdown] = useState(false);
+    const directionDropdownRef = useRef<HTMLDivElement>(null);
+    const [ideaId, setIdeaId] = useState<string | null>(null);
+    const [ideaTitle, setIdeaTitle] = useState<string | null>(null);
+    const [showRegenerateModal, setShowRegenerateModal] = useState(false);
+    const [regenerateContext, setRegenerateContext] = useState('');
+    const [regenerateLoading, setRegenerateLoading] = useState(false);
+
+    const DIRECTION_PRESETS = [
+        "Shorten",
+        "Stronger hook",
+        "Add CTA",
+        "Simplify",
+        "More data-driven",
+        "Make bolder",
+    ];
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
@@ -54,6 +73,16 @@ export default function CreatePostPage() {
                 }
             }
 
+            // Load idea context for regeneration
+            if (searchParams.get('source') === 'idea') {
+                const storedIdeaId = localStorage.getItem('draftIdeaId');
+                const storedIdeaTitle = localStorage.getItem('draftIdeaTitle');
+                if (storedIdeaId) setIdeaId(storedIdeaId);
+                if (storedIdeaTitle) setIdeaTitle(storedIdeaTitle);
+                localStorage.removeItem('draftIdeaId');
+                localStorage.removeItem('draftIdeaTitle');
+            }
+
             // Cleanup localStorage after loading
             localStorage.removeItem('draftPostContent');
             localStorage.removeItem('draftPostAttachments');
@@ -65,6 +94,16 @@ export default function CreatePostPage() {
             setSelectedAuthorUrn(authors[0].urn);
         }
     }, [authors]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (directionDropdownRef.current && !directionDropdownRef.current.contains(event.target as Node)) {
+                setShowDirectionDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -106,6 +145,19 @@ export default function CreatePostPage() {
         setAttachments(newAttachments);
     };
 
+    const handleUndo = () => {
+        if (contentHistory.length === 0) return;
+        const previous = contentHistory[contentHistory.length - 1];
+        setContentHistory(contentHistory.slice(0, -1));
+        setContent(previous);
+        toast.success("Reverted to previous version");
+    };
+
+    const getActiveDirection = () => {
+        if (improviseDirection === '__custom__') return customDirection || undefined;
+        return improviseDirection || undefined;
+    };
+
     const handleAIImprovise = async () => {
         if (!content) {
             toast.error("Please enter some content first");
@@ -113,17 +165,48 @@ export default function CreatePostPage() {
         }
         setAiLoading(true);
         try {
+            setContentHistory([...contentHistory, content]);
             const res = await api.post("/ai/improvise", {
                 content,
                 targetAudience: selectedAudience || undefined,
-                authorUrn: selectedAuthorUrn || undefined
+                authorUrn: selectedAuthorUrn || undefined,
+                direction: getActiveDirection(),
+                platform: platforms.length > 0 ? platforms.join(',') : undefined
             });
             setContent(res.data.content);
             toast.success("Content improved by AI!");
         } catch (error: any) {
+            // Revert the undo stack push on failure
+            setContentHistory(prev => prev.slice(0, -1));
             toast.error(error.response?.data?.error || "Failed to improvise content");
         } finally {
             setAiLoading(false);
+        }
+    };
+
+    const handleRegenerate = async () => {
+        if (!ideaId) return;
+        setRegenerateLoading(true);
+        try {
+            if (content) {
+                setContentHistory([...contentHistory, content]);
+            }
+            const res = await api.post(`/ideas/${ideaId}/generate`, {
+                platform: platforms.length > 0 ? platforms[0] : 'LINKEDIN',
+                additionalContext: regenerateContext || undefined
+            });
+            setContent(res.data.content);
+            setShowRegenerateModal(false);
+            setRegenerateContext('');
+            toast.success("Content regenerated!");
+        } catch (error: any) {
+            // Revert the undo stack push on failure
+            if (content) {
+                setContentHistory(prev => prev.slice(0, -1));
+            }
+            toast.error(error.response?.data?.error || "Failed to regenerate content");
+        } finally {
+            setRegenerateLoading(false);
         }
     };
 
@@ -183,6 +266,32 @@ export default function CreatePostPage() {
                         <div className="flex items-center justify-between">
                             <Label htmlFor="content">Post Content</Label>
                             <div className="flex items-center gap-2">
+                                {ideaId && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowRegenerateModal(true)}
+                                        disabled={aiLoading || regenerateLoading}
+                                        className="text-primary hover:text-primary hover:bg-primary/10"
+                                    >
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Regenerate
+                                    </Button>
+                                )}
+                                {contentHistory.length > 0 && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleUndo}
+                                        disabled={aiLoading}
+                                        className="text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    >
+                                        <Undo2 className="mr-2 h-4 w-4" />
+                                        Undo
+                                    </Button>
+                                )}
                                 {settings.targetAudiences.length > 0 && (
                                     <select
                                         value={selectedAudience}
@@ -197,6 +306,67 @@ export default function CreatePostPage() {
                                         ))}
                                     </select>
                                 )}
+                                <div className="relative" ref={directionDropdownRef}>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowDirectionDropdown(!showDirectionDropdown)}
+                                        className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 px-2"
+                                    >
+                                        <ChevronDown className="h-4 w-4" />
+                                        <span className="ml-1 text-xs max-w-[100px] truncate">
+                                            {improviseDirection === '__custom__'
+                                                ? (customDirection || 'Custom')
+                                                : (improviseDirection || 'Direction')}
+                                        </span>
+                                    </Button>
+                                    {showDirectionDropdown && (
+                                        <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-md border border-input bg-background shadow-lg">
+                                            <div className="p-1">
+                                                <button
+                                                    type="button"
+                                                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted ${!improviseDirection ? 'bg-muted font-medium' : ''}`}
+                                                    onClick={() => { setImproviseDirection(''); setShowDirectionDropdown(false); }}
+                                                >
+                                                    No direction (default)
+                                                </button>
+                                                {DIRECTION_PRESETS.map((preset) => (
+                                                    <button
+                                                        key={preset}
+                                                        type="button"
+                                                        className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted ${improviseDirection === preset ? 'bg-muted font-medium' : ''}`}
+                                                        onClick={() => { setImproviseDirection(preset); setShowDirectionDropdown(false); }}
+                                                    >
+                                                        {preset}
+                                                    </button>
+                                                ))}
+                                                <div className="border-t border-input mt-1 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted ${improviseDirection === '__custom__' ? 'bg-muted font-medium' : ''}`}
+                                                        onClick={() => { setImproviseDirection('__custom__'); }}
+                                                    >
+                                                        Custom direction...
+                                                    </button>
+                                                    {improviseDirection === '__custom__' && (
+                                                        <div className="px-2 py-1">
+                                                            <input
+                                                                type="text"
+                                                                value={customDirection}
+                                                                onChange={(e) => setCustomDirection(e.target.value)}
+                                                                onKeyDown={(e) => { if (e.key === 'Enter') setShowDirectionDropdown(false); }}
+                                                                placeholder="e.g. More conversational"
+                                                                className="w-full h-7 rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 <Button
                                     type="button"
                                     variant="ghost"
@@ -402,6 +572,61 @@ export default function CreatePostPage() {
                 <h3 className="text-lg font-medium">Preview</h3>
                 <PostPreview content={content} attachments={attachments} />
             </div>
+
+            {showRegenerateModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground">
+                                Regenerate{ideaTitle ? `: ${ideaTitle}` : ''}
+                            </h3>
+                            <button
+                                onClick={() => { setShowRegenerateModal(false); setRegenerateContext(''); }}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="regenerateContext">Additional context or instructions</Label>
+                                <Textarea
+                                    id="regenerateContext"
+                                    placeholder="e.g. Focus more on the technical aspects, make it shorter..."
+                                    className="min-h-[100px] resize-none"
+                                    value={regenerateContext}
+                                    onChange={(e) => setRegenerateContext(e.target.value)}
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => { setShowRegenerateModal(false); setRegenerateContext(''); }}
+                                    disabled={regenerateLoading}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleRegenerate}
+                                    disabled={regenerateLoading}
+                                >
+                                    {regenerateLoading ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            Generate
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

@@ -174,87 +174,108 @@ class LinkedInService {
         const accessToken = setting.linkedinAccessToken;
         const isOrg = authorUrn?.includes(':organization:');
 
-        // Normalizing URNs: The practices suggest using urn:li:activity:ID
-        // We'll try to use the most compatible format for the aggregate endpoint
-        const normalizedUrns = postUrns.map(urn => {
-            if (urn.includes('urn:li:share:')) return urn;
-            if (urn.includes('urn:li:ugcPost:')) return urn;
-            // Fallback: If it's already an activity URN or other, keep it
-            return urn;
-        });
+        console.log(`[LinkedIn] Fetching stats for ${postUrns.length} posts, isOrg=${isOrg}, authorUrn=${authorUrn}`);
 
-        const paramName = normalizedUrns[0]?.includes('urn:li:ugcPost:') ? 'ugcPosts' : 'shares';
-        const sharesParam = encodeURIComponent(`List(${normalizedUrns.join(',')})`);
+        // For personal profiles, try v2 shareStatistics (batch)
+        if (!isOrg) {
+            const v2Headers = {
+                'Authorization': `Bearer ${accessToken}`,
+                'X-Restli-Protocol-Version': '2.0.0',
+            };
 
-        let baseUrl = isOrg
-            ? 'https://api.linkedin.com/v2/organizationalEntityShareStatistics'
-            : 'https://api.linkedin.com/v2/shareStatistics';
-
-        let url = `${baseUrl}?${paramName}=${sharesParam}`;
-        if (isOrg) {
-            url += `&organizationalEntity=${encodeURIComponent(authorUrn as string)}`;
-        }
-
-        try {
-            const response = await axios.get(url, {
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'X-Restli-Protocol-Version': '2.0.0',
-                },
+            const normalizedUrns = postUrns.map(urn => {
+                if (urn.includes('urn:li:share:') || urn.includes('urn:li:ugcPost:')) return urn;
+                return `urn:li:ugcPost:${urn}`;
             });
 
-            const results = response.data.elements || [];
-            return results.map((item: any) => ({
-                urn: item.share || item.ugcPost || item.organizationalEntity,
-                likes: item.totalShareStatistics?.likeCount || 0,
-                comments: item.totalShareStatistics?.commentCount || 0,
-                reposts: item.totalShareStatistics?.shareCount || 0,
-                impressions: item.totalShareStatistics?.impressionCount || 0
-            }));
-        } catch (error: any) {
-            // If the aggregate call fails, we log it. 
-            // The practices suggest granular endpoints for standard accounts to avoid blocks.
-            console.error(`LinkedIn Aggregate Stats Error (${paramName}):`, error.response?.data || error.message);
-            return [];
+            const paramName = normalizedUrns[0]?.includes('urn:li:ugcPost:') ? 'ugcPosts' : 'shares';
+            const listParam = encodeURIComponent(`List(${normalizedUrns.join(',')})`);
+            const url = `https://api.linkedin.com/v2/shareStatistics?${paramName}=${listParam}`;
+
+            try {
+                const response = await axios.get(url, { headers: v2Headers });
+                const results = response.data.elements || [];
+                if (results.length > 0) {
+                    return results.map((item: any) => ({
+                        urn: item.ugcPost || item.share || '',
+                        likes: item.totalShareStatistics?.likeCount || 0,
+                        comments: item.totalShareStatistics?.commentCount || 0,
+                        reposts: item.totalShareStatistics?.shareCount || 0,
+                        impressions: item.totalShareStatistics?.impressionCount || 0,
+                    }));
+                }
+            } catch (error: any) {
+                console.error(`[LinkedIn] v2 Stats Error:`, error.response?.status, error.response?.data?.message || error.message);
+            }
         }
+
+        // For org posts: the per-post aggregate stats APIs require partner-level access,
+        // so we return empty here and let the caller fall back to granular v2/socialActions
+        // which works with standard r_organization_social scope.
+        return [];
     }
 
     /**
-     * Optional: Fetch detailed social actions if aggregate fails or for specific deeper insights.
-     * Follows the practice: GET https://api.linkedin.com/rest/socialActions/{urn}/comments
+     * Fetch detailed social actions per post (granular fallback).
+     * Uses the v2 API (not /rest which requires partner access).
      */
-    async getDetailedSocialActions(tenantId: string, activityUrn: string) {
+    async getDetailedSocialActions(tenantId: string, postUrn: string) {
         const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return null;
 
-        // Ensure we're using the activity URN format as requested in step 1 of practices
-        const normalizedUrn = activityUrn.replace('share', 'activity').replace('ugcPost', 'activity');
+        const accessToken = setting.linkedinAccessToken;
+        const headers = {
+            'Authorization': `Bearer ${accessToken}`,
+            'X-Restli-Protocol-Version': '2.0.0'
+        };
 
+        // The socialActions v2 endpoint uses the URN as-is (urn:li:share: or urn:li:ugcPost:)
+        console.log(`[LinkedIn] Fetching detailed stats for ${postUrn}`);
+
+        let likesCount = 0;
+        let commentsCount = 0;
+        let repostsCount = 0;
+
+        // Try v2 socialActions endpoint (works with standard OAuth scopes)
         try {
-            const headers = {
-                'Authorization': `Bearer ${setting.linkedinAccessToken}`,
-                'LinkedIn-Version': '202306',
-                'X-Restli-Protocol-Version': '2.0.0'
-            };
+            const socialActionsUrl = `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(postUrn)}`;
+            const socialRes = await axios.get(socialActionsUrl, { headers });
+            likesCount = socialRes.data?.likesSummary?.totalLikes || 0;
+            commentsCount = socialRes.data?.commentsSummary?.totalFirstLevelComments || 0;
+            repostsCount = socialRes.data?.sharesSummary?.totalShares || 0;
+            console.log(`[LinkedIn] v2 socialActions success: likes=${likesCount}, comments=${commentsCount}, reposts=${repostsCount}`);
+        } catch (socialErr: any) {
+            const status = socialErr.response?.status;
+            if (status === 429) {
+                console.log(`[LinkedIn] Rate limited (429). Returning null to stop further calls.`);
+                return null; // Signal caller to stop
+            }
+            console.error(`[LinkedIn] v2 socialActions failed for ${postUrn}:`, status, socialErr.response?.data?.message || socialErr.message);
 
-            // Get Likes (Reactions)
-            const reactionsUrl = `https://api.linkedin.com/rest/reactions/(entity:${encodeURIComponent(normalizedUrn)})?q=entity`;
-            const reactionsRes = await axios.get(reactionsUrl, { headers });
-            const likesCount = reactionsRes.data.paging?.total || 0;
+            // Fallback: try v2 individual endpoints
+            try {
+                const likesUrl = `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(postUrn)}/likes?count=0`;
+                const likesRes = await axios.get(likesUrl, { headers });
+                likesCount = likesRes.data.paging?.total || 0;
+            } catch (e: any) {
+                if (e.response?.status === 429) return null;
+            }
 
-            // Get Comments
-            const commentsUrl = `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(normalizedUrn)}/comments`;
-            const commentsRes = await axios.get(commentsUrl, { headers });
-            const commentsCount = commentsRes.data.paging?.total || 0;
-
-            return {
-                likes: likesCount,
-                comments: commentsCount
-            };
-        } catch (error: any) {
-            console.error(`LinkedIn Detailed Stats Error for ${normalizedUrn}:`, error.response?.data || error.message);
-            return null;
+            try {
+                const commentsUrl = `https://api.linkedin.com/v2/socialActions/${encodeURIComponent(postUrn)}/comments?count=0`;
+                const commentsRes = await axios.get(commentsUrl, { headers });
+                commentsCount = commentsRes.data.paging?.total || 0;
+            } catch (e: any) {
+                if (e.response?.status === 429) return null;
+            }
         }
+
+        return {
+            likes: likesCount,
+            comments: commentsCount,
+            reposts: repostsCount,
+            impressions: 0
+        };
     }
 
     async getRecentPosts(tenantId: string, authorUrn?: string, count: number = 20) {

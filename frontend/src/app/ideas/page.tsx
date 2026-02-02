@@ -60,7 +60,7 @@ export default function IdeasPage() {
         scheduleTime: "",
         scheduleDayOfWeek: 1, // 1 = Monday
         scheduleDayOfMonth: 1,
-        postShape: "Hot take",
+        postShape: "auto",
         effortLevel: "🧠 Medium",
         keyTakeaway: "",
         antiGoals: "",
@@ -121,7 +121,7 @@ export default function IdeasPage() {
                 scheduleTime: idea.scheduleTime || "",
                 scheduleDayOfWeek: idea.scheduleDayOfWeek || 1,
                 scheduleDayOfMonth: idea.scheduleDayOfMonth || 1,
-                postShape: idea.postShape || "Hot take",
+                postShape: idea.postShape || "auto",
                 effortLevel: idea.effortLevel || "🧠 Medium",
                 keyTakeaway: idea.keyTakeaway || "",
                 antiGoals: idea.antiGoals || ""
@@ -146,7 +146,7 @@ export default function IdeasPage() {
                 scheduleTime: "",
                 scheduleDayOfWeek: 1,
                 scheduleDayOfMonth: 1,
-                postShape: "Hot take",
+                postShape: "auto",
                 effortLevel: "🧠 Medium",
                 keyTakeaway: "",
                 antiGoals: ""
@@ -277,9 +277,11 @@ export default function IdeasPage() {
             });
             const content = res.data.content;
 
-            // Redirect to create page with content
+            // Store idea info for regeneration on create page
             localStorage.setItem('draftPostContent', content);
             localStorage.setItem('draftPostAttachments', '[]'); // Do not carry over reference documents
+            localStorage.setItem('draftIdeaId', String(idea.id));
+            localStorage.setItem('draftIdeaTitle', idea.title);
             router.push('/create?source=idea');
         } catch (error) {
             toast.error("Failed to generate post");
@@ -740,6 +742,7 @@ export default function IdeasPage() {
                                             value={formData.postShape}
                                             onChange={(e) => setFormData({ ...formData, postShape: e.target.value })}
                                         >
+                                            <option value="auto">Auto (AI picks best)</option>
                                             <option value="Hot take">Hot take</option>
                                             <option value="Breakdown (step-by-step)">Breakdown (step-by-step)</option>
                                             <option value="Story / anecdote">Story / anecdote</option>

@@ -72,17 +72,21 @@ export class AnalyticsSyncService {
                     const postIds = group.map(p => p.linkedinPostId as string);
                     let stats = await linkedinService.getPostStats(tenantId, postIds, authorUrn === 'SELF' ? undefined : authorUrn);
 
-                    // If aggregate stats failed to find these posts, try granular extraction for the most recent 10 posts
-                    // to respect the extraction limit while ensuring we get data for new content.
+                    // If aggregate stats failed, try granular extraction via v2 socialActions
                     if (stats.length === 0) {
-                        console.log(`[AnalyticsSync] Aggregate stats returned empty for ${authorUrn}. Trying granular fallback...`);
-                        const recentPosts = group.slice(0, 10);
-                        for (const post of recentPosts) {
+                        console.log(`[AnalyticsSync] Aggregate stats returned empty for ${authorUrn}. Trying granular fallback for ${group.length} posts...`);
+                        for (const post of group) {
                             const granular = await linkedinService.getDetailedSocialActions(tenantId, post.linkedinPostId!);
+                            if (granular === null) {
+                                console.log(`[AnalyticsSync] Rate limited by LinkedIn. Stopping granular sync.`);
+                                break;
+                            }
                             if (granular) {
                                 await post.update({
                                     likesCount: granular.likes,
                                     commentsCount: granular.comments,
+                                    repostsCount: granular.reposts || 0,
+                                    impressionsCount: granular.impressions || 0,
                                     lastStatsSyncedAt: new Date()
                                 });
                             }

@@ -3,6 +3,7 @@ import { Post } from '../db';
 import { linkedinService } from '../services/linkedin';
 import { markdownToUnicode } from '../utils/markdownToUnicode';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
+import { analyticsSyncService } from '../services/analyticsSync';
 
 const router = express.Router();
 
@@ -128,6 +129,13 @@ router.post('/:id/publish', authMiddleware, async (req: AuthRequest, res: Respon
         post.status = 'PUBLISHED';
         post.error = null;
         await post.save();
+
+        // Trigger analytics sync after 1 minute to let LinkedIn process
+        setTimeout(() => {
+            analyticsSyncService.syncTenantPosts(tenantId).catch(err => {
+                console.error('[Posts] Post-publish analytics sync error:', err);
+            });
+        }, 60000);
 
         res.json(post);
     } catch (error: any) {

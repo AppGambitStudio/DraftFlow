@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2 } from 'lucide-react';
+import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2, Undo2, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,20 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const [attachments, setAttachments] = useState<any[]>([]);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [contentHistory, setContentHistory] = useState<string[]>([]);
+    const [improviseDirection, setImproviseDirection] = useState<string>('');
+    const [customDirection, setCustomDirection] = useState<string>('');
+    const [showDirectionDropdown, setShowDirectionDropdown] = useState(false);
+    const directionDropdownRef = useRef<HTMLDivElement>(null);
+
+    const DIRECTION_PRESETS = [
+        "Shorten",
+        "Stronger hook",
+        "Add CTA",
+        "Simplify",
+        "More data-driven",
+        "Make bolder",
+    ];
 
     useEffect(() => {
         if (post) {
@@ -88,12 +102,39 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
             if (!post?.authorUrn && authors.length > 0) {
                 setSelectedAuthorUrn(authors[0].urn);
             }
+            // Reset undo history and direction when opening a new post
+            setContentHistory([]);
+            setImproviseDirection('');
+            setCustomDirection('');
         }
     }, [isOpen, authors, post]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (directionDropdownRef.current && !directionDropdownRef.current.contains(event.target as Node)) {
+                setShowDirectionDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     if (!isOpen || !post) return null;
 
     const isPublished = post.status === 'PUBLISHED';
+
+    const handleUndo = () => {
+        if (contentHistory.length === 0) return;
+        const previous = contentHistory[contentHistory.length - 1];
+        setContentHistory(contentHistory.slice(0, -1));
+        setContent(previous);
+        toast.success("Reverted to previous version");
+    };
+
+    const getActiveDirection = () => {
+        if (improviseDirection === '__custom__') return customDirection || undefined;
+        return improviseDirection || undefined;
+    };
 
     const handleAIImprovise = async () => {
         if (!content) {
@@ -102,13 +143,18 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         }
         setAiLoading(true);
         try {
+            setContentHistory([...contentHistory, content]);
+            const postPlatforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
             const res = await api.post("/ai/improvise", {
                 content,
-                targetAudience: selectedAudience || undefined
+                targetAudience: selectedAudience || undefined,
+                direction: getActiveDirection(),
+                platform: postPlatforms.join(',')
             });
             setContent(res.data.content);
             toast.success("Content improved by AI!");
         } catch (error: any) {
+            setContentHistory(prev => prev.slice(0, -1));
             toast.error(error.response?.data?.error || "Failed to improvise content");
         } finally {
             setAiLoading(false);
@@ -332,6 +378,19 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                 <Label htmlFor="content">Content</Label>
                                 {!isPublished && (
                                     <div className="flex items-center gap-2">
+                                        {contentHistory.length > 0 && (
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={handleUndo}
+                                                disabled={aiLoading || isLoading}
+                                                className="text-muted-foreground hover:text-foreground hover:bg-muted"
+                                            >
+                                                <Undo2 className="mr-2 h-4 w-4" />
+                                                Undo
+                                            </Button>
+                                        )}
                                         {settings.targetAudiences.length > 0 && (
                                             <select
                                                 value={selectedAudience}
@@ -347,6 +406,67 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                                 ))}
                                             </select>
                                         )}
+                                        <div className="relative" ref={directionDropdownRef}>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setShowDirectionDropdown(!showDirectionDropdown)}
+                                                className="text-muted-foreground hover:text-foreground hover:bg-muted h-8 px-2"
+                                            >
+                                                <ChevronDown className="h-4 w-4" />
+                                                <span className="ml-1 text-xs max-w-[100px] truncate">
+                                                    {improviseDirection === '__custom__'
+                                                        ? (customDirection || 'Custom')
+                                                        : (improviseDirection || 'Direction')}
+                                                </span>
+                                            </Button>
+                                            {showDirectionDropdown && (
+                                                <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-md border border-input bg-background shadow-lg">
+                                                    <div className="p-1">
+                                                        <button
+                                                            type="button"
+                                                            className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted ${!improviseDirection ? 'bg-muted font-medium' : ''}`}
+                                                            onClick={() => { setImproviseDirection(''); setShowDirectionDropdown(false); }}
+                                                        >
+                                                            No direction (default)
+                                                        </button>
+                                                        {DIRECTION_PRESETS.map((preset) => (
+                                                            <button
+                                                                key={preset}
+                                                                type="button"
+                                                                className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted ${improviseDirection === preset ? 'bg-muted font-medium' : ''}`}
+                                                                onClick={() => { setImproviseDirection(preset); setShowDirectionDropdown(false); }}
+                                                            >
+                                                                {preset}
+                                                            </button>
+                                                        ))}
+                                                        <div className="border-t border-input mt-1 pt-1">
+                                                            <button
+                                                                type="button"
+                                                                className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted ${improviseDirection === '__custom__' ? 'bg-muted font-medium' : ''}`}
+                                                                onClick={() => { setImproviseDirection('__custom__'); }}
+                                                            >
+                                                                Custom direction...
+                                                            </button>
+                                                            {improviseDirection === '__custom__' && (
+                                                                <div className="px-2 py-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={customDirection}
+                                                                        onChange={(e) => setCustomDirection(e.target.value)}
+                                                                        onKeyDown={(e) => { if (e.key === 'Enter') setShowDirectionDropdown(false); }}
+                                                                        placeholder="e.g. More conversational"
+                                                                        className="w-full h-7 rounded-md border border-input bg-transparent px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                                        autoFocus
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                         <Button
                                             type="button"
                                             variant="ghost"

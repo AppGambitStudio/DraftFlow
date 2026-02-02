@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Settings, Idea } from '../db';
+import { Settings, Idea, Post } from '../db';
 import fs from 'fs';
 import path from 'path';
 
@@ -69,11 +69,62 @@ export class AIService {
         }
     }
 
-    static async improvise(tenantId: string, content: string, authorUrn?: string, targetAudience?: string, manualToneOverride?: string): Promise<string> {
+    private static async getTopPerformingPosts(tenantId: string, authorUrn?: string | null, limit: number = 3): Promise<string[]> {
+        try {
+            const where: any = { tenantId, status: 'PUBLISHED' };
+            if (authorUrn) {
+                where.authorUrn = authorUrn;
+            }
+
+            const posts = await Post.findAll({
+                where,
+                order: [['likesCount', 'DESC']],
+            });
+
+            // Sort by engagement score: likes + comments*3 + reposts*2
+            const scored = posts.map(p => ({
+                content: p.content,
+                score: (p.likesCount || 0) + (p.commentsCount || 0) * 3 + (p.repostsCount || 0) * 2,
+            }));
+            scored.sort((a, b) => b.score - a.score);
+
+            return scored
+                .filter(p => p.score > 0)
+                .slice(0, limit)
+                .map(p => p.content.substring(0, 300));
+        } catch (e: any) {
+            console.error('[AIService] Failed to fetch top posts:', e.message);
+            return [];
+        }
+    }
+
+    static async improvise(tenantId: string, content: string, authorUrn?: string, targetAudience?: string, manualToneOverride?: string, direction?: string, platform?: string): Promise<string> {
         const config = await this.getUnifiedConfig(tenantId, authorUrn);
 
         let SYSTEM_PROMPT = config.aiPersona || `You are an expert LinkedIn content editor specializing in software development, cloud technologies, and AI content.`;
         SYSTEM_PROMPT += `\n\nYour task is to refine and enhance an existing LinkedIn post draft while preserving the author's core message and voice. If first line has the exact instructions from the author, then follow them.\n`;
+
+        if (direction) {
+            SYSTEM_PROMPT = `PRIORITY INSTRUCTION: The user wants you to specifically: ${direction}. Focus on this above all other refinement guidelines.\n\n` + SYSTEM_PROMPT;
+        }
+
+        if (platform) {
+            const platformUpper = platform.toUpperCase();
+            if (platformUpper === 'TWITTER' || platformUpper === 'X') {
+                SYSTEM_PROMPT += `\n**PLATFORM CHARACTER LIMIT:** This is a Twitter/X post. MAXIMUM 270 characters (hard limit, leave room for hashtags). This overrides all other length guidelines.\n`;
+            } else {
+                SYSTEM_PROMPT += `\n**PLATFORM CHARACTER LIMIT:** This is a LinkedIn post. MAXIMUM 2800 characters (hard limit).\n`;
+            }
+        }
+
+        // Inject top-performing posts as style reference
+        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
+        if (topPosts.length > 0) {
+            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** These posts performed well for this author. Study their style, structure, and hooks — but do NOT copy them.\n`;
+            topPosts.forEach((post, i) => {
+                SYSTEM_PROMPT += `[Example ${i + 1}]: ${post}\n`;
+            });
+        }
 
         if (targetAudience) {
             SYSTEM_PROMPT += `\n**Post Audience:** ${targetAudience}\nEnsure the tone, complexity, and value proposition resonate specifically with this audience.\n`;
@@ -136,7 +187,8 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
         effortLevel?: string,
         keyTakeaway?: string,
         antiGoals?: string,
-        manualToneOverride?: string
+        manualToneOverride?: string,
+        platform?: string
     ): Promise<{ content: string; summary: string }> {
         const config = await this.getUnifiedConfig(tenantId, authorUrn);
         let SYSTEM_PROMPT = config.aiPersona || `You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.`;
@@ -158,13 +210,37 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
             SYSTEM_PROMPT += `\n**ANTI-GOALS (STRICTLY AVOID):**\n"${antiGoals}"\n-> You must ensure the post does NOT violate these constraints.\n`;
         }
 
+        // Platform character limits
+        if (platform) {
+            const platformUpper = platform.toUpperCase();
+            if (platformUpper === 'TWITTER' || platformUpper === 'X') {
+                SYSTEM_PROMPT += `\n**PLATFORM CHARACTER LIMIT (HARD CONSTRAINT):** This is a Twitter/X post. MAXIMUM 270 characters (hard limit, leave room for hashtags). This overrides all effort-level word limits.\n`;
+            } else {
+                SYSTEM_PROMPT += `\n**PLATFORM CHARACTER LIMIT:** This is a LinkedIn post. MAXIMUM 2800 characters (hard limit).\n`;
+            }
+        }
+
+        // Top-performing posts as style reference
+        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
+        if (topPosts.length > 0) {
+            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** These posts performed well for this author. Study their style, structure, and hooks — but do NOT copy them.\n`;
+            topPosts.forEach((post, i) => {
+                SYSTEM_PROMPT += `[Example ${i + 1}]: ${post}\n`;
+            });
+        }
+
         SYSTEM_PROMPT += `\n### CONTENT STRATEGY ###\n`;
 
         const effectiveTone = manualToneOverride || config.toneInstructions;
         if (effectiveTone) {
             SYSTEM_PROMPT += `\n**TONE & WRITING STYLE:**\n${effectiveTone}\n`;
         }
-        if (postShape) {
+
+        // Auto Post Shape: when no shape specified or "auto", let the AI choose
+        const isAutoShape = !postShape || postShape.toLowerCase() === 'auto';
+        if (isAutoShape) {
+            SYSTEM_PROMPT += `\n**Post Shape/Format Strategy (AUTO-SELECT):**\nAnalyze the idea/topic and choose the BEST post shape from these options: "Hot take", "Breakdown (step-by-step)", "Story / anecdote", "Checklist", "Before vs After", "Diagram-first", "Question-led", "Myth vs Reality".\nIn your themeAnalysis field, include which shape you chose and why.\n`;
+        } else if (postShape) {
             SYSTEM_PROMPT += `\n**Post Shape/Format Strategy:**\nYou must structure the post as a "${postShape}".\n`;
             if (postShape === 'Hot take') SYSTEM_PROMPT += `Be bold, controversial, and start with a strong opinion.\n`;
             else if (postShape === 'Breakdown (step-by-step)') SYSTEM_PROMPT += `Use a clear, step-by-step numbered list logic.\n`;
@@ -176,7 +252,10 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
             else if (postShape === 'Myth vs Reality') SYSTEM_PROMPT += `Debunk a common myth and present the reality.\n`;
         }
 
-        if (effortLevel) {
+        const isTwitter = platform && (platform.toUpperCase() === 'TWITTER' || platform.toUpperCase() === 'X');
+        if (isTwitter) {
+            SYSTEM_PROMPT += `\n**STRICT LENGTH CONSTRAINT - YOU MUST OBEY THIS:**\nMAXIMUM 270 characters. This is a Twitter/X post. The character limit overrides all word-based effort levels. Keep it extremely concise.\n`;
+        } else if (effortLevel) {
             SYSTEM_PROMPT += `\n**STRICT LENGTH CONSTRAINT - YOU MUST OBEY THIS:**\n`;
             if (effortLevel === '⚡ Quick') {
                 SYSTEM_PROMPT += `MAXIMUM 80 WORDS. This is a HARD LIMIT. Use exactly ONE short paragraph or 3-4 very brief bullet points. NO intros, NO outros, NO "Here is your post". Just the punchy content. If you exceed 80 words, you have FAILED.\n`;
@@ -412,6 +491,22 @@ Return a JSON object with the following structure:
                 let text = response.data;
                 if (typeof text !== 'string') text = JSON.stringify(text);
 
+                // Try Readability for clean article extraction (dynamic import to avoid ESM issues)
+                try {
+                    const { JSDOM } = await import('jsdom');
+                    const { Readability } = await import('@mozilla/readability');
+                    const dom = new JSDOM(text, { url: link });
+                    const reader = new Readability(dom.window.document);
+                    const article = reader.parse();
+                    if (article && article.textContent) {
+                        const cleanText = article.textContent.replace(/\s+/g, " ").trim();
+                        return `[Content from ${link}]:\n${cleanText.substring(0, 2000)}...\n`;
+                    }
+                } catch (readabilityErr) {
+                    // Fall through to regex fallback
+                }
+
+                // Fallback: regex-based HTML stripping
                 text = text.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gm, "");
                 text = text.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gm, "");
                 text = text.replace(/<[^>]+>/g, "\n");
@@ -493,7 +588,9 @@ Return a JSON object with the following structure:
             idea.postShape || undefined,
             idea.effortLevel || undefined,
             idea.keyTakeaway || undefined,
-            idea.antiGoals || undefined
+            idea.antiGoals || undefined,
+            undefined,
+            platform
         );
 
         if (summary && summary !== "Summary parsing failed") {

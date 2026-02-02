@@ -1,4 +1,4 @@
-# LinkedIn Post Scheduler
+# DraftFlow
 
 A powerful, self-hosted application to schedule and publish posts to LinkedIn and Twitter. Features an Idea Board, AI-powered content improvement, and Markdown support.
 

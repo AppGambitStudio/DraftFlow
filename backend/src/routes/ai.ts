@@ -8,14 +8,14 @@ const router = express.Router();
 router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
-        const { content, targetAudience, authorUrn } = req.body;
+        const { content, targetAudience, authorUrn, direction, platform } = req.body;
 
         if (!content) {
             res.status(400).json({ error: 'Content is required' });
             return;
         }
 
-        const improvedContent = await AIService.improvise(tenantId, content, authorUrn, targetAudience);
+        const improvedContent = await AIService.improvise(tenantId, content, authorUrn, targetAudience, undefined, direction, platform);
         res.json({ content: improvedContent });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

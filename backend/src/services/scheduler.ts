@@ -103,6 +103,16 @@ export const startScheduler = () => {
                         error: null,
                     });
                 }
+
+                // Trigger analytics sync after successful publish (delayed to let LinkedIn process)
+                if (results.length > 0 && post.tenantId) {
+                    setTimeout(() => {
+                        console.log(`[Scheduler] Triggering post-publish analytics sync for tenant ${post.tenantId}`);
+                        analyticsSyncService.syncTenantPosts(post.tenantId as string).catch(err => {
+                            console.error('[Scheduler] Post-publish analytics sync error:', err);
+                        });
+                    }, 60000); // 1 minute delay
+                }
             }
         } catch (error) {
             console.error('Error in scheduler:', error);
