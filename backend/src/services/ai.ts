@@ -449,6 +449,464 @@ Return a JSON object with the following structure:
         return null;
     }
 
+    static async suggestContentPillars(tenantId: string, companyName?: string, companyDescription?: string, industry?: string, expertiseAreas?: string[]): Promise<string[]> {
+        const config = await this.getUnifiedConfig(tenantId);
+
+        const SYSTEM_PROMPT = `You are an expert content strategist. Given a business profile, suggest 5-6 content pillars (core recurring themes) that this person/company should consistently post about on LinkedIn.
+
+Content pillars should be:
+- Specific enough to guide content creation
+- Broad enough to generate many post ideas
+- Relevant to the business's industry and expertise
+- A mix of educational, thought leadership, and engagement-driven themes
+
+Return a JSON object: { "pillars": ["Pillar 1", "Pillar 2", ...] }
+**CRITICAL:** Return ONLY valid JSON. No markdown blocks, no explanations.`;
+
+        const userContent = `${companyName ? `Company: ${companyName}` : ''}
+${industry ? `Industry: ${industry}` : ''}
+${companyDescription ? `What they do: ${companyDescription}` : ''}
+${expertiseAreas && expertiseAreas.length > 0 ? `Expertise areas: ${expertiseAreas.join(', ')}` : ''}`;
+
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userContent);
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            return parsed?.pillars || [];
+        } catch (e) {
+            console.error('[AIService] Failed to parse pillars response:', e);
+            return [];
+        }
+    }
+
+    static async generateIdeaBatch(
+        tenantId: string,
+        params: {
+            companyName?: string; industry?: string; companyDescription?: string;
+            expertiseAreas?: string[]; contentPillars: string[];
+            targetAudience?: string; audiencePainPoints?: string; toneOverride?: string;
+            batchTheme?: string; trendingTopics?: string;
+            count: number; authorUrn?: string; excludeTitles?: string[];
+        }
+    ): Promise<Array<{ title: string; description: string; tags: string[]; suggestedPostShape: string; suggestedEffortLevel: string }>> {
+        const config = await this.getUnifiedConfig(tenantId, params.authorUrn);
+        const { companyName, industry, companyDescription, expertiseAreas, contentPillars,
+                targetAudience, audiencePainPoints, toneOverride, batchTheme, trendingTopics,
+                count, authorUrn, excludeTitles } = params;
+
+        let SYSTEM_PROMPT = `You are a strategic content planning assistant for LinkedIn and Twitter.
+
+CONTEXT ABOUT THE AUTHOR/BRAND:
+${companyName ? `Company: ${companyName}` : ''}
+${industry ? `Industry: ${industry}` : ''}
+${companyDescription ? `What they do: ${companyDescription}` : ''}
+${expertiseAreas && expertiseAreas.length > 0 ? `Expertise: ${expertiseAreas.join(', ')}` : ''}
+
+Content Pillars: ${contentPillars.join(', ')}
+
+AUDIENCE:
+${targetAudience ? `Target: ${targetAudience}` : 'General professional audience'}
+${audiencePainPoints ? `Their pain points: ${audiencePainPoints}` : ''}`;
+
+        if (toneOverride && toneOverride !== 'Use Default') {
+            SYSTEM_PROMPT += `\n\nTONE: Write in a ${toneOverride} tone.`;
+        } else if (config.toneInstructions) {
+            SYSTEM_PROMPT += `\n\nTONE: ${config.toneInstructions}`;
+        }
+
+        if (batchTheme) {
+            SYSTEM_PROMPT += `\n\nBATCH FOCUS: The user wants ideas around this theme: "${batchTheme}"`;
+        }
+        if (trendingTopics) {
+            SYSTEM_PROMPT += `\nTRENDING CONTEXT: Consider these current events/trends: "${trendingTopics}"`;
+        }
+
+        // Add top performing posts as style reference
+        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
+        if (topPosts.length > 0) {
+            SYSTEM_PROMPT += `\n\nHIGH-PERFORMING POST EXAMPLES (study style, not content):`;
+            topPosts.forEach((post, i) => { SYSTEM_PROMPT += `\n[Example ${i + 1}]: ${post}`; });
+        }
+
+        if (excludeTitles && excludeTitles.length > 0) {
+            SYSTEM_PROMPT += `\n\nALREADY GENERATED (DO NOT REPEAT):\n${excludeTitles.map(t => `- ${t}`).join('\n')}`;
+        }
+
+        SYSTEM_PROMPT += `\n\nYOUR TASK: Generate exactly ${count} unique content idea concepts.
+
+REQUIREMENTS FOR EACH IDEA:
+1. title: A compelling, specific title (max 80 chars)
+2. description: 2-3 sentences explaining the angle and key argument (content brief, NOT the final post)
+3. tags: 2-4 relevant topic tags
+4. suggestedPostShape: Pick from: "Hot take", "Breakdown (step-by-step)", "Story / anecdote", "Checklist", "Before vs After", "Question-led", "Myth vs Reality"
+5. suggestedEffortLevel: "Quick" for simple observations, "Medium" for standard arguments, "Deep" for comprehensive analyses
+
+DIVERSITY RULES:
+- Spread ideas across different content pillars
+- Vary the post shapes (max 2 of same shape)
+- Mix effort levels
+- Include at least one contrarian/hot take and one practical how-to
+
+RESPONSE FORMAT:
+Return a JSON object:
+{
+  "ideas": [
+    { "title": "...", "description": "...", "tags": ["..."], "suggestedPostShape": "...", "suggestedEffortLevel": "..." }
+  ]
+}
+CRITICAL: Return ONLY valid JSON. No markdown blocks.`;
+
+        console.log('[AIService] Generating idea batch, count:', count);
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate ${count} content ideas now.`);
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            return parsed?.ideas || [];
+        } catch (e) {
+            console.error('[AIService] Failed to parse idea batch response:', e);
+            return [];
+        }
+    }
+
+    static async generateVariations(
+        tenantId: string,
+        content: string,
+        authorUrn?: string,
+        targetAudience?: string,
+        platform?: string
+    ): Promise<Array<{ content: string; format: string }>> {
+        const config = await this.getUnifiedConfig(tenantId, authorUrn);
+
+        // Determine character limit based on platform
+        const isTwitter = platform && (platform.toUpperCase() === 'TWITTER' || platform.toUpperCase() === 'X');
+        const charLimit = isTwitter ? 270 : 2800;
+        const platformName = isTwitter ? 'Twitter/X' : 'LinkedIn';
+
+        let SYSTEM_PROMPT = config.aiPersona || `You are an expert social media content strategist specializing in creating engaging posts.`;
+
+        SYSTEM_PROMPT += `\n\nYour task is to rewrite the provided content in 3 DIFFERENT post formats while preserving the SAME core message.\n`;
+
+        SYSTEM_PROMPT += `\n**PLATFORM:** ${platformName}`;
+        SYSTEM_PROMPT += `\n**CHARACTER LIMIT:** Maximum ${charLimit} characters per variation. This is a HARD LIMIT.\n`;
+
+        // Add top-performing posts as style reference
+        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
+        if (topPosts.length > 0) {
+            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** Study their style and hooks:\n`;
+            topPosts.forEach((post, i) => {
+                SYSTEM_PROMPT += `[Example ${i + 1}]: ${post}\n`;
+            });
+        }
+
+        if (targetAudience) {
+            SYSTEM_PROMPT += `\n**TARGET AUDIENCE:** ${targetAudience}\nEnsure all variations resonate with this audience.\n`;
+        }
+
+        if (config.toneInstructions) {
+            SYSTEM_PROMPT += `\n**TONE & STYLE:**\n${config.toneInstructions}\n`;
+        }
+
+        SYSTEM_PROMPT += `
+**AVAILABLE FORMATS (choose 3 different ones):**
+1. Hot take - Bold, controversial opinion that grabs attention
+2. Breakdown (step-by-step) - Numbered steps or logical progression
+3. Story/anecdote - Narrative arc with situation, challenge, resolution
+4. Checklist - Actionable items the reader can use
+5. Before vs After - Contrast the old way with the better new way
+6. Question-led - Start with a provocative question, then answer it
+7. Myth vs Reality - Debunk a common misconception
+
+**REQUIREMENTS:**
+- Each variation MUST convey the SAME core message/insight from the original content
+- Each variation MUST use a DIFFERENT format from the list above
+- Each variation MUST be under ${charLimit} characters
+- Maintain the author's voice and authenticity
+- Make each variation engaging and ready to publish
+
+**RESPONSE FORMAT:**
+Return a JSON object:
+{
+    "variations": [
+        { "content": "The full post text...", "format": "Hot take" },
+        { "content": "The full post text...", "format": "Breakdown (step-by-step)" },
+        { "content": "The full post text...", "format": "Question-led" }
+    ]
+}
+
+**CRITICAL:** Return ONLY valid JSON. No markdown blocks, no explanations.
+`;
+
+        console.log('[AIService] Generating variations for content');
+
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate 3 variations of this content:\n\n${content}`);
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            const variations = parsed?.variations || [];
+
+            // Validate and filter variations
+            return variations
+                .filter((v: any) => v.content && v.format)
+                .map((v: any) => ({
+                    content: v.content.substring(0, charLimit),
+                    format: v.format
+                }));
+        } catch (e: any) {
+            console.error('[AIService] Failed to parse variations response:', e.message);
+            return [];
+        }
+    }
+
+    static async generateHooks(
+        tenantId: string,
+        content: string,
+        count: number = 5,
+        authorUrn?: string,
+        platform?: string
+    ): Promise<Array<{ hook: string; style: string }>> {
+        const config = await this.getUnifiedConfig(tenantId, authorUrn);
+
+        const isTwitter = platform && (platform.toUpperCase() === 'TWITTER' || platform.toUpperCase() === 'X');
+        const platformName = isTwitter ? 'Twitter/X' : 'LinkedIn';
+        const charLimit = isTwitter ? 100 : 200;
+
+        let SYSTEM_PROMPT = config.aiPersona || `You are an expert social media content strategist specializing in creating attention-grabbing hooks.`;
+
+        SYSTEM_PROMPT += `\n\nYour task is to generate ${count} compelling hook variations for the provided content.\n`;
+
+        SYSTEM_PROMPT += `\n**PLATFORM:** ${platformName}`;
+        SYSTEM_PROMPT += `\n**HOOK CHARACTER LIMIT:** Maximum ${charLimit} characters per hook. This is a HARD LIMIT.\n`;
+
+        // Add top-performing posts as style reference
+        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
+        if (topPosts.length > 0) {
+            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** Study their opening hooks:\n`;
+            topPosts.forEach((post, i) => {
+                const firstLine = post.split('\n')[0] || post.substring(0, 100);
+                SYSTEM_PROMPT += `[Example ${i + 1}]: ${firstLine}\n`;
+            });
+        }
+
+        if (config.toneInstructions) {
+            SYSTEM_PROMPT += `\n**TONE & STYLE:**\n${config.toneInstructions}\n`;
+        }
+
+        SYSTEM_PROMPT += `
+**HOOK STYLES TO USE (generate variety across these):**
+1. Question - Start with a provocative or relatable question
+2. Bold Statement - Lead with a controversial or surprising claim
+3. Story Opener - Begin with "I..." or a personal anecdote teaser
+4. Statistic/Number - Open with a compelling data point or number
+5. Pain Point - Address a common frustration or challenge
+6. Contrarian - Challenge conventional wisdom
+7. Curiosity Gap - Create intrigue without revealing everything
+
+**REQUIREMENTS:**
+- Each hook MUST be under ${charLimit} characters
+- Each hook should make the reader want to continue reading
+- Hooks should capture the ESSENCE of the content's main message
+- Vary the styles - do not repeat the same style twice
+- Hooks should be ready to use as the first 1-2 lines of a post
+
+**RESPONSE FORMAT:**
+Return a JSON object:
+{
+    "hooks": [
+        { "hook": "The attention-grabbing opening line...", "style": "Question" },
+        { "hook": "Another compelling hook...", "style": "Bold Statement" }
+    ]
+}
+
+**CRITICAL:** Return ONLY valid JSON. No markdown blocks, no explanations.
+`;
+
+        console.log('[AIService] Generating hooks for content');
+
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate ${count} hook variations for this content:\n\n${content}`);
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            const hooks = parsed?.hooks || [];
+
+            return hooks
+                .filter((h: any) => h.hook && h.style)
+                .map((h: any) => ({
+                    hook: h.hook.substring(0, charLimit),
+                    style: h.style
+                }));
+        } catch (e: any) {
+            console.error('[AIService] Failed to parse hooks response:', e.message);
+            return [];
+        }
+    }
+
+    static async suggestHashtags(
+        tenantId: string,
+        content: string,
+        count: number = 5,
+        platform?: string
+    ): Promise<string[]> {
+        const config = await this.getUnifiedConfig(tenantId);
+
+        const isTwitter = platform && (platform.toUpperCase() === 'TWITTER' || platform.toUpperCase() === 'X');
+        const platformName = isTwitter ? 'Twitter/X' : 'LinkedIn';
+
+        let SYSTEM_PROMPT = `You are an expert social media strategist specializing in hashtag optimization for ${platformName}.`;
+
+        SYSTEM_PROMPT += `\n\nYour task is to suggest ${count} relevant and effective hashtags for the provided content.\n`;
+
+        SYSTEM_PROMPT += `
+**HASHTAG GUIDELINES FOR ${platformName.toUpperCase()}:**
+${isTwitter ? `
+- Twitter hashtags should be concise and trending-aware
+- Mix of broad reach (#Tech, #AI) and niche (#DevOps, #CloudNative)
+- 2-3 hashtags is optimal for Twitter engagement
+- Avoid overly long hashtags
+` : `
+- LinkedIn hashtags should be professional and industry-relevant
+- Mix of broad (#Leadership, #Technology) and specific (#SaaS, #ProductManagement)
+- 3-5 hashtags is optimal for LinkedIn
+- Include at least one high-volume hashtag for reach
+`}
+
+**REQUIREMENTS:**
+- Return exactly ${count} hashtags
+- Each hashtag must start with #
+- Hashtags should be relevant to the content's main topics
+- Include a mix of:
+  - High-volume hashtags (for reach)
+  - Niche hashtags (for targeted audience)
+  - Industry-specific hashtags
+- Avoid generic hashtags like #post or #content
+- No spaces in hashtags (use CamelCase for multi-word tags)
+
+**RESPONSE FORMAT:**
+Return a JSON object:
+{
+    "hashtags": ["#Hashtag1", "#Hashtag2", "#Hashtag3"]
+}
+
+**CRITICAL:** Return ONLY valid JSON. No markdown blocks, no explanations.
+`;
+
+        console.log('[AIService] Suggesting hashtags for content');
+
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Suggest ${count} hashtags for this content:\n\n${content}`);
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            const hashtags = parsed?.hashtags || [];
+
+            return hashtags
+                .filter((h: any) => typeof h === 'string' && h.startsWith('#'))
+                .slice(0, count);
+        } catch (e: any) {
+            console.error('[AIService] Failed to parse hashtags response:', e.message);
+            return [];
+        }
+    }
+
+    static async getTrendingTopics(
+        tenantId: string,
+        params: {
+            industry?: string;
+            contentPillars?: string[];
+            targetAudience?: string;
+            count?: number;
+        }
+    ): Promise<Array<{ topic: string; description: string; relevance: string; suggestedAngles: string[]; trendType: string }>> {
+        const config = await this.getUnifiedConfig(tenantId);
+        const { industry, contentPillars, targetAudience, count = 5 } = params;
+
+        // Include current date for accurate trending topics
+        const currentDate = new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        let SYSTEM_PROMPT = `You are a social media trend analyst with expertise in identifying trending topics and conversations relevant to professional content creation.
+
+**TODAY'S DATE:** ${currentDate}
+
+Your task is to identify ${count} current trending topics that would be relevant for LinkedIn/Twitter content creation.
+
+**IMPORTANT:** You have access to web search. Use it to find CURRENT trending topics, news, and discussions from the past 7 days (as of ${currentDate}). Search for recent news and trends.`;
+
+        if (industry) {
+            SYSTEM_PROMPT += `\n\n**INDUSTRY FOCUS:** ${industry}\nPrioritize trends relevant to this industry.`;
+        }
+
+        if (contentPillars && contentPillars.length > 0) {
+            SYSTEM_PROMPT += `\n\n**CONTENT PILLARS:** ${contentPillars.join(', ')}\nFind trends that align with these content themes.`;
+        }
+
+        if (targetAudience) {
+            SYSTEM_PROMPT += `\n\n**TARGET AUDIENCE:** ${targetAudience}\nEnsure trends would resonate with this audience.`;
+        }
+
+        SYSTEM_PROMPT += `
+
+**TREND TYPES TO LOOK FOR (as of ${currentDate}):**
+- "breaking" - Major news or announcements from the last 24-48 hours
+- "emerging" - Growing conversations and topics gaining momentum this week
+- "evergreen-surge" - Established topics seeing renewed interest recently
+- "seasonal" - Time-sensitive or event-related trends happening now
+- "controversy" - Current debates or polarizing discussions (handle professionally)
+
+**FOR EACH TREND, PROVIDE:**
+1. topic: Clear, specific topic name (not generic)
+2. description: 2-3 sentences explaining what's happening and why it's trending
+3. relevance: Why this matters for professional content creators
+4. suggestedAngles: 3-4 specific content angles to cover this trend
+5. trendType: One of the types listed above
+
+**RESPONSE FORMAT:**
+Return a JSON object:
+{
+    "topics": [
+        {
+            "topic": "Specific Trend Name",
+            "description": "What's happening and why it's trending...",
+            "relevance": "Why content creators should care...",
+            "suggestedAngles": ["Angle 1", "Angle 2", "Angle 3"],
+            "trendType": "breaking|emerging|evergreen-surge|seasonal|controversy"
+        }
+    ]
+}
+
+**CRITICAL:**
+- Return ONLY valid JSON. No markdown blocks, no explanations.
+- Topics must be CURRENT and REAL - use web search to verify.
+- Be specific - avoid generic topics like "AI" or "Technology".`;
+
+        console.log('[AIService] Fetching trending topics');
+
+        const userPrompt = `Search for and identify ${count} trending topics${industry ? ` in the ${industry} industry` : ''} that would make great professional content. Focus on what's happening as of ${currentDate} - search for news and discussions from the past 7 days.`;
+
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userPrompt);
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            const topics = parsed?.topics || [];
+
+            return topics
+                .filter((t: any) => t.topic && t.description && t.relevance && t.suggestedAngles && t.trendType)
+                .slice(0, count)
+                .map((t: any) => ({
+                    topic: t.topic,
+                    description: t.description,
+                    relevance: t.relevance,
+                    suggestedAngles: Array.isArray(t.suggestedAngles) ? t.suggestedAngles : [t.suggestedAngles],
+                    trendType: t.trendType
+                }));
+        } catch (e: any) {
+            console.error('[AIService] Failed to parse trending topics response:', e.message);
+            return [];
+        }
+    }
+
     static async enhanceIdeaDescription(tenantId: string, title: string, description: string): Promise<string> {
         const SYSTEM_PROMPT = `
             You are an expert content strategist. Your goal is to create a **Content Brief/Outline** for a future LinkedIn post.

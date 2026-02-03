@@ -55,6 +55,51 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Batch create ideas
+router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const tenantId = req.tenantId!;
+        const { ideas } = req.body;
+
+        if (!ideas || !Array.isArray(ideas) || ideas.length === 0) {
+            return res.status(400).json({ error: 'Ideas array is required' });
+        }
+
+        const ideaRecords = ideas.map((ideaData: any) => ({
+            userId,
+            tenantId,
+            title: ideaData.title,
+            description: ideaData.description || null,
+            tags: JSON.stringify(ideaData.tags || []),
+            status: 'NEW',
+            isRecurring: false,
+            frequency: null,
+            lastGeneratedAt: null,
+            authorUrn: ideaData.authorUrn || null,
+            authorName: ideaData.authorName || null,
+            targetAudience: ideaData.targetAudience || null,
+            generatedSummaries: '[]',
+            sourceLinks: JSON.stringify(ideaData.sourceLinks || []),
+            attachments: '[]',
+            scheduleTime: null,
+            scheduleDayOfWeek: null,
+            scheduleDayOfMonth: null,
+            postShape: ideaData.postShape || null,
+            effortLevel: ideaData.effortLevel || null,
+            keyTakeaway: ideaData.keyTakeaway || null,
+            antiGoals: ideaData.antiGoals || null
+        }));
+
+        const createdIdeas = await Idea.bulkCreate(ideaRecords);
+
+        res.json(createdIdeas);
+    } catch (error) {
+        console.error('Batch create error:', error);
+        res.status(500).json({ error: 'Failed to batch create ideas' });
+    }
+});
+
 // Update idea
 router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {

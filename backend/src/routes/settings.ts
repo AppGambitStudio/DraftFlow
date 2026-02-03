@@ -50,7 +50,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const {
         openRouterApiKey, openRouterModelId, targetAudiences, maxHistoryItems,
-        globalTone, accountTones, aiPersona
+        globalTone, accountTones, aiPersona,
+        companyName, companyDescription, industry, expertiseAreas, contentPillars
     } = req.body;
     console.log('Received settings update for tenant:', tenantId);
 
@@ -67,6 +68,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
                 globalTone,
                 accountTones: accountTones ? JSON.stringify(accountTones) : '{}',
                 aiPersona,
+                companyName: companyName || null,
+                companyDescription: companyDescription || null,
+                industry: industry || null,
+                expertiseAreas: expertiseAreas ? JSON.stringify(expertiseAreas) : '[]',
+                contentPillars: contentPillars ? JSON.stringify(contentPillars) : '[]',
             },
         });
 
@@ -78,6 +84,11 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             globalTone,
             accountTones: accountTones ? JSON.stringify(accountTones) : setting.accountTones,
             aiPersona: aiPersona !== undefined ? aiPersona : setting.aiPersona,
+            companyName: companyName !== undefined ? companyName : setting.companyName,
+            companyDescription: companyDescription !== undefined ? companyDescription : setting.companyDescription,
+            industry: industry !== undefined ? industry : setting.industry,
+            expertiseAreas: expertiseAreas !== undefined ? JSON.stringify(expertiseAreas) : setting.expertiseAreas,
+            contentPillars: contentPillars !== undefined ? JSON.stringify(contentPillars) : setting.contentPillars,
         });
 
         res.json(setting);

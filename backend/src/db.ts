@@ -188,6 +188,11 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare accountTones: string | null; // JSON string mapping urn -> instructions
     declare aiPersona: string | null; // Added
     declare webhookSecret: CreationOptional<string | null>; // Added
+    declare companyName: string | null;
+    declare industry: string | null;
+    declare companyDescription: string | null;
+    declare expertiseAreas: string | null; // JSON string array
+    declare contentPillars: string | null; // JSON string array
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -247,6 +252,28 @@ Settings.init({
     webhookSecret: {
         type: DataTypes.STRING,
         allowNull: true,
+    },
+    companyName: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    industry: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    companyDescription: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    expertiseAreas: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        defaultValue: '[]',
+    },
+    contentPillars: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        defaultValue: '[]',
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
@@ -481,6 +508,73 @@ Idea.init({
     ]
 });
 
+// SavedTrend Model - for persisting trending topics
+export class SavedTrend extends Model<InferAttributes<SavedTrend>, InferCreationAttributes<SavedTrend>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']>;
+    declare topic: string;
+    declare description: string;
+    declare relevance: string;
+    declare suggestedAngles: string; // JSON array
+    declare trendType: string;
+    declare industry: string | null;
+    declare fetchedAt: Date;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+SavedTrend.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    topic: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    relevance: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    suggestedAngles: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        defaultValue: '[]',
+    },
+    trendType: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    industry: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    fetchedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'SavedTrend',
+    tableName: 'saved_trends',
+    indexes: [
+        { fields: ['tenantId'] },
+        { fields: ['fetchedAt'] },
+    ]
+});
+
 // Associations
 User.hasMany(Settings, { foreignKey: 'userId' });
 Settings.belongsTo(User, { foreignKey: 'userId' });
@@ -510,12 +604,15 @@ Settings.belongsTo(Tenant, { foreignKey: 'tenantId' });
 Tenant.hasMany(Invitation, { foreignKey: 'tenantId' });
 Invitation.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
+Tenant.hasMany(SavedTrend, { foreignKey: 'tenantId' });
+SavedTrend.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
 // Sync database
 export const initDB = async () => {
     try {
         await sequelize.authenticate();
         console.log('Connection has been established successfully.');
-        await sequelize.sync(); // Removed alter: true
+        await sequelize.sync(); // Use migrations for schema changes
         console.log('Database synced successfully.');
 
         // 1. Create Default User if not exists

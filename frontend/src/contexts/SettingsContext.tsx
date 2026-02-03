@@ -11,6 +11,11 @@ interface Settings {
     globalTone: string;
     accountTones: Record<string, string>;
     isOpenRouterConfigured: boolean;
+    companyName: string;
+    industry: string;
+    companyDescription: string;
+    expertiseAreas: string[];
+    contentPillars: string[];
 }
 
 interface SettingsContextType {
@@ -28,7 +33,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         maxHistoryItems: 5,
         globalTone: "",
         accountTones: {},
-        isOpenRouterConfigured: true // Default to true to avoid flash
+        isOpenRouterConfigured: true, // Default to true to avoid flash
+        companyName: "",
+        industry: "",
+        companyDescription: "",
+        expertiseAreas: [],
+        contentPillars: [],
     });
     const [loading, setLoading] = useState(true);
 
@@ -50,12 +60,35 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 }
             }
 
+            let expertiseAreas: string[] = [];
+            if (res.data.expertiseAreas) {
+                try {
+                    expertiseAreas = JSON.parse(res.data.expertiseAreas);
+                } catch (e) {
+                    console.error('Failed to parse expertiseAreas:', e);
+                }
+            }
+
+            let contentPillars: string[] = [];
+            if (res.data.contentPillars) {
+                try {
+                    contentPillars = JSON.parse(res.data.contentPillars);
+                } catch (e) {
+                    console.error('Failed to parse contentPillars:', e);
+                }
+            }
+
             setSettings({
                 targetAudiences: audiences,
                 maxHistoryItems: res.data.maxHistoryItems !== undefined ? res.data.maxHistoryItems : 5,
                 globalTone: res.data.globalTone || "",
                 accountTones,
-                isOpenRouterConfigured: !!res.data.openRouterApiKey
+                isOpenRouterConfigured: !!res.data.openRouterApiKey,
+                companyName: res.data.companyName || "",
+                industry: res.data.industry || "",
+                companyDescription: res.data.companyDescription || "",
+                expertiseAreas,
+                contentPillars,
             });
         } catch (error) {
             console.error('Failed to fetch settings:', error);
@@ -73,7 +106,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 maxHistoryItems: 5,
                 globalTone: "",
                 accountTones: {},
-                isOpenRouterConfigured: true
+                isOpenRouterConfigured: true,
+                companyName: "",
+                industry: "",
+                companyDescription: "",
+                expertiseAreas: [],
+                contentPillars: [],
             });
             setLoading(false);
         }

@@ -3,3 +3,9 @@ node_modules
 .env
 
 /generated/prisma
+
+# TypeScript build artifacts (project uses ts-node directly)
+src/**/*.js
+src/**/*.d.ts
+src/**/*.js.map
+src/**/*.d.ts.map

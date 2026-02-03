@@ -433,6 +433,14 @@ export default function IdeasPage() {
                             <List className="h-4 w-4" />
                         </Button>
                     </div>
+                    <Button
+                        variant="outline"
+                        onClick={() => router.push('/ideas/generate')}
+                        className="border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                    >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Generate Ideas
+                    </Button>
                     <Button onClick={() => handleOpenModal()}>
                         <Plus className="mr-2 h-4 w-4" />
                         New Idea

@@ -16,7 +16,8 @@ import {
     Target,
     RefreshCw,
     AlertCircle,
-    Copy
+    Copy,
+    Building2,
 } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
@@ -50,6 +51,11 @@ export default function SettingsPage() {
         accountTones: {} as Record<string, string>,
         aiPersona: "",
         webhookSecret: "",
+        companyName: "",
+        industry: "",
+        companyDescription: "",
+        expertiseAreas: "",
+        contentPillars: "",
     });
 
     useEffect(() => {
@@ -78,6 +84,11 @@ export default function SettingsPage() {
                 accountTones: res.data.accountTones ? JSON.parse(res.data.accountTones) : {},
                 aiPersona: res.data.aiPersona || "",
                 webhookSecret: res.data.webhookSecret || "",
+                companyName: res.data.companyName || "",
+                industry: res.data.industry || "",
+                companyDescription: res.data.companyDescription || "",
+                expertiseAreas: res.data.expertiseAreas ? JSON.parse(res.data.expertiseAreas).join(', ') : "",
+                contentPillars: res.data.contentPillars ? JSON.parse(res.data.contentPillars).join(', ') : "",
             });
             setConfig({
                 isLinkedinConfigured: res.data.isLinkedinConfigured || false,
@@ -105,7 +116,16 @@ export default function SettingsPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.post("/settings", formData);
+            const payload = {
+                ...formData,
+                expertiseAreas: formData.expertiseAreas
+                    ? formData.expertiseAreas.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    : [],
+                contentPillars: formData.contentPillars
+                    ? formData.contentPillars.split(',').map((s: string) => s.trim()).filter(Boolean)
+                    : [],
+            };
+            await api.post("/settings", payload);
             toast.success("Settings saved successfully");
         } catch (error) {
             toast.error("Failed to save settings");
@@ -332,6 +352,90 @@ export default function SettingsPage() {
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     Recommended: <code>anthropic/claude-3.5-sonnet</code>
+                                </p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Business Profile */}
+                <Card className="overflow-hidden border-slate-200">
+                    <CardHeader className="bg-slate-50/50 border-b">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-white rounded-lg border shadow-sm">
+                                <Building2 className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <div>
+                                <CardTitle>Business Profile</CardTitle>
+                                <CardDescription>Tell the AI about your business so it can generate more relevant content ideas.</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="companyName">Company Name</Label>
+                                <Input
+                                    id="companyName"
+                                    name="companyName"
+                                    value={formData.companyName}
+                                    onChange={handleChange}
+                                    placeholder="Acme Corp"
+                                    className="bg-slate-50/30"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="industry">Industry</Label>
+                                <Input
+                                    id="industry"
+                                    name="industry"
+                                    value={formData.industry}
+                                    onChange={handleChange}
+                                    placeholder="e.g., SaaS, Fintech, Healthcare"
+                                    className="bg-slate-50/30"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="companyDescription">What do you do?</Label>
+                            <textarea
+                                id="companyDescription"
+                                value={formData.companyDescription}
+                                onChange={(e) => setFormData({ ...formData, companyDescription: e.target.value })}
+                                className="flex min-h-[100px] w-full rounded-xl border border-input bg-slate-50/30 px-4 py-3 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                                placeholder="Briefly describe what your business does and your unique value proposition..."
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                This helps the AI understand your domain and generate ideas aligned with your business goals.
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="expertiseAreas">Expertise Areas</Label>
+                                <Input
+                                    id="expertiseAreas"
+                                    name="expertiseAreas"
+                                    value={formData.expertiseAreas}
+                                    onChange={handleChange}
+                                    placeholder="Cloud Architecture, DevOps, Security..."
+                                    className="bg-slate-50/30"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Comma-separated list of your areas of expertise.
+                                </p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="contentPillars">Content Pillars</Label>
+                                <Input
+                                    id="contentPillars"
+                                    name="contentPillars"
+                                    value={formData.contentPillars}
+                                    onChange={handleChange}
+                                    placeholder="Thought Leadership, Tutorials, Industry News..."
+                                    className="bg-slate-50/30"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Comma-separated themes that guide your content strategy.
                                 </p>
                             </div>
                         </div>

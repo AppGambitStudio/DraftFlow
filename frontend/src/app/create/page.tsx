@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PostPreview } from "@/components/PostPreview";
 import toast, { Toaster } from "react-hot-toast";
 
-import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown } from "lucide-react";
+import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash } from "lucide-react";
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -46,6 +46,13 @@ export default function CreatePostPage() {
     const [showRegenerateModal, setShowRegenerateModal] = useState(false);
     const [regenerateContext, setRegenerateContext] = useState('');
     const [regenerateLoading, setRegenerateLoading] = useState(false);
+    const [showVariationsModal, setShowVariationsModal] = useState(false);
+    const [variations, setVariations] = useState<Array<{ content: string; format: string }>>([]);
+    const [variationsLoading, setVariationsLoading] = useState(false);
+    const [showHooksModal, setShowHooksModal] = useState(false);
+    const [hooks, setHooks] = useState<Array<{ hook: string; style: string }>>([]);
+    const [hooksLoading, setHooksLoading] = useState(false);
+    const [hashtagsLoading, setHashtagsLoading] = useState(false);
 
     const DIRECTION_PRESETS = [
         "Shorten",
@@ -94,6 +101,53 @@ export default function CreatePostPage() {
             setSelectedAuthorUrn(authors[0].urn);
         }
     }, [authors]);
+
+    // Handle trend-to-post flow
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.get('fromTrend') === 'true') {
+            const trendData = localStorage.getItem('trendForPost');
+            if (trendData) {
+                try {
+                    const trend = JSON.parse(trendData);
+                    localStorage.removeItem('trendForPost');
+                    // Auto-generate post from trend
+                    generatePostFromTrend(trend);
+                } catch (e) {
+                    console.error('Failed to parse trend data', e);
+                }
+            }
+        }
+    }, []);
+
+    const generatePostFromTrend = async (trend: { topic: string; description: string; relevance: string; suggestedAngles: string[]; trendType: string }) => {
+        setAiLoading(true);
+        toast.loading('Generating post from trend...', { id: 'trend-post' });
+        try {
+            const res = await api.post("/ai/generate-from-context", {
+                context: `Write a professional LinkedIn post about this trending topic:
+
+TOPIC: ${trend.topic}
+
+WHAT'S HAPPENING: ${trend.description}
+
+WHY IT MATTERS: ${trend.relevance}
+
+SUGGESTED ANGLES TO CONSIDER:
+${trend.suggestedAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+
+Create an engaging post that provides value to the reader. Pick one of the suggested angles or combine them creatively.`,
+                authorUrn: selectedAuthorUrn || undefined,
+                platform: platforms[0] || 'LINKEDIN'
+            });
+            setContent(res.data.content);
+            toast.success('Post generated from trend!', { id: 'trend-post' });
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to generate post from trend', { id: 'trend-post' });
+        } finally {
+            setAiLoading(false);
+        }
+    };
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -207,6 +261,87 @@ export default function CreatePostPage() {
             toast.error(error.response?.data?.error || "Failed to regenerate content");
         } finally {
             setRegenerateLoading(false);
+        }
+    };
+
+    const handleGenerateVariations = async () => {
+        if (!content) return;
+        setVariationsLoading(true);
+        setShowVariationsModal(true);
+        try {
+            const res = await api.post('/ai/variations', {
+                content,
+                authorUrn: selectedAuthorUrn,
+                targetAudience: selectedAudience,
+                platform: platforms[0] || 'LINKEDIN'
+            });
+            setVariations(res.data.variations);
+        } catch (error) {
+            toast.error('Failed to generate variations');
+            setShowVariationsModal(false);
+        } finally {
+            setVariationsLoading(false);
+        }
+    };
+
+    const handleSelectVariation = (variation: { content: string; format: string }) => {
+        setContentHistory(prev => [...prev, content]);
+        setContent(variation.content);
+        setShowVariationsModal(false);
+        toast.success(`Switched to ${variation.format} format`);
+    };
+
+    const handleGenerateHooks = async () => {
+        if (!content) return;
+        setHooksLoading(true);
+        setShowHooksModal(true);
+        try {
+            const res = await api.post('/ai/hooks', {
+                content,
+                count: 5,
+                authorUrn: selectedAuthorUrn,
+                platform: platforms[0] || 'LINKEDIN'
+            });
+            setHooks(res.data.hooks);
+        } catch (error) {
+            toast.error('Failed to generate hooks');
+            setShowHooksModal(false);
+        } finally {
+            setHooksLoading(false);
+        }
+    };
+
+    const handleSelectHook = (hook: { hook: string; style: string }) => {
+        setContentHistory(prev => [...prev, content]);
+        // Replace the first line (current hook) with the new hook
+        const lines = content.split('\n');
+        const restOfContent = lines.slice(1).join('\n').trimStart();
+        const newContent = restOfContent ? `${hook.hook}\n\n${restOfContent}` : hook.hook;
+        setContent(newContent);
+        setShowHooksModal(false);
+        toast.success(`Applied ${hook.style} hook`);
+    };
+
+    const handleGenerateHashtags = async () => {
+        if (!content) return;
+        setHashtagsLoading(true);
+        try {
+            const res = await api.post('/ai/hashtags', {
+                content,
+                count: 5,
+                platform: platforms[0] || 'LINKEDIN'
+            });
+            const hashtags = res.data.hashtags;
+            if (hashtags && hashtags.length > 0) {
+                setContentHistory(prev => [...prev, content]);
+                const hashtagString = hashtags.map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`).join(' ');
+                setContent(prev => prev.trim() + '\n\n' + hashtagString);
+                toast.success('Hashtags added!');
+            }
+        } catch (error) {
+            toast.error('Failed to generate hashtags');
+        } finally {
+            setHashtagsLoading(false);
         }
     };
 
@@ -372,11 +507,48 @@ export default function CreatePostPage() {
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleAIImprovise}
-                                    disabled={aiLoading || !content}
+                                    disabled={aiLoading || variationsLoading || !content}
                                     className="text-primary hover:text-primary hover:bg-primary/10"
                                 >
                                     <Sparkles className="mr-2 h-4 w-4" />
                                     {aiLoading ? "Improvising..." : "AImprovise"}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleGenerateVariations}
+                                    disabled={!content || aiLoading || variationsLoading}
+                                    className="text-primary hover:text-primary hover:bg-primary/10"
+                                >
+                                    <GitBranch className="mr-2 h-4 w-4" />
+                                    Variations
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleGenerateHooks}
+                                    disabled={!content || aiLoading || hooksLoading}
+                                    className="text-primary hover:text-primary hover:bg-primary/10"
+                                >
+                                    <Zap className="mr-2 h-4 w-4" />
+                                    Hooks
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleGenerateHashtags}
+                                    disabled={!content || hashtagsLoading}
+                                    className="text-primary hover:text-primary hover:bg-primary/10"
+                                >
+                                    {hashtagsLoading ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Hash className="mr-2 h-4 w-4" />
+                                    )}
+                                    Hashtags
                                 </Button>
                             </div>
                         </div>
@@ -624,6 +796,98 @@ export default function CreatePostPage() {
                                 </Button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showVariationsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-4xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground">Format Variations</h3>
+                            <button
+                                onClick={() => setShowVariationsModal(false)}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        {variationsLoading ? (
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                                <p className="text-muted-foreground">Generating 3 variations...</p>
+                            </div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto space-y-4">
+                                {variations.map((variation, index) => (
+                                    <div
+                                        key={index}
+                                        className="rounded-lg border border-border p-4 space-y-3"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="inline-block px-3 py-1 text-xs font-medium uppercase rounded-full bg-indigo-100 text-indigo-700">
+                                                {variation.format}
+                                            </span>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleSelectVariation(variation)}
+                                            >
+                                                Use This
+                                            </Button>
+                                        </div>
+                                        <p className="text-sm text-foreground whitespace-pre-wrap">
+                                            {variation.content}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {showHooksModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-4xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground">Hook Suggestions</h3>
+                            <button
+                                onClick={() => setShowHooksModal(false)}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        {hooksLoading ? (
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                                <p className="text-muted-foreground">Generating hook suggestions...</p>
+                            </div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto space-y-4">
+                                {hooks.map((hook, index) => (
+                                    <div
+                                        key={index}
+                                        className="rounded-lg border border-border p-4 space-y-3"
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="inline-block px-3 py-1 text-xs font-medium uppercase rounded-full bg-amber-100 text-amber-700">
+                                                {hook.style}
+                                            </span>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => handleSelectHook(hook)}
+                                            >
+                                                Use This
+                                            </Button>
+                                        </div>
+                                        <p className="text-sm text-foreground whitespace-pre-wrap">
+                                            {hook.hook}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
