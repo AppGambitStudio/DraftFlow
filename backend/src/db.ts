@@ -607,6 +607,88 @@ Invitation.belongsTo(Tenant, { foreignKey: 'tenantId' });
 Tenant.hasMany(SavedTrend, { foreignKey: 'tenantId' });
 SavedTrend.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
+// AgentDraft Model - for storing AI agent generated drafts pending approval
+export class AgentDraft extends Model<InferAttributes<AgentDraft>, InferCreationAttributes<AgentDraft>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']>;
+    declare content: string;
+    declare explanation: string | null; // Why this content was generated
+    declare sources: string; // JSON array: trends/ideas used
+    declare hooks: string; // JSON array: alternative hooks
+    declare hashtags: string; // JSON array: suggested hashtags
+    declare status: string; // pending, approved, rejected
+    declare platform: string; // LINKEDIN, TWITTER
+    declare scheduledFor: Date | null;
+    declare postId: ForeignKey<Post['id']> | null; // Created post after approval
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+AgentDraft.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    content: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    explanation: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    sources: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
+    hooks: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
+    hashtags: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: 'pending',
+    },
+    platform: {
+        type: DataTypes.STRING,
+        defaultValue: 'LINKEDIN',
+    },
+    scheduledFor: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+    postId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'AgentDraft',
+    tableName: 'agent_drafts',
+    indexes: [
+        { fields: ['tenantId'] },
+        { fields: ['status'] },
+        { fields: ['createdAt'] },
+    ]
+});
+
+Tenant.hasMany(AgentDraft, { foreignKey: 'tenantId' });
+AgentDraft.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+AgentDraft.belongsTo(Post, { foreignKey: 'postId' });
+Post.hasOne(AgentDraft, { foreignKey: 'postId' });
+
 // Sync database
 export const initDB = async () => {
     try {

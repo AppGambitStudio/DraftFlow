@@ -12,6 +12,7 @@ import analyticsRoutes from './routes/analytics';
 import invitationRoutes from './routes/invitations';
 import userRoutes from './routes/users';
 import uploadRoutes from './routes/uploads';
+import agentRoutes from './routes/agent';
 import { startScheduler } from './services/scheduler';
 import path from 'path';
 import { initDB } from './db';
@@ -36,6 +37,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/invitations', invitationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/agent', agentRoutes);
 
 // Serve uploads directory
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
