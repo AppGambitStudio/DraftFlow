@@ -422,7 +422,7 @@ export default function AgentPage() {
                                                                     key={i}
                                                                     className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"
                                                                 >
-                                                                    #{tag}
+                                                                    {tag}
                                                                 </span>
                                                             ))}
                                                         </div>
@@ -433,20 +433,17 @@ export default function AgentPage() {
                                                 {draft.sources && draft.sources.length > 0 && (
                                                     <div className="space-y-2">
                                                         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-                                                            <Link2 className="h-3.5 w-3.5" />
-                                                            Sources
+                                                            <Sparkles className="h-3.5 w-3.5" />
+                                                            Based On
                                                         </div>
-                                                        <div className="space-y-1">
+                                                        <div className="flex flex-wrap gap-1.5">
                                                             {draft.sources.map((source, i) => (
-                                                                <a
+                                                                <span
                                                                     key={i}
-                                                                    href={source}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="block text-xs text-blue-600 hover:underline truncate"
+                                                                    className="inline-flex items-center text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100"
                                                                 >
                                                                     {source}
-                                                                </a>
+                                                                </span>
                                                             ))}
                                                         </div>
                                                     </div>
@@ -528,11 +525,10 @@ export default function AgentPage() {
                         {processedDrafts.map((draft) => (
                             <Card
                                 key={draft.id}
-                                className={`border-slate-200 opacity-75 ${
-                                    draft.status === "approved"
+                                className={`border-slate-200 opacity-75 ${draft.status === "approved"
                                         ? "bg-green-50/30"
                                         : "bg-red-50/30"
-                                }`}
+                                    }`}
                             >
                                 <CardContent className="py-4">
                                     <div className="flex items-start justify-between gap-4">

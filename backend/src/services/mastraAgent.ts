@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { AIService } from './ai';
 import { Settings, Idea, SavedTrend, Post } from '../db';
 import { Op } from 'sequelize';
+import axios from 'axios';
 
 // Helper to create OpenRouter provider with tenant's API key
 function createOpenRouterForTenant(apiKey: string) {
@@ -497,6 +498,157 @@ export const getRecentPostsTool = createTool({
 });
 
 /**
+ * Tool: Web search for fact-checking and finding fresh angles
+ */
+export const webSearchTool = createTool({
+    id: 'web-search',
+    description: 'Search the web for current information, statistics, news, or to fact-check claims. Use this to find fresh angles, verify facts, or discover recent developments on a topic.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID'),
+        query: z.string().describe('The search query - be specific and focused'),
+        purpose: z.enum(['fact-check', 'find-stats', 'recent-news', 'fresh-angle']).describe('Why you are searching')
+    }),
+    outputSchema: z.object({
+        results: z.array(z.object({
+            title: z.string(),
+            snippet: z.string(),
+            url: z.string()
+        })),
+        summary: z.string().describe('Brief summary of key findings')
+    }),
+    execute: async (inputData) => {
+        const { tenantId, query, purpose } = inputData;
+
+        // Get API key for web search (using OpenRouter with web plugin)
+        const settings = await Settings.findOne({ where: { tenantId } });
+        if (!settings?.openRouterApiKey) {
+            throw new Error('OpenRouter API Key not configured');
+        }
+
+        try {
+            // Use OpenRouter with web search enabled
+            const response = await axios.post(
+                'https://openrouter.ai/api/v1/chat/completions',
+                {
+                    model: settings.openRouterModelId || 'anthropic/claude-sonnet-4',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `You are a research assistant. Search the web and provide factual, current information. Purpose: ${purpose}`
+                        },
+                        {
+                            role: 'user',
+                            content: `Search for: ${query}\n\nProvide 3-5 relevant results with titles, snippets, and a brief summary of key findings. Format as JSON: { "results": [...], "summary": "..." }`
+                        }
+                    ],
+                    plugins: [{ id: 'web' }],
+                    temperature: 0.3
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${settings.openRouterApiKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            const responseText = response.data.choices[0]?.message?.content || '';
+
+            // Parse JSON from response
+            try {
+                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    return JSON.parse(jsonMatch[0]);
+                }
+            } catch (e) {
+                // Return raw response as summary if parsing fails
+            }
+
+            return {
+                results: [],
+                summary: responseText.substring(0, 500)
+            };
+        } catch (error: any) {
+            console.error('[webSearchTool] Error:', error.message);
+            return {
+                results: [],
+                summary: `Search failed: ${error.message}`
+            };
+        }
+    }
+});
+
+/**
+ * Tool: Check content similarity against recent posts
+ */
+export const checkSimilarityTool = createTool({
+    id: 'check-similarity',
+    description: 'Check if a draft post is too similar to recent posts. Use this BEFORE finalizing any post to ensure uniqueness.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID'),
+        draftContent: z.string().describe('The draft post content to check'),
+        threshold: z.number().optional().default(0.7).describe('Similarity threshold (0-1). Above this = too similar')
+    }),
+    outputSchema: z.object({
+        isTooSimilar: z.boolean(),
+        mostSimilarPost: z.string().nullable(),
+        similarityScore: z.number(),
+        suggestion: z.string()
+    }),
+    execute: async (inputData) => {
+        const { tenantId, draftContent, threshold } = inputData;
+
+        // Get recent posts
+        const recentPosts = await Post.findAll({
+            where: {
+                tenantId,
+                status: { [Op.in]: ['PUBLISHED', 'SCHEDULED', 'DRAFT'] }
+            },
+            order: [['createdAt', 'DESC']],
+            limit: 20,
+            attributes: ['content']
+        });
+
+        if (recentPosts.length === 0) {
+            return {
+                isTooSimilar: false,
+                mostSimilarPost: null,
+                similarityScore: 0,
+                suggestion: 'No recent posts to compare against'
+            };
+        }
+
+        // Simple similarity check using word overlap (Jaccard similarity)
+        const draftWords = new Set(draftContent.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+        let maxSimilarity = 0;
+        let mostSimilar = '';
+
+        for (const post of recentPosts) {
+            const postWords = new Set(post.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+            const intersection = new Set([...draftWords].filter(w => postWords.has(w)));
+            const union = new Set([...draftWords, ...postWords]);
+            const similarity = intersection.size / union.size;
+
+            if (similarity > maxSimilarity) {
+                maxSimilarity = similarity;
+                mostSimilar = post.content.substring(0, 200);
+            }
+        }
+
+        const isTooSimilar = maxSimilarity > (threshold || 0.7);
+
+        return {
+            isTooSimilar,
+            mostSimilarPost: isTooSimilar ? mostSimilar : null,
+            similarityScore: Math.round(maxSimilarity * 100) / 100,
+            suggestion: isTooSimilar
+                ? 'This draft is too similar to existing posts. Try a different angle, use a unique hook, or focus on a different aspect of the topic.'
+                : 'Content is sufficiently unique.'
+        };
+    }
+});
+
+/**
  * Tool: Evaluate a post draft for quality
  */
 export const evaluatePostTool = createTool({
@@ -610,14 +762,17 @@ export const contentCreatorTools = {
     getSavedTrendsTool,
     getSavedIdeasTool,
     getRecentPostsTool,
+    // Research tools
+    webSearchTool,
     // Generation tools
     generatePostTool,
     generateFromIdeaTool,
     improvisePostTool,
     generateHooksTool,
     generateVariationsTool,
-    // Evaluation tools
+    // Evaluation & validation tools
     evaluatePostTool,
+    checkSimilarityTool,
     // Enhancement tools
     suggestHashtagsTool,
     generateIdeasTool,
@@ -645,73 +800,91 @@ export function createContentCreatorAgent(apiKey: string, modelId: string = 'ant
 
 ## YOUR MANDATORY WORKFLOW
 
-You MUST follow this workflow for EVERY post generation request. Use the tools - do not generate content directly.
+You MUST follow this workflow for EVERY post. Use the tools - NEVER generate content directly.
 
-### STEP 1: GATHER CONTEXT (Always do this first)
-Call these tools to understand the business:
-- get-user-context: Get company info, content pillars, target audience, tone
-- get-saved-trends: Get current trending topics for inspiration
-- get-saved-ideas: Get pre-planned content ideas
-- get-recent-posts: See what's been posted to avoid repetition
+### STEP 1: GATHER CONTEXT
+Call these tools FIRST:
+- get-user-context: Get company info, pillars, audience, tone
+- get-saved-trends: Get trending topics
+- get-saved-ideas: Get content ideas
+- get-recent-posts: CRITICAL - see what's been posted (YOU MUST AVOID SIMILARITY)
 
-### STEP 2: STRATEGIZE (Think before generating)
-Based on the context, decide:
-- Which content pillar to focus on
-- Which trend or idea to build from (if any)
-- What unique angle to take
-- What post format works best (Hot take, Story, Breakdown, etc.)
+### STEP 2: RESEARCH & FACT-CHECK
+Use web-search to:
+- Find fresh statistics or data points for your chosen topic
+- Verify any claims or facts you plan to include
+- Discover recent news or developments to reference
+- Find a unique angle not covered in recent posts
 
-### STEP 3: GENERATE INITIAL DRAFT
-Use generate-post with:
-- A well-crafted prompt combining your strategic choices
-- The appropriate post shape/format
-- Clear target audience
-- Key takeaway you want readers to get
+### STEP 3: STRATEGIZE FOR UNIQUENESS
+After reviewing recent posts, you MUST create something DIFFERENT:
+- Choose a DIFFERENT content pillar than recent posts
+- Take a CONTRARIAN or UNEXPECTED angle
+- Use a DIFFERENT post format (if recent was story, try hot-take)
+- Focus on a DIFFERENT audience pain point
+- Add FRESH data/stats from your web research
 
-### STEP 4: EVALUATE THE DRAFT
-Use evaluate-post to assess quality:
-- If score >= 7: Proceed to Step 5
-- If score < 7: Use improvise-post with the suggestions, then re-evaluate
+### STEP 4: GENERATE DRAFT
+Use generate-post with a UNIQUE prompt that:
+- Combines your fresh research with business expertise
+- Takes an angle NOT covered in recent posts
+- Includes specific data points or examples
+- Has a clearly different tone/format from recent content
+
+### STEP 5: CHECK SIMILARITY (MANDATORY)
+Use check-similarity to compare your draft against recent posts:
+- If isTooSimilar = true: You MUST use improvise-post with direction "make this completely different - change the angle, examples, and structure" then check again
+- If isTooSimilar = false: Proceed to evaluation
+- Maximum 3 attempts - if still similar, pick a completely different topic
+
+### STEP 6: EVALUATE QUALITY
+Use evaluate-post:
+- Score must be >= 7 to proceed
+- If < 7: Use improvise-post with suggestions, re-evaluate
 - Maximum 2 refinement cycles
 
-### STEP 5: ENHANCE WITH HOOKS & HASHTAGS
-- Use generate-hooks to create 3 alternative opening lines
-- Use suggest-hashtags to add 3-5 relevant hashtags
+### STEP 7: ENHANCE
+- generate-hooks: Create 3 DIFFERENT style hooks (question, bold claim, story opener)
+- suggest-hashtags: Add 3-5 relevant hashtags
 
-### STEP 6: RETURN FINAL RESULT
-Return a structured response with:
-1. The final post content (ready to publish)
-2. Your strategic explanation (why this topic, angle, format)
-3. Alternative hooks
-4. Suggested hashtags
-5. Quality score from evaluation
-
-## OUTPUT FORMAT
-
-After completing the workflow, return your final output in this EXACT JSON format:
+### STEP 8: RETURN RESULT
+Return JSON with this EXACT structure:
 {
   "posts": [
     {
-      "content": "The full post content here",
-      "explanation": "Why I chose this topic and angle",
-      "hooks": ["alt hook 1", "alt hook 2", "alt hook 3"],
-      "hashtags": ["#hashtag1", "#hashtag2"],
+      "content": "Full post text ready to publish",
+      "explanation": "Why this topic/angle is unique and valuable",
+      "hooks": ["hook1", "hook2", "hook3"],
+      "hashtags": ["#tag1", "#tag2"],
       "qualityScore": 8,
-      "basedOn": "trend/idea/pillar name"
+      "similarityScore": 0.3,
+      "basedOn": "source name",
+      "webResearch": "key facts/stats used"
     }
   ]
 }
 
+## UNIQUENESS IS NON-NEGOTIABLE
+
+Your #1 job is creating UNIQUE content. If a post resembles ANY recent post:
+- Different topic entirely
+- Different angle on same topic
+- Different format/structure
+- Different examples/data
+- Different emotional appeal
+
+NEVER produce content that could be confused with existing posts.
+
 ## CRITICAL RULES
 
-1. ALWAYS use tools - never generate content directly without tools
-2. ALWAYS gather context first - don't skip Step 1
-3. ALWAYS evaluate before finalizing - quality matters
-4. Each post should be UNIQUE - different angles, different pillars
-5. Posts must be READY TO PUBLISH - not drafts or outlines
-6. Keep LinkedIn posts under 2800 chars, Twitter under 270 chars
+1. ALWAYS use tools - never generate content without them
+2. ALWAYS check similarity before finalizing
+3. ALWAYS include fresh research/data
+4. Each post MUST be genuinely unique
+5. Posts must be READY TO PUBLISH
+6. LinkedIn: max 2800 chars | Twitter: max 270 chars
 
-You are an agent. Use your tools. Follow the workflow. Deliver quality.`,
+You are a Content Strategist Agent. Research. Validate. Create unique, high-quality content.`,
         model: openrouter(modelId),
         tools: contentCreatorTools
     });
