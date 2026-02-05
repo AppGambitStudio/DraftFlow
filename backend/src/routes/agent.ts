@@ -12,7 +12,7 @@ const router = express.Router();
 router.post('/generate', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
-        const { count = 1, platform = 'LINKEDIN', focus = 'auto' } = req.body;
+        const { count = 1, platform = 'LINKEDIN', focus = 'auto', context = '' } = req.body;
 
         // Validate settings exist
         const settings = await Settings.findOne({ where: { tenantId } });
@@ -25,55 +25,161 @@ router.post('/generate', authMiddleware, async (req: AuthRequest, res: Response)
             return res.status(400).json({ error: 'Please set up content pillars in settings first' });
         }
 
-        // Build the agent task
+        // Get recent posts to identify topics to AVOID
+        const recentPosts = await Post.findAll({
+            where: { tenantId, status: { [Op.in]: ['PUBLISHED', 'SCHEDULED', 'DRAFT'] } },
+            order: [['createdAt', 'DESC']],
+            limit: 5,
+            attributes: ['content']
+        });
+
+        // Get recent drafts to also avoid those topics
+        const recentDrafts = await AgentDraft.findAll({
+            where: { tenantId },
+            order: [['createdAt', 'DESC']],
+            limit: 5,
+            attributes: ['content']
+        });
+
+        // Extract key topics from recent content to avoid
+        const recentTopics = [...recentPosts, ...recentDrafts]
+            .map(p => p.content.substring(0, 100))
+            .join('\n- ');
+
+        // Build STRONG focus instruction
         let focusInstruction = '';
+        let sourcePreference = '';
         if (focus === 'trends') {
-            focusInstruction = 'Prioritize using saved trends as inspiration for the posts.';
+            focusInstruction = `⚠️ MANDATORY: You MUST base your post on a SAVED TREND. Do NOT use ideas or general topics.`;
+            sourcePreference = 'TREND';
         } else if (focus === 'ideas') {
-            focusInstruction = 'Prioritize using saved ideas from the idea board.';
+            focusInstruction = `⚠️ MANDATORY: You MUST base your post on a SAVED IDEA from the idea board. Do NOT use trends.`;
+            sourcePreference = 'IDEA';
+        } else if (focus === 'case-studies') {
+            focusInstruction = `⚠️ MANDATORY: You MUST base your post on a CASE STUDY. Use generate-from-case-study tool.`;
+            sourcePreference = 'CASE_STUDY';
         } else {
-            focusInstruction = 'Use a mix of trends, ideas, and content pillars for variety.';
+            focusInstruction = `You may choose from trends, ideas, case studies, or content pillars - but MUST pick something DIFFERENT from recent posts.`;
+            sourcePreference = 'ANY';
         }
 
-        const agentTask = `Generate ${count} unique, high-quality ${platform} post(s) for this business.
+        // Generate a random seed to encourage variety
+        const randomSeed = Math.floor(Math.random() * 1000);
 
-TENANT ID: ${tenantId}
+        // Build completely different tasks based on whether user provided context
+        let agentTask: string;
+
+        if (context && context.trim()) {
+            // TYPE 1: User provided specific topic
+            agentTask = `TYPE 1: DIRECT TOPIC POST
+
+═══════════════════════════════════════════════════════════════════════════════
+TOPIC: "${context.trim()}"
+TENANT: ${tenantId}
 PLATFORM: ${platform}
-NUMBER OF POSTS: ${count}
+═══════════════════════════════════════════════════════════════════════════════
 
-INSTRUCTIONS:
-1. First, call get-user-context with tenantId "${tenantId}" to understand the business
-2. Call get-saved-trends with tenantId "${tenantId}" to see trending topics
-3. Call get-saved-ideas with tenantId "${tenantId}" to see content ideas
-4. Call get-recent-posts with tenantId "${tenantId}" to avoid repetition
-5. ${focusInstruction}
+Create a ${platform} post about "${context.trim()}" that sounds like a real professional wrote it.
 
-For EACH post:
-- Use generate-post to create the initial draft
-- Use evaluate-post to check quality (must score >= 7)
-- If score < 7, use improvise-post to refine, then re-evaluate
-- Use generate-hooks to create alternative openings
-- Use suggest-hashtags to add relevant hashtags
+**Your goal:** Create a post that:
+- Is specifically about "${context.trim()}" (don't change the topic)
+- Quality score ≥ 7
+- Authenticity score ≥ 7 (doesn't sound like AI)
+- Sounds like the professional wrote it themselves
 
-After completing all posts, return your final output as JSON with this structure:
+**Context you'll need:**
+- Call get-user-context to understand who you're ghostwriting for
+- Call get-recent-posts to see what angles to AVOID (don't repeat)
+
+**Your judgment calls:**
+- Would fresh stats/data strengthen this? → use web-search
+- Is this a complex topic that needs planning? → use create-plan
+- Does the first draft score < 7? → use improvise-post and re-evaluate
+- Does it sound too AI-like? → use self-critique to fix it
+
+**Don't use:** get-saved-trends, get-saved-ideas, get-case-studies (topic is already given)
+
+**Output JSON:**
+{
+  "posts": [{
+    "content": "final post ready to publish",
+    "explanation": "why this angle works",
+    "hooks": ["hook1", "hook2", "hook3"],
+    "hashtags": ["#tag1", "#tag2"],
+    "qualityScore": 8,
+    "authenticityScore": 8,
+    "basedOn": "${context.trim()}",
+    "toolsUsedAndWhy": ["tool: reason"]
+  }]
+}`;
+        } else {
+            // TYPE 2: No user context, agent selects from sources
+            agentTask = `TYPE 2: SELECT TOPIC & CREATE POST
+
+═══════════════════════════════════════════════════════════════════════════════
+TENANT: ${tenantId}
+PLATFORM: ${platform}
+COUNT: ${count} post(s)
+SOURCE PREFERENCE: ${sourcePreference}
+SESSION: ${randomSeed}
+═══════════════════════════════════════════════════════════════════════════════
+
+Create ${count} ${platform} post(s) that sound like a real professional wrote them.
+
+**Your goal:** Create post(s) that:
+- Quality score ≥ 7
+- Authenticity score ≥ 7 (doesn't sound like AI)
+- Are DIFFERENT from recent posts (variety is key)
+- Sound like the professional wrote them
+
+**Source guidance:**
+${focusInstruction}
+
+**Recent content to AVOID repeating:**
+${recentTopics ? `- ${recentTopics}` : '(No recent posts - you have freedom to choose)'}
+
+**Finding a topic:**
+- Use get-saved-trends, get-saved-ideas, get-case-studies to explore options
+- Each tool returns RANDOMIZED results with a selectionHint - consider following it
+- Use get-recent-posts to see what to AVOID (don't repeat similar topics)
+- Pick something FRESH and DIFFERENT
+
+**Your judgment calls:**
+- Complex topic? → use create-plan to think through the angle
+- Need current data? → use web-search
+- First draft scores < 7? → use improvise-post based on feedback
+- Too similar to recent posts? → change the angle, not just words
+- Sounds too AI-like? → use self-critique to humanize it
+
+**Quality gates before returning:**
+- Verify uniqueness with check-similarity
+- Quality score must be ≥ 7
+- Post should sound human, not like AI generated it
+
+**Output JSON:**
 {
   "posts": [
     {
-      "content": "full post text",
-      "explanation": "strategic reasoning",
+      "content": "final post ready to publish",
+      "explanation": "why you chose this topic and angle",
       "hooks": ["hook1", "hook2", "hook3"],
       "hashtags": ["#tag1", "#tag2"],
       "qualityScore": 8,
-      "basedOn": "source name"
+      "authenticityScore": 8,
+      "basedOn": "the trend/idea/case study you used",
+      "toolsUsedAndWhy": ["tool: reason"]
     }
   ]
-}
-
-Remember: Use the tools. Follow the workflow. Each post must be unique and publication-ready.`;
+}`;
+        }
 
         // Call the Mastra agent
+        console.log('[Agent Route] ═══════════════════════════════════════════════════');
         console.log('[Agent Route] Starting Mastra agent for tenant:', tenantId);
-        console.log('[Agent Route] Task:', agentTask.substring(0, 200) + '...');
+        console.log('[Agent Route] Platform:', platform, '| Count:', count, '| Focus:', focus);
+        console.log('[Agent Route] USER CONTEXT:', context || '(none provided)');
+        console.log('[Agent Route] ═══════════════════════════════════════════════════');
+        console.log('[Agent Route] Full Task:\n', agentTask);
 
         const agentService = getMastraAgentService();
         const result = await agentService.chat({
@@ -103,10 +209,17 @@ Remember: Use the tools. Follow the workflow. Each post must be unique and publi
         // If we got structured posts from the agent
         if (agentPosts.length > 0) {
             for (const post of agentPosts) {
+                // Build explanation with quality metrics
+                const qualityInfo = [];
+                if (post.qualityScore) qualityInfo.push(`Quality: ${post.qualityScore}/10`);
+                if (post.authenticityScore) qualityInfo.push(`Authenticity: ${post.authenticityScore}/10`);
+                if (post.selfCritiqueApplied) qualityInfo.push('Self-critique applied');
+                const explanation = post.explanation || `${qualityInfo.join(' | ')}. Based on: ${post.basedOn || 'content strategy'}`;
+
                 const draft = await AgentDraft.create({
                     tenantId,
                     content: post.content,
-                    explanation: post.explanation || `Quality score: ${post.qualityScore || 'N/A'}. Based on: ${post.basedOn || 'content strategy'}`,
+                    explanation,
                     sources: JSON.stringify([post.basedOn || 'agent strategy']),
                     hooks: JSON.stringify(post.hooks || []),
                     hashtags: JSON.stringify(post.hashtags || []),
@@ -122,6 +235,9 @@ Remember: Use the tools. Follow the workflow. Each post must be unique and publi
                     hooks: post.hooks || [],
                     hashtags: post.hashtags || [],
                     qualityScore: post.qualityScore,
+                    authenticityScore: post.authenticityScore,
+                    selfCritiqueApplied: post.selfCritiqueApplied,
+                    changesFromCritique: post.changesFromCritique || [],
                     status: draft.status,
                     platform: draft.platform,
                     createdAt: draft.createdAt
@@ -176,23 +292,36 @@ Remember: Use the tools. Follow the workflow. Each post must be unique and publi
 });
 
 // ============================================================================
-// List drafts (pending, approved, rejected)
+// List drafts (pending, approved, rejected) with pagination
 // ============================================================================
 router.get('/drafts', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
         const { status } = req.query;
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const offset = (page - 1) * limit;
 
         const where: any = { tenantId };
         if (status && ['pending', 'approved', 'rejected'].includes(status as string)) {
             where.status = status;
         }
 
-        const drafts = await AgentDraft.findAll({
+        const { count: totalCount, rows: drafts } = await AgentDraft.findAndCountAll({
             where,
             order: [['createdAt', 'DESC']],
-            limit: 50
+            limit,
+            offset
         });
+
+        // Also get counts for each status (for tab badges)
+        const [pendingCount, approvedCount, rejectedCount] = await Promise.all([
+            AgentDraft.count({ where: { tenantId, status: 'pending' } }),
+            AgentDraft.count({ where: { tenantId, status: 'approved' } }),
+            AgentDraft.count({ where: { tenantId, status: 'rejected' } })
+        ]);
+
+        const totalPages = Math.ceil(totalCount / limit);
 
         res.json({
             drafts: drafts.map(d => ({
@@ -208,7 +337,17 @@ router.get('/drafts', authMiddleware, async (req: AuthRequest, res: Response) =>
                 postId: d.postId,
                 createdAt: d.createdAt,
                 updatedAt: d.updatedAt
-            }))
+            })),
+            totalCount,
+            page,
+            limit,
+            totalPages,
+            hasMore: page < totalPages,
+            counts: {
+                pending: pendingCount,
+                approved: approvedCount,
+                rejected: rejectedCount
+            }
         });
 
     } catch (error: any) {

@@ -53,6 +53,8 @@ export default function CreatePostPage() {
     const [hooks, setHooks] = useState<Array<{ hook: string; style: string }>>([]);
     const [hooksLoading, setHooksLoading] = useState(false);
     const [hashtagsLoading, setHashtagsLoading] = useState(false);
+    const [editingPostId, setEditingPostId] = useState<string | null>(null);
+    const [loadingPost, setLoadingPost] = useState(false);
 
     const DIRECTION_PRESETS = [
         "Shorten",
@@ -101,6 +103,41 @@ export default function CreatePostPage() {
             setSelectedAuthorUrn(authors[0].urn);
         }
     }, [authors]);
+
+    // Handle loading existing post for editing
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const postId = searchParams.get('postId');
+        if (postId) {
+            setLoadingPost(true);
+            setEditingPostId(postId);
+            api.get(`/posts/${postId}`)
+                .then((res) => {
+                    const post = res.data;
+                    setContent(post.content || '');
+                    setScheduledTime(post.scheduledTime ? new Date(post.scheduledTime).toISOString().slice(0, 16) : '');
+                    setPlatforms(post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN']);
+                    setSelectedAuthorUrn(post.authorUrn || '');
+                    if (post.attachments) {
+                        try {
+                            setAttachments(JSON.parse(post.attachments));
+                        } catch (e) {
+                            console.error('Failed to parse attachments', e);
+                        }
+                    }
+                    toast.success('Post loaded for editing');
+                })
+                .catch((error) => {
+                    console.error('Failed to load post:', error);
+                    const errorMsg = error.response?.data?.error || error.message || 'Unknown error';
+                    toast.error(`Failed to load post: ${errorMsg}`);
+                    setEditingPostId(null);
+                })
+                .finally(() => {
+                    setLoadingPost(false);
+                });
+        }
+    }, []);
 
     // Handle trend-to-post flow
     useEffect(() => {
@@ -372,7 +409,7 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
                 finalScheduledTime = new Date().toISOString();
             }
 
-            await api.post("/posts", {
+            const postData = {
                 content,
                 scheduledTime: finalScheduledTime || undefined,
                 platforms,
@@ -380,8 +417,17 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
                 authorName: selectedAuthor?.name || "",
                 status,
                 mediaUrls: attachments // Stored as mediaUrls in DB
-            });
-            toast.success(status === 'DRAFT' ? "Post saved as draft!" : "Post scheduled successfully!");
+            };
+
+            if (editingPostId) {
+                // Update existing post
+                await api.put(`/posts/${editingPostId}`, postData);
+                toast.success(status === 'DRAFT' ? "Post updated!" : "Post scheduled successfully!");
+            } else {
+                // Create new post
+                await api.post("/posts", postData);
+                toast.success(status === 'DRAFT' ? "Post saved as draft!" : "Post scheduled successfully!");
+            }
             setTimeout(() => router.push("/"), 1500);
         } catch (error: any) {
             const errorMsg = error.response?.data?.error || (status === 'DRAFT' ? "Failed to save draft" : "Failed to schedule post");
@@ -395,7 +441,9 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
         <div className="flex h-full gap-8">
             <Toaster />
             <div className="flex-1 space-y-6">
-                <h2 className="text-3xl font-bold tracking-tight">Create Post</h2>
+                <h2 className="text-3xl font-bold tracking-tight">
+                    {loadingPost ? "Loading Post..." : editingPostId ? "Edit Post" : "Create Post"}
+                </h2>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
@@ -719,19 +767,19 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
                     </div>
 
                     <div className="flex gap-4">
-                        <Button type="submit" disabled={loading || uploading} onClick={(e) => {
+                        <Button type="submit" disabled={loading || uploading || loadingPost} onClick={(e) => {
                             e.preventDefault();
                             handleSubmit(e, 'SCHEDULED');
                         }}>
-                            {loading ? "Scheduling..." : "Schedule Post"}
+                            {loading ? "Saving..." : editingPostId ? "Update & Schedule" : "Schedule Post"}
                         </Button>
                         <Button
                             type="button"
                             variant="secondary"
-                            disabled={loading || uploading}
+                            disabled={loading || uploading || loadingPost}
                             onClick={(e) => handleSubmit(e, 'DRAFT')}
                         >
-                            {loading ? "Saving..." : "Save as Draft"}
+                            {loading ? "Saving..." : editingPostId ? "Update Draft" : "Save as Draft"}
                         </Button>
                         <Button type="button" variant="outline" onClick={() => router.back()}>
                             Cancel

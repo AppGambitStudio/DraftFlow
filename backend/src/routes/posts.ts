@@ -21,6 +21,27 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     }
 });
 
+// Get a single post by ID
+router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { id } = req.params;
+
+        const post = await Post.findOne({
+            where: { id, tenantId }
+        });
+
+        if (!post) {
+            return res.status(404).json({ error: 'Post not found' });
+        }
+
+        res.json(post);
+    } catch (error: any) {
+        console.error('[Posts] GET /:id - Error:', error.message);
+        res.status(500).json({ error: 'Failed to fetch post' });
+    }
+});
+
 // Create a post
 router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {

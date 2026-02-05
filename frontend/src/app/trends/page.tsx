@@ -13,12 +13,14 @@ import {
     Sparkles,
     Loader2,
     Lightbulb,
-    ArrowRight,
     Flame,
     Zap,
     Target,
     RefreshCw,
     PenSquare,
+    ExternalLink,
+    ChevronDown,
+    Trash2,
 } from "lucide-react";
 
 interface TrendingTopic {
@@ -27,6 +29,7 @@ interface TrendingTopic {
     description: string;
     relevance: string;
     suggestedAngles: string[];
+    sources?: string[];
     trendType: string;
     industry?: string;
     fetchedAt?: string;
@@ -38,31 +41,58 @@ export default function TrendsPage() {
     const [topics, setTopics] = useState<TrendingTopic[]>([]);
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
     const [totalCount, setTotalCount] = useState(0);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [hasMore, setHasMore] = useState(false);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
+
+    const ITEMS_PER_PAGE = 10;
 
     // Load saved trends on mount
     useEffect(() => {
-        const loadSavedTrends = async () => {
-            try {
-                const res = await api.get("/ai/saved-trends");
-                if (res.data.topics && res.data.topics.length > 0) {
-                    setTopics(res.data.topics);
-                    setLastFetchedAt(res.data.lastFetchedAt);
-                    setTotalCount(res.data.totalCount || res.data.topics.length);
-                    // Restore the industry filter if available
-                    if (res.data.topics[0]?.industry) {
-                        setIndustry(res.data.topics[0].industry);
-                    }
-                }
-            } catch (error) {
-                console.error("Failed to load saved trends:", error);
-            } finally {
-                setInitialLoading(false);
-            }
-        };
-        loadSavedTrends();
+        loadSavedTrends(1, true);
     }, []);
+
+    const loadSavedTrends = async (page: number, isInitial: boolean = false) => {
+        try {
+            if (isInitial) {
+                setInitialLoading(true);
+            } else {
+                setLoadingMore(true);
+            }
+
+            const res = await api.get(`/ai/saved-trends?page=${page}&limit=${ITEMS_PER_PAGE}`);
+
+            if (res.data.topics) {
+                if (page === 1) {
+                    setTopics(res.data.topics);
+                } else {
+                    setTopics(prev => [...prev, ...res.data.topics]);
+                }
+                setLastFetchedAt(res.data.lastFetchedAt);
+                setTotalCount(res.data.totalCount || 0);
+                setCurrentPage(page);
+                setHasMore(res.data.hasMore || false);
+
+                // Restore the industry filter if available
+                if (page === 1 && res.data.topics[0]?.industry) {
+                    setIndustry(res.data.topics[0].industry);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to load saved trends:", error);
+            toast.error("Failed to load trends");
+        } finally {
+            setInitialLoading(false);
+            setLoadingMore(false);
+        }
+    };
+
+    const handleLoadMore = () => {
+        loadSavedTrends(currentPage + 1);
+    };
 
     const formatLastFetched = (dateStr: string) => {
         const date = new Date(dateStr);
@@ -105,6 +135,20 @@ export default function TrendsPage() {
         }
     };
 
+    const handleDeleteTrend = async (id: number) => {
+        setDeletingId(id);
+        try {
+            await api.delete(`/ai/saved-trends/${id}`);
+            setTopics(prev => prev.filter(t => t.id !== id));
+            setTotalCount(prev => prev - 1);
+            toast.success("Trend deleted");
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || "Failed to delete trend");
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     const handleUseForIdeas = (topic: TrendingTopic) => {
         // Navigate to the generate ideas page with trending topics pre-filled
         const trendingParam = encodeURIComponent(topic.topic);
@@ -118,6 +162,7 @@ export default function TrendsPage() {
             description: topic.description,
             relevance: topic.relevance,
             suggestedAngles: topic.suggestedAngles,
+            sources: topic.sources || [],
             trendType: topic.trendType
         };
         localStorage.setItem('trendForPost', JSON.stringify(postContext));
@@ -218,7 +263,7 @@ export default function TrendsPage() {
                             ) : topics.length > 0 ? (
                                 <>
                                     <RefreshCw className="mr-2 h-4 w-4" />
-                                    Refresh
+                                    Fetch More
                                 </>
                             ) : (
                                 <>
@@ -242,9 +287,7 @@ export default function TrendsPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <h3 className="text-lg font-semibold">
-                                {totalCount > topics.length
-                                    ? `${topics.length} of ${totalCount} Saved Trends`
-                                    : `${topics.length} Saved Trends`}
+                                Showing {topics.length} of {totalCount} Saved Trends
                             </h3>
                             {lastFetchedAt && (
                                 <p className="text-xs text-muted-foreground">
@@ -260,7 +303,7 @@ export default function TrendsPage() {
                     <div className="grid gap-4 md:grid-cols-2">
                         {topics.map((topic, index) => (
                             <Card
-                                key={index}
+                                key={topic.id || index}
                                 className="group border-slate-200 hover:border-indigo-200 hover:shadow-md transition-all"
                             >
                                 <CardContent className="pt-6 space-y-4">
@@ -287,6 +330,21 @@ export default function TrendsPage() {
                                                 )}
                                             </div>
                                         </div>
+                                        {topic.id && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                onClick={() => handleDeleteTrend(topic.id!)}
+                                                disabled={deletingId === topic.id}
+                                            >
+                                                {deletingId === topic.id ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Trash2 className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        )}
                                     </div>
 
                                     <p className="text-sm text-muted-foreground leading-relaxed">
@@ -319,6 +377,40 @@ export default function TrendsPage() {
                                         </div>
                                     )}
 
+                                    {topic.sources && topic.sources.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-slate-600">
+                                                Sources:
+                                            </p>
+                                            <ul className="space-y-1">
+                                                {topic.sources.slice(0, 3).map((source, i) => {
+                                                    try {
+                                                        const url = new URL(source);
+                                                        return (
+                                                            <li
+                                                                key={i}
+                                                                className="text-xs flex items-center gap-2"
+                                                            >
+                                                                <ExternalLink className="h-3 w-3 text-blue-500 shrink-0" />
+                                                                <a
+                                                                    href={source}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-blue-600 hover:text-blue-800 hover:underline truncate max-w-[250px]"
+                                                                    title={source}
+                                                                >
+                                                                    {url.hostname.replace('www.', '')}
+                                                                </a>
+                                                            </li>
+                                                        );
+                                                    } catch {
+                                                        return null;
+                                                    }
+                                                })}
+                                            </ul>
+                                        </div>
+                                    )}
+
                                     <div className="pt-2 border-t flex gap-2">
                                         <Button
                                             variant="outline"
@@ -343,6 +435,29 @@ export default function TrendsPage() {
                             </Card>
                         ))}
                     </div>
+
+                    {/* Load More */}
+                    {hasMore && (
+                        <div className="flex justify-center pt-4">
+                            <Button
+                                variant="outline"
+                                onClick={handleLoadMore}
+                                disabled={loadingMore}
+                            >
+                                {loadingMore ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Loading...
+                                    </>
+                                ) : (
+                                    <>
+                                        <ChevronDown className="mr-2 h-4 w-4" />
+                                        Load More ({totalCount - topics.length} remaining)
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    )}
                 </div>
             ) : !loading && !initialLoading ? (
                 <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed rounded-lg text-muted-foreground">

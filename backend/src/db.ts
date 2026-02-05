@@ -516,6 +516,7 @@ export class SavedTrend extends Model<InferAttributes<SavedTrend>, InferCreation
     declare description: string;
     declare relevance: string;
     declare suggestedAngles: string; // JSON array
+    declare sources: string; // JSON array of source URLs
     declare trendType: string;
     declare industry: string | null;
     declare fetchedAt: Date;
@@ -546,6 +547,11 @@ SavedTrend.init({
         allowNull: false,
     },
     suggestedAngles: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        defaultValue: '[]',
+    },
+    sources: {
         type: DataTypes.TEXT,
         allowNull: false,
         defaultValue: '[]',
@@ -688,6 +694,86 @@ AgentDraft.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
 AgentDraft.belongsTo(Post, { foreignKey: 'postId' });
 Post.hasOne(AgentDraft, { foreignKey: 'postId' });
+
+// CaseStudy Model - for storing client success stories and case studies
+export class CaseStudy extends Model<InferAttributes<CaseStudy>, InferCreationAttributes<CaseStudy>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']>;
+    declare title: string;
+    declare clientName: string;
+    declare industry: string | null;
+    declare challenge: string; // The problem/challenge faced
+    declare solution: string; // How it was solved
+    declare results: string; // Outcomes and metrics
+    declare testimonial: string | null; // Client quote
+    declare tags: string; // JSON array of tags
+    declare status: string; // draft, published, archived
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+CaseStudy.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    title: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    clientName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    industry: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    challenge: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    solution: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    results: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    testimonial: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    tags: {
+        type: DataTypes.TEXT,
+        defaultValue: '[]',
+    },
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: 'draft',
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'CaseStudy',
+    tableName: 'case_studies',
+    indexes: [
+        { fields: ['tenantId'] },
+        { fields: ['status'] },
+        { fields: ['industry'] },
+        { fields: ['createdAt'] },
+    ]
+});
+
+Tenant.hasMany(CaseStudy, { foreignKey: 'tenantId' });
+CaseStudy.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
 // Sync database
 export const initDB = async () => {

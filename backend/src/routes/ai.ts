@@ -133,11 +133,15 @@ router.post('/hashtags', authMiddleware, async (req: AuthRequest, res: Response)
 router.get('/saved-trends', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const offset = (page - 1) * limit;
 
-        const trends = await SavedTrend.findAll({
+        const { count: totalCount, rows: trends } = await SavedTrend.findAndCountAll({
             where: { tenantId },
             order: [['fetchedAt', 'DESC']],
-            limit: 100 // Keep last 100 trends for reuse
+            limit,
+            offset
         });
 
         const topics = trends.map(t => ({
@@ -146,15 +150,44 @@ router.get('/saved-trends', authMiddleware, async (req: AuthRequest, res: Respon
             description: t.description,
             relevance: t.relevance,
             suggestedAngles: JSON.parse(t.suggestedAngles || '[]'),
+            sources: JSON.parse(t.sources || '[]'),
             trendType: t.trendType,
             industry: t.industry,
             fetchedAt: t.fetchedAt
         }));
 
-        // Group by fetchedAt date for display
-        const totalCount = await SavedTrend.count({ where: { tenantId } });
+        const totalPages = Math.ceil(totalCount / limit);
 
-        res.json({ topics, totalCount, lastFetchedAt: trends[0]?.fetchedAt || null });
+        res.json({
+            topics,
+            totalCount,
+            page,
+            limit,
+            totalPages,
+            hasMore: page < totalPages,
+            lastFetchedAt: trends[0]?.fetchedAt || null
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete a saved trend
+router.delete('/saved-trends/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { id } = req.params;
+
+        const trend = await SavedTrend.findOne({
+            where: { id, tenantId }
+        });
+
+        if (!trend) {
+            return res.status(404).json({ error: 'Trend not found' });
+        }
+
+        await trend.destroy();
+        res.json({ message: 'Trend deleted' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -184,6 +217,7 @@ router.post('/trending-topics', authMiddleware, async (req: AuthRequest, res: Re
                     description: t.description,
                     relevance: t.relevance,
                     suggestedAngles: JSON.stringify(t.suggestedAngles),
+                    sources: JSON.stringify(t.sources || []),
                     trendType: t.trendType,
                     industry: industry || null,
                     fetchedAt

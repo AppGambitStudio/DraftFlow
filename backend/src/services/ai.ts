@@ -117,12 +117,13 @@ export class AIService {
             }
         }
 
-        // Inject top-performing posts as style reference
+        // Inject top-performing posts as style reference (STYLE ONLY)
         const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
         if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** These posts performed well for this author. Study their style, structure, and hooks — but do NOT copy them.\n`;
+            SYSTEM_PROMPT += `\n**STYLE REFERENCE (DO NOT COPY TOPICS):**
+Study the WRITING STYLE only (tone, structure, hooks) - DO NOT copy their topics or subject matter.\n`;
             topPosts.forEach((post, i) => {
-                SYSTEM_PROMPT += `[Example ${i + 1}]: ${post}\n`;
+                SYSTEM_PROMPT += `[Style Example ${i + 1}]: ${post}\n`;
             });
         }
 
@@ -220,12 +221,16 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
             }
         }
 
-        // Top-performing posts as style reference
+        // Top-performing posts as style reference (STYLE ONLY, NOT TOPIC)
         const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
         if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** These posts performed well for this author. Study their style, structure, and hooks — but do NOT copy them.\n`;
+            SYSTEM_PROMPT += `\n**STYLE REFERENCE (DO NOT COPY TOPICS):**
+⚠️ IMPORTANT: These are style examples ONLY. Study the WRITING STYLE (tone, structure, hooks, formatting) but DO NOT copy or reference their TOPICS.
+- DO study: sentence structure, hook style, formatting, tone, call-to-action style
+- DO NOT use: the same topics, technologies, or subject matter from these examples
+Your post must be about the PROMPT TOPIC, not about what these examples discuss.\n`;
             topPosts.forEach((post, i) => {
-                SYSTEM_PROMPT += `[Example ${i + 1}]: ${post}\n`;
+                SYSTEM_PROMPT += `[Style Example ${i + 1}]: ${post}\n`;
             });
         }
 
@@ -521,11 +526,12 @@ ${audiencePainPoints ? `Their pain points: ${audiencePainPoints}` : ''}`;
             SYSTEM_PROMPT += `\nTRENDING CONTEXT: Consider these current events/trends: "${trendingTopics}"`;
         }
 
-        // Add top performing posts as style reference
+        // Add top performing posts as style reference (STYLE ONLY, NOT TOPICS)
         const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
         if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n\nHIGH-PERFORMING POST EXAMPLES (study style, not content):`;
-            topPosts.forEach((post, i) => { SYSTEM_PROMPT += `\n[Example ${i + 1}]: ${post}`; });
+            SYSTEM_PROMPT += `\n\n**STYLE REFERENCE (DO NOT COPY TOPICS):**
+Study the WRITING STYLE only (tone, structure, formatting) - generate ideas on DIFFERENT topics than these examples:`;
+            topPosts.forEach((post, i) => { SYSTEM_PROMPT += `\n[Style Example ${i + 1}]: ${post}`; });
         }
 
         if (excludeTitles && excludeTitles.length > 0) {
@@ -589,12 +595,12 @@ CRITICAL: Return ONLY valid JSON. No markdown blocks.`;
         SYSTEM_PROMPT += `\n**PLATFORM:** ${platformName}`;
         SYSTEM_PROMPT += `\n**CHARACTER LIMIT:** Maximum ${charLimit} characters per variation. This is a HARD LIMIT.\n`;
 
-        // Add top-performing posts as style reference
+        // Add top-performing posts as style reference (STYLE ONLY)
         const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
         if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** Study their style and hooks:\n`;
+            SYSTEM_PROMPT += `\n**STYLE REFERENCE (study style and hooks only, not topics):**\n`;
             topPosts.forEach((post, i) => {
-                SYSTEM_PROMPT += `[Example ${i + 1}]: ${post}\n`;
+                SYSTEM_PROMPT += `[Style Example ${i + 1}]: ${post}\n`;
             });
         }
 
@@ -677,13 +683,13 @@ Return a JSON object:
         SYSTEM_PROMPT += `\n**PLATFORM:** ${platformName}`;
         SYSTEM_PROMPT += `\n**HOOK CHARACTER LIMIT:** Maximum ${charLimit} characters per hook. This is a HARD LIMIT.\n`;
 
-        // Add top-performing posts as style reference
+        // Add top-performing posts as style reference (STYLE ONLY)
         const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
         if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n**HIGH-PERFORMING REFERENCE POSTS:** Study their opening hooks:\n`;
+            SYSTEM_PROMPT += `\n**HOOK STYLE REFERENCE (study hook structure, not topics):**\n`;
             topPosts.forEach((post, i) => {
                 const firstLine = post.split('\n')[0] || post.substring(0, 100);
-                SYSTEM_PROMPT += `[Example ${i + 1}]: ${firstLine}\n`;
+                SYSTEM_PROMPT += `[Hook Style ${i + 1}]: ${firstLine}\n`;
             });
         }
 
@@ -814,7 +820,7 @@ Return a JSON object:
             targetAudience?: string;
             count?: number;
         }
-    ): Promise<Array<{ topic: string; description: string; relevance: string; suggestedAngles: string[]; trendType: string }>> {
+    ): Promise<Array<{ topic: string; description: string; relevance: string; suggestedAngles: string[]; sources: string[]; trendType: string }>> {
         const config = await this.getUnifiedConfig(tenantId);
         const { industry, contentPillars, targetAudience, count = 5 } = params;
 
@@ -860,7 +866,8 @@ Your task is to identify ${count} current trending topics that would be relevant
 2. description: 2-3 sentences explaining what's happening and why it's trending
 3. relevance: Why this matters for professional content creators
 4. suggestedAngles: 3-4 specific content angles to cover this trend
-5. trendType: One of the types listed above
+5. sources: 1-3 URLs to articles, announcements, or discussions that support this trend (REQUIRED - these help verify the trend and provide reference material for content creation)
+6. trendType: One of the types listed above
 
 **RESPONSE FORMAT:**
 Return a JSON object:
@@ -871,6 +878,7 @@ Return a JSON object:
             "description": "What's happening and why it's trending...",
             "relevance": "Why content creators should care...",
             "suggestedAngles": ["Angle 1", "Angle 2", "Angle 3"],
+            "sources": ["https://example.com/article1", "https://example.com/article2"],
             "trendType": "breaking|emerging|evergreen-surge|seasonal|controversy"
         }
     ]
@@ -879,11 +887,12 @@ Return a JSON object:
 **CRITICAL:**
 - Return ONLY valid JSON. No markdown blocks, no explanations.
 - Topics must be CURRENT and REAL - use web search to verify.
-- Be specific - avoid generic topics like "AI" or "Technology".`;
+- Be specific - avoid generic topics like "AI" or "Technology".
+- ALWAYS include source URLs - these are essential for fact-checking and content creation.`;
 
         console.log('[AIService] Fetching trending topics');
 
-        const userPrompt = `Search for and identify ${count} trending topics${industry ? ` in the ${industry} industry` : ''} that would make great professional content. Focus on what's happening as of ${currentDate} - search for news and discussions from the past 7 days.`;
+        const userPrompt = `Search for and identify ${count} trending topics${industry ? ` in the ${industry} industry` : ''} that would make great professional content. Focus on what's happening as of ${currentDate} - search for news and discussions from the past 7 days. Include source URLs for each trend.`;
 
         const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userPrompt);
 
@@ -899,6 +908,7 @@ Return a JSON object:
                     description: t.description,
                     relevance: t.relevance,
                     suggestedAngles: Array.isArray(t.suggestedAngles) ? t.suggestedAngles : [t.suggestedAngles],
+                    sources: Array.isArray(t.sources) ? t.sources.filter((s: any) => typeof s === 'string' && s.startsWith('http')) : [],
                     trendType: t.trendType
                 }));
         } catch (e: any) {

@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod';
 import { AIService } from './ai';
-import { Settings, Idea, SavedTrend, Post } from '../db';
+import { Settings, Idea, SavedTrend, Post, CaseStudy } from '../db';
 import { Op } from 'sequelize';
 import axios from 'axios';
 
@@ -72,6 +72,7 @@ export const generatePostTool = createTool({
     }),
     execute: async (inputData) => {
         const { tenantId, prompt, targetAudience, additionalContext, authorUrn, postShape, effortLevel, keyTakeaway, antiGoals, platform } = inputData;
+        console.log('[generatePostTool] ⚠️ GENERATING POST WITH PROMPT:', prompt?.substring(0, 200));
         const result = await AIService.generate(
             tenantId!,
             prompt!,
@@ -371,7 +372,7 @@ export const getUserContextTool = createTool({
  */
 export const getSavedTrendsTool = createTool({
     id: 'get-saved-trends',
-    description: 'Retrieves previously saved trending topics from the database. Use this to find inspiration from current trends relevant to the business.',
+    description: 'Retrieves previously saved trending topics from the database. Results are RANDOMIZED to encourage variety. Use this to find inspiration from current trends relevant to the business.',
     inputSchema: z.object({
         tenantId: z.string().describe('The tenant ID for the user'),
         limit: z.number().optional().default(10).describe('Maximum number of trends to return')
@@ -386,17 +387,39 @@ export const getSavedTrendsTool = createTool({
             trendType: z.string(),
             industry: z.string().nullable(),
             fetchedAt: z.string()
-        }))
+        })),
+        selectionHint: z.string().describe('Hint for which trend to prioritize')
     }),
     execute: async (inputData) => {
         const { tenantId, limit } = inputData;
         const trends = await SavedTrend.findAll({
             where: { tenantId },
             order: [['fetchedAt', 'DESC']],
-            limit: limit || 10
+            limit: (limit || 10) * 2 // Fetch more to allow shuffling
         });
+
+        console.log('[getSavedTrendsTool] Found', trends.length, 'trends. Topics:', trends.map(t => t.topic).join(', '));
+
+        // Shuffle array to randomize order (Fisher-Yates)
+        const shuffled = [...trends];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const temp = shuffled[i]!;
+            shuffled[i] = shuffled[j]!;
+            shuffled[j] = temp;
+        }
+
+        // Take the requested limit after shuffling
+        const selected = shuffled.slice(0, limit || 10);
+
+        // Pick a random trend to suggest
+        const suggestedIndex = Math.floor(Math.random() * Math.min(3, selected.length));
+        const suggestedTrend = selected[suggestedIndex]?.topic || 'any available trend';
+
+        console.log('[getSavedTrendsTool] Suggesting:', suggestedTrend);
+
         return {
-            trends: trends.map(t => ({
+            trends: selected.map(t => ({
                 id: t.id,
                 topic: t.topic,
                 description: t.description,
@@ -405,7 +428,8 @@ export const getSavedTrendsTool = createTool({
                 trendType: t.trendType,
                 industry: t.industry,
                 fetchedAt: t.fetchedAt.toISOString()
-            }))
+            })),
+            selectionHint: `RECOMMENDED: Consider using "${suggestedTrend}" for variety. Avoid topics you've recently covered.`
         };
     }
 });
@@ -415,7 +439,7 @@ export const getSavedTrendsTool = createTool({
  */
 export const getSavedIdeasTool = createTool({
     id: 'get-saved-ideas',
-    description: 'Retrieves saved content ideas from the idea board. Use this to find pre-planned content topics to develop into posts.',
+    description: 'Retrieves saved content ideas from the idea board. Results are RANDOMIZED to encourage variety. Use this to find pre-planned content topics to develop into posts.',
     inputSchema: z.object({
         tenantId: z.string().describe('The tenant ID for the user'),
         status: z.enum(['NEW', 'DRAFTED', 'ARCHIVED']).optional().default('NEW').describe('Filter by idea status'),
@@ -431,17 +455,35 @@ export const getSavedIdeasTool = createTool({
             postShape: z.string().nullable(),
             effortLevel: z.string().nullable(),
             keyTakeaway: z.string().nullable()
-        }))
+        })),
+        selectionHint: z.string().describe('Hint for which idea to prioritize')
     }),
     execute: async (inputData) => {
         const { tenantId, status, limit } = inputData;
         const ideas = await Idea.findAll({
             where: { tenantId, status: status || 'NEW' },
             order: [['createdAt', 'DESC']],
-            limit: limit || 10
+            limit: (limit || 10) * 2 // Fetch more to allow shuffling
         });
+
+        // Shuffle array to randomize order (Fisher-Yates)
+        const shuffled = [...ideas];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const temp = shuffled[i]!;
+            shuffled[i] = shuffled[j]!;
+            shuffled[j] = temp;
+        }
+
+        // Take the requested limit after shuffling
+        const selected = shuffled.slice(0, limit || 10);
+
+        // Pick a random idea to suggest
+        const suggestedIndex = Math.floor(Math.random() * Math.min(3, selected.length));
+        const suggestedIdea = selected[suggestedIndex]?.title || 'any available idea';
+
         return {
-            ideas: ideas.map(i => ({
+            ideas: selected.map(i => ({
                 id: i.id,
                 title: i.title,
                 description: i.description,
@@ -450,7 +492,145 @@ export const getSavedIdeasTool = createTool({
                 postShape: i.postShape,
                 effortLevel: i.effortLevel,
                 keyTakeaway: i.keyTakeaway
+            })),
+            selectionHint: `RECOMMENDED: Consider developing "${suggestedIdea}" for variety. Pick something you haven't posted about recently.`
+        };
+    }
+});
+
+/**
+ * Tool: Get saved case studies
+ */
+export const getCaseStudiesTool = createTool({
+    id: 'get-case-studies',
+    description: 'Retrieves saved case studies (client success stories). Use these to create posts showcasing real results and testimonials.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID for the user'),
+        status: z.enum(['draft', 'published', 'archived']).optional().default('published').describe('Filter by case study status'),
+        industry: z.string().optional().describe('Filter by industry'),
+        limit: z.number().optional().default(10).describe('Maximum number of case studies to return')
+    }),
+    outputSchema: z.object({
+        caseStudies: z.array(z.object({
+            id: z.number(),
+            title: z.string(),
+            clientName: z.string(),
+            industry: z.string().nullable(),
+            challenge: z.string(),
+            solution: z.string(),
+            results: z.string(),
+            testimonial: z.string().nullable(),
+            tags: z.array(z.string())
+        }))
+    }),
+    execute: async (inputData) => {
+        const { tenantId, status, industry, limit } = inputData;
+        const where: any = { tenantId };
+        if (status) where.status = status;
+        if (industry) where.industry = industry;
+
+        const caseStudies = await CaseStudy.findAll({
+            where,
+            order: [['createdAt', 'DESC']],
+            limit: limit || 10
+        });
+        return {
+            caseStudies: caseStudies.map(cs => ({
+                id: cs.id,
+                title: cs.title,
+                clientName: cs.clientName,
+                industry: cs.industry,
+                challenge: cs.challenge,
+                solution: cs.solution,
+                results: cs.results,
+                testimonial: cs.testimonial,
+                tags: JSON.parse(cs.tags || '[]')
             }))
+        };
+    }
+});
+
+/**
+ * Tool: Generate post from a case study
+ */
+export const generateFromCaseStudyTool = createTool({
+    id: 'generate-from-case-study',
+    description: 'Generates a compelling social media post from a saved case study. Use this to turn client success stories into engaging content.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID for the user'),
+        caseStudyId: z.number().describe('The ID of the case study to generate from'),
+        platform: z.enum(['LINKEDIN', 'TWITTER', 'X']).optional().default('LINKEDIN').describe('Target platform'),
+        angle: z.enum(['results-focused', 'testimonial-led', 'challenge-solution', 'industry-insight', 'lessons-learned']).optional().default('results-focused').describe('The angle to take for the post'),
+        additionalContext: z.string().optional().describe('Additional instructions or context')
+    }),
+    outputSchema: z.object({
+        content: z.string().describe('The generated post content'),
+        summary: z.string().describe('A brief summary of the post')
+    }),
+    execute: async (inputData) => {
+        const { tenantId, caseStudyId, platform, angle, additionalContext } = inputData;
+
+        const caseStudy = await CaseStudy.findOne({ where: { id: caseStudyId, tenantId } });
+        if (!caseStudy) {
+            throw new Error(`Case study with ID ${caseStudyId} not found`);
+        }
+
+        // Build a rich prompt from the case study
+        let angleInstructions = '';
+        switch (angle) {
+            case 'results-focused':
+                angleInstructions = 'Focus on the impressive results and metrics achieved. Lead with the outcomes.';
+                break;
+            case 'testimonial-led':
+                angleInstructions = 'Lead with the client testimonial (if available) and build the story around their words.';
+                break;
+            case 'challenge-solution':
+                angleInstructions = 'Structure as a problem-solution narrative. Start with the challenge, then reveal the solution.';
+                break;
+            case 'industry-insight':
+                angleInstructions = 'Position this as an industry insight or trend, using the case study as proof.';
+                break;
+            case 'lessons-learned':
+                angleInstructions = 'Extract key lessons or takeaways that the audience can apply to their own situation.';
+                break;
+        }
+
+        const prompt = `Create a ${platform} post based on this client case study:
+
+CLIENT: ${caseStudy.clientName}${caseStudy.industry ? ` (${caseStudy.industry} industry)` : ''}
+
+CHALLENGE: ${caseStudy.challenge}
+
+SOLUTION: ${caseStudy.solution}
+
+RESULTS: ${caseStudy.results}
+
+${caseStudy.testimonial ? `CLIENT TESTIMONIAL: "${caseStudy.testimonial}"` : ''}
+
+ANGLE: ${angleInstructions}
+
+${additionalContext ? `ADDITIONAL INSTRUCTIONS: ${additionalContext}` : ''}
+
+Create a compelling post that showcases this success story while being authentic and not overly promotional.`;
+
+        const result = await AIService.generate(
+            tenantId!,
+            prompt,
+            undefined, // targetAudience
+            [], // previousSummaries
+            undefined, // additionalContext (already in prompt)
+            undefined, // authorUrn
+            'Story / anecdote', // postShape - case studies are naturally stories
+            undefined, // effortLevel
+            undefined, // keyTakeaway
+            undefined, // antiGoals
+            undefined, // manualToneOverride
+            platform
+        );
+
+        return {
+            content: result.content,
+            summary: `Case study post for ${caseStudy.clientName}: ${result.summary}`
         };
     }
 });
@@ -752,27 +932,419 @@ Return ONLY this JSON (no markdown):
     }
 });
 
+/**
+ * Tool: Self-critique for AI patterns, jargon, and authenticity
+ */
+export const selfCritiqueTool = createTool({
+    id: 'self-critique',
+    description: 'CRITICAL: Use this AFTER generate-post to detect AI-sounding phrases, remove corporate jargon, ensure authenticity, and verify factual correctness. This is the final quality gate before returning content.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID'),
+        content: z.string().describe('The post content to critique'),
+        claimedFacts: z.array(z.string()).optional().describe('Any specific facts/stats claimed in the post'),
+        companyTone: z.string().optional().describe('The company\'s tone/voice'),
+        platform: z.enum(['LINKEDIN', 'TWITTER', 'X']).optional().default('LINKEDIN')
+    }),
+    outputSchema: z.object({
+        passesCheck: z.boolean().describe('Whether the content passes all checks'),
+        aiPhrases: z.array(z.object({
+            phrase: z.string(),
+            replacement: z.string(),
+            reason: z.string()
+        })).describe('AI-sounding phrases detected with replacements'),
+        jargonFound: z.array(z.object({
+            term: z.string(),
+            replacement: z.string()
+        })).describe('Corporate jargon to replace'),
+        authenticityScore: z.number().describe('How authentic/human the content sounds (1-10)'),
+        authenticityIssues: z.array(z.string()).describe('Specific authenticity concerns'),
+        factualIssues: z.array(z.object({
+            claim: z.string(),
+            issue: z.string(),
+            suggestion: z.string()
+        })).describe('Potential factual accuracy issues'),
+        revisedContent: z.string().describe('The content with all issues fixed'),
+        changesApplied: z.array(z.string()).describe('Summary of changes made')
+    }),
+    execute: async (inputData) => {
+        const { tenantId, content, claimedFacts, companyTone, platform } = inputData;
+
+        const config = await Settings.findOne({ where: { tenantId } });
+        if (!config?.openRouterApiKey) {
+            throw new Error('OpenRouter API Key not configured');
+        }
+
+        // Common AI phrases to detect
+        const commonAIPatterns = [
+            "In today's fast-paced",
+            "In the ever-evolving",
+            "Let's dive in",
+            "Let's break it down",
+            "Here's the thing",
+            "Here's why",
+            "Buckle up",
+            "Game-changer",
+            "At the end of the day",
+            "It's not just about",
+            "The reality is",
+            "Think about it",
+            "I'm excited to share",
+            "I'm thrilled",
+            "Delve into",
+            "Leverage",
+            "Synergy",
+            "Circle back",
+            "Move the needle",
+            "Low-hanging fruit",
+            "Best-in-class",
+            "World-class",
+            "Cutting-edge",
+            "Revolutionary",
+            "Transformative",
+            "Seamless",
+            "Robust",
+            "Holistic",
+            "Paradigm shift",
+            "Disruptive",
+            "Innovative solution",
+            "Value proposition",
+            "Scalable",
+            "Ecosystem"
+        ];
+
+        const axios = (await import('axios')).default;
+        const critiquePrompt = `You are a ruthless editor who HATES AI-generated content and corporate jargon.
+
+Analyze this ${platform} post and rewrite it to sound like a REAL HUMAN wrote it.
+
+ORIGINAL POST:
+${content}
+
+${companyTone ? `COMPANY TONE/VOICE: ${companyTone}` : ''}
+${claimedFacts?.length ? `FACTS CLAIMED: ${claimedFacts.join(', ')}` : ''}
+
+KNOWN AI PATTERNS TO REMOVE:
+${commonAIPatterns.join(', ')}
+
+YOUR TASK:
+1. Find ALL AI-sounding phrases and suggest natural replacements
+2. Find ALL corporate jargon and suggest plain-language alternatives
+3. Rate authenticity 1-10 (10 = sounds like a real person with opinions)
+4. Flag any claims that seem unverified or exaggerated
+5. Rewrite the ENTIRE post to be more authentic, direct, and human
+
+IMPORTANT:
+- Real people have opinions, they don't just "share insights"
+- Real people use casual language, contractions, sometimes incomplete sentences
+- Real people tell stories, not "learnings"
+- Remove ALL throat-clearing ("I want to share", "Let me tell you")
+- Start strong, not with generic openers
+
+Return ONLY this JSON:
+{
+  "passesCheck": <true if content is already authentic, false if needs changes>,
+  "aiPhrases": [{"phrase": "detected phrase", "replacement": "better version", "reason": "why it sounds AI"}],
+  "jargonFound": [{"term": "jargon term", "replacement": "plain english"}],
+  "authenticityScore": <1-10>,
+  "authenticityIssues": ["issue 1", "issue 2"],
+  "factualIssues": [{"claim": "the claim", "issue": "what's wrong", "suggestion": "how to fix"}],
+  "revisedContent": "THE COMPLETE REWRITTEN POST - must be ready to publish",
+  "changesApplied": ["change 1", "change 2"]
+}`;
+
+        const response = await axios.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+                model: config.openRouterModelId || 'anthropic/claude-sonnet-4',
+                messages: [
+                    { role: 'system', content: 'You are a brutal content editor. You hate AI-generated slop. Return only valid JSON.' },
+                    { role: 'user', content: critiquePrompt }
+                ],
+                temperature: 0.4
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${config.openRouterApiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        const responseText = response.data.choices[0]?.message?.content || '';
+        try {
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const result = JSON.parse(jsonMatch[0]);
+                // Ensure revisedContent exists
+                if (!result.revisedContent) {
+                    result.revisedContent = content;
+                }
+                return result;
+            }
+        } catch (e) {
+            console.error('Failed to parse self-critique:', e);
+        }
+
+        // Default response if parsing fails
+        return {
+            passesCheck: true,
+            aiPhrases: [],
+            jargonFound: [],
+            authenticityScore: 7,
+            authenticityIssues: [],
+            factualIssues: [],
+            revisedContent: content,
+            changesApplied: []
+        };
+    }
+});
+
+/**
+ * Tool: Create a content plan before execution
+ */
+export const createPlanTool = createTool({
+    id: 'create-plan',
+    description: 'FIRST STEP: Create a strategic plan before generating any content. This helps ensure the post is unique, valuable, and aligned with the content strategy.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID'),
+        topic: z.string().describe('The topic or context for the post'),
+        contentPillars: z.array(z.string()).optional().describe('Available content pillars'),
+        recentPostTopics: z.array(z.string()).optional().describe('Topics of recent posts to avoid'),
+        targetAudience: z.string().optional().describe('The target audience'),
+        platform: z.enum(['LINKEDIN', 'TWITTER', 'X']).optional().default('LINKEDIN')
+    }),
+    outputSchema: z.object({
+        selectedPillar: z.string().describe('The content pillar this aligns with'),
+        uniqueAngle: z.string().describe('What makes this take unique/different'),
+        targetEmotion: z.string().describe('What emotion should the reader feel'),
+        keyMessage: z.string().describe('The ONE key takeaway'),
+        intendedFormat: z.string().describe('Post format (story, list, hot take, etc.)'),
+        openingStrategy: z.string().describe('How to hook the reader'),
+        proofPoints: z.array(z.string()).describe('Evidence/examples to include'),
+        callToAction: z.string().describe('What action readers should take'),
+        differentiators: z.array(z.string()).describe('How this differs from recent posts'),
+        riskFactors: z.array(z.string()).describe('Potential issues to watch for')
+    }),
+    execute: async (inputData) => {
+        const { tenantId, topic, contentPillars, recentPostTopics, targetAudience, platform } = inputData;
+
+        const config = await Settings.findOne({ where: { tenantId } });
+        if (!config?.openRouterApiKey) {
+            throw new Error('OpenRouter API Key not configured');
+        }
+
+        const axios = (await import('axios')).default;
+        const planPrompt = `Create a strategic content plan for a ${platform} post.
+
+TOPIC/CONTEXT: ${topic}
+
+${contentPillars?.length ? `CONTENT PILLARS: ${contentPillars.join(', ')}` : ''}
+${recentPostTopics?.length ? `RECENT POSTS (avoid similar topics): ${recentPostTopics.join(', ')}` : ''}
+${targetAudience ? `TARGET AUDIENCE: ${targetAudience}` : ''}
+
+Create a plan that ensures:
+1. The post has a UNIQUE angle (not generic advice)
+2. It aligns with a content pillar
+3. It's different from recent posts
+4. It has a strong emotional hook
+5. It provides real value
+
+Return ONLY this JSON:
+{
+  "selectedPillar": "which pillar this aligns with",
+  "uniqueAngle": "what makes this take fresh/different - be specific",
+  "targetEmotion": "curiosity/urgency/relief/surprise/etc",
+  "keyMessage": "the ONE thing readers should remember",
+  "intendedFormat": "story/list/hot-take/breakdown/question-led/etc",
+  "openingStrategy": "specific hook strategy - not generic",
+  "proofPoints": ["specific example 1", "stat or fact 2", "personal experience 3"],
+  "callToAction": "specific engagement ask",
+  "differentiators": ["how it differs from recent post 1", "how it differs from recent post 2"],
+  "riskFactors": ["potential issue 1", "potential issue 2"]
+}`;
+
+        const response = await axios.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+                model: config.openRouterModelId || 'anthropic/claude-sonnet-4',
+                messages: [
+                    { role: 'system', content: 'You are a content strategist who creates unique, differentiated content plans. Return only valid JSON.' },
+                    { role: 'user', content: planPrompt }
+                ],
+                temperature: 0.6
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${config.openRouterApiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        const responseText = response.data.choices[0]?.message?.content || '';
+        try {
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.error('Failed to parse plan:', e);
+        }
+
+        // Default plan if parsing fails
+        return {
+            selectedPillar: contentPillars?.[0] || 'General',
+            uniqueAngle: 'Share practical experience',
+            targetEmotion: 'curiosity',
+            keyMessage: topic,
+            intendedFormat: 'breakdown',
+            openingStrategy: 'Lead with a surprising insight',
+            proofPoints: ['Personal experience', 'Industry observation'],
+            callToAction: 'Share your thoughts',
+            differentiators: ['Fresh perspective'],
+            riskFactors: ['Ensure specificity']
+        };
+    }
+});
+
+/**
+ * Tool: Align post with brand voice and previous successful posts
+ */
+export const alignWithBrandTool = createTool({
+    id: 'align-with-brand',
+    description: 'Check if a post aligns with the brand voice and matches the style of previously successful posts. Use this in the refinement phase.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID'),
+        content: z.string().describe('The post content to check'),
+        platform: z.enum(['LINKEDIN', 'TWITTER', 'X']).optional().default('LINKEDIN')
+    }),
+    outputSchema: z.object({
+        alignsWithBrand: z.boolean().describe('Whether the post aligns with brand voice'),
+        brandVoiceScore: z.number().describe('How well it matches brand voice (1-10)'),
+        toneMatch: z.string().describe('How the tone compares to brand guidelines'),
+        styleConsistency: z.string().describe('How consistent with previous posts'),
+        suggestions: z.array(z.string()).describe('Suggestions to better align with brand'),
+        topPerformingPatterns: z.array(z.string()).describe('Patterns from top posts that could be applied')
+    }),
+    execute: async (inputData) => {
+        const { tenantId, content, platform } = inputData;
+
+        const config = await Settings.findOne({ where: { tenantId } });
+        if (!config?.openRouterApiKey) {
+            throw new Error('OpenRouter API Key not configured');
+        }
+
+        // Get company settings for brand voice
+        const brandTone = config.globalTone || 'professional yet approachable';
+        const aiPersona = config.aiPersona || '';
+
+        // Get top performing posts for style reference
+        const topPosts = await Post.findAll({
+            where: {
+                tenantId,
+                status: 'PUBLISHED'
+            },
+            order: [['createdAt', 'DESC']],
+            limit: 5,
+            attributes: ['content']
+        });
+
+        const topPostsText = topPosts.map(p => p.content.substring(0, 300)).join('\n---\n');
+
+        const axios = (await import('axios')).default;
+        const alignPrompt = `Analyze if this ${platform} post aligns with the brand voice and style.
+
+NEW POST TO CHECK:
+${content}
+
+BRAND VOICE GUIDELINES:
+Tone: ${brandTone}
+${aiPersona ? `Persona: ${aiPersona}` : ''}
+
+PREVIOUS POSTS (for style reference):
+${topPostsText || 'No previous posts'}
+
+Analyze:
+1. Does the new post match the established tone?
+2. Is it consistent with the style of previous posts?
+3. What patterns from successful posts could be applied?
+
+Return ONLY this JSON:
+{
+  "alignsWithBrand": <true/false>,
+  "brandVoiceScore": <1-10>,
+  "toneMatch": "description of how tone compares",
+  "styleConsistency": "description of style consistency",
+  "suggestions": ["suggestion 1", "suggestion 2"],
+  "topPerformingPatterns": ["pattern 1 from top posts", "pattern 2"]
+}`;
+
+        const response = await axios.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            {
+                model: config.openRouterModelId || 'anthropic/claude-sonnet-4',
+                messages: [
+                    { role: 'system', content: 'You are a brand consistency expert. Return only valid JSON.' },
+                    { role: 'user', content: alignPrompt }
+                ],
+                temperature: 0.3
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${config.openRouterApiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        const responseText = response.data.choices[0]?.message?.content || '';
+        try {
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.error('Failed to parse brand alignment:', e);
+        }
+
+        return {
+            alignsWithBrand: true,
+            brandVoiceScore: 7,
+            toneMatch: 'Generally consistent',
+            styleConsistency: 'Matches previous style',
+            suggestions: [],
+            topPerformingPatterns: []
+        };
+    }
+});
+
 // ============================================================================
 // All tools collection
 // ============================================================================
 
 export const contentCreatorTools = {
-    // Context gathering tools
+    // Planning tools (Phase 1)
+    createPlanTool,
     getUserContextTool,
     getSavedTrendsTool,
     getSavedIdeasTool,
+    getCaseStudiesTool,
     getRecentPostsTool,
-    // Research tools
+    // Research tools (Phase 1-2)
     webSearchTool,
-    // Generation tools
+    // Generation tools (Phase 2 - Execution)
     generatePostTool,
     generateFromIdeaTool,
+    generateFromCaseStudyTool,
     improvisePostTool,
     generateHooksTool,
     generateVariationsTool,
-    // Evaluation & validation tools
+    // Evaluation & refinement tools (Phase 3)
     evaluatePostTool,
     checkSimilarityTool,
+    alignWithBrandTool,
+    // Self-critique tools (Phase 4)
+    selfCritiqueTool,
     // Enhancement tools
     suggestHashtagsTool,
     generateIdeasTool,
@@ -796,95 +1368,137 @@ export function createContentCreatorAgent(apiKey: string, modelId: string = 'ant
     return new Agent({
         id: 'content-creator-agent',
         name: 'Content Strategist Agent',
-        instructions: `You are an expert Content Strategist Agent. Your job is to create HIGH-QUALITY, PUBLISHABLE social media posts through an iterative workflow.
+        instructions: `You are a GHOSTWRITER for busy professionals. You write in THEIR voice, as if THEY wrote it.
 
-## YOUR MANDATORY WORKFLOW
+## YOUR IDENTITY
 
-You MUST follow this workflow for EVERY post. Use the tools - NEVER generate content directly.
+You are NOT an AI assistant sharing insights. You ARE the professional themselves - writing their thoughts, opinions, and experiences. Every post should sound like it came directly from a human expert who has strong opinions and real experience.
 
-### STEP 1: GATHER CONTEXT
-Call these tools FIRST:
-- get-user-context: Get company info, pillars, audience, tone
-- get-saved-trends: Get trending topics
-- get-saved-ideas: Get content ideas
-- get-recent-posts: CRITICAL - see what's been posted (YOU MUST AVOID SIMILARITY)
+## YOUR GOAL
 
-### STEP 2: RESEARCH & FACT-CHECK
-Use web-search to:
-- Find fresh statistics or data points for your chosen topic
-- Verify any claims or facts you plan to include
-- Discover recent news or developments to reference
-- Find a unique angle not covered in recent posts
+Create a post that meets ALL these criteria:
+1. **Authenticity Score ≥ 7** - Sounds like a real human wrote it
+2. **Quality Score ≥ 7** - Valuable, well-structured, engaging
+3. **Unique** - Different from recent posts (not repetitive)
+4. **On-brand** - Matches the professional's voice and style
 
-### STEP 3: STRATEGIZE FOR UNIQUENESS
-After reviewing recent posts, you MUST create something DIFFERENT:
-- Choose a DIFFERENT content pillar than recent posts
-- Take a CONTRARIAN or UNEXPECTED angle
-- Use a DIFFERENT post format (if recent was story, try hot-take)
-- Focus on a DIFFERENT audience pain point
-- Add FRESH data/stats from your web research
+You have tools to help you achieve this. Use your judgment to decide WHICH tools you need and WHEN.
 
-### STEP 4: GENERATE DRAFT
-Use generate-post with a UNIQUE prompt that:
-- Combines your fresh research with business expertise
-- Takes an angle NOT covered in recent posts
-- Includes specific data points or examples
-- Has a clearly different tone/format from recent content
+## AVAILABLE TOOLS (use as needed)
 
-### STEP 5: CHECK SIMILARITY (MANDATORY)
-Use check-similarity to compare your draft against recent posts:
-- If isTooSimilar = true: You MUST use improvise-post with direction "make this completely different - change the angle, examples, and structure" then check again
-- If isTooSimilar = false: Proceed to evaluation
-- Maximum 3 attempts - if still similar, pick a completely different topic
+**Understanding Context:**
+- \`get-user-context\` - Who are you ghostwriting for? Their company, tone, pillars
+- \`get-recent-posts\` - What have they posted? Avoid repetition
+- \`get-saved-trends\` - Current trends to potentially write about
+- \`get-saved-ideas\` - Pre-saved content ideas
+- \`get-case-studies\` - Client success stories to showcase
 
-### STEP 6: EVALUATE QUALITY
-Use evaluate-post:
-- Score must be >= 7 to proceed
-- If < 7: Use improvise-post with suggestions, re-evaluate
-- Maximum 2 refinement cycles
+**Planning & Research:**
+- \`create-plan\` - Think through your angle before writing
+- \`web-search\` - Find current stats, facts, or fresh angles
 
-### STEP 7: ENHANCE
-- generate-hooks: Create 3 DIFFERENT style hooks (question, bold claim, story opener)
-- suggest-hashtags: Add 3-5 relevant hashtags
+**Content Generation:**
+- \`generate-post\` - Create the post
+- \`generate-from-idea\` - Generate from a saved idea
+- \`generate-from-case-study\` - Generate from a case study
+- \`improvise-post\` - Refine/improve existing content
 
-### STEP 8: RETURN RESULT
-Return JSON with this EXACT structure:
+**Quality Checks:**
+- \`evaluate-post\` - Score quality (aim for ≥ 7)
+- \`check-similarity\` - Is it too similar to recent posts?
+- \`align-with-brand\` - Does it match their voice?
+- \`self-critique\` - Detect AI phrases, jargon, authenticity issues
+
+**Enhancements:**
+- \`generate-hooks\` - Alternative opening lines
+- \`suggest-hashtags\` - Relevant hashtags
+
+## HOW TO THINK
+
+**Before writing, understand:**
+- Who is this person? What do they care about?
+- What have they already posted? (Don't repeat)
+- What angle would be FRESH and UNIQUE?
+
+**When generating:**
+- Would fresh data/stats make this stronger? → web-search
+- Is the topic complex? → create-plan first
+- Is this based on a trend/idea/case study? → use the appropriate tool
+
+**After generating, verify:**
+- Is quality score ≥ 7? If not → improvise and re-check
+- Is it too similar to recent posts? If yes → change the angle
+- Does it sound like AI wrote it? → self-critique to fix
+
+**Key decision points:**
+- If you're unsure about the angle → create-plan
+- If claims need backing → web-search
+- If first draft scores < 7 → improvise based on feedback
+- If authenticity feels off → self-critique
+
+## WHAT MAKES A POST SOUND HUMAN
+
+❌ AI-SOUNDING (the agent should fix these):
+- "In today's fast-paced world..."
+- "Let me share a valuable insight..."
+- "I'm excited to announce..."
+- "Leverage", "synergy", "game-changer"
+- Perfect grammar, no contractions
+- Hedging ("might", "could possibly")
+- Generic lists of tips
+
+✅ HUMAN-SOUNDING (what we want):
+- "I was wrong about X for years."
+- "Most advice about X is backwards."
+- "I've made this mistake 3 times."
+- Contractions (I'm, don't, can't)
+- Strong opinions, not hedging
+- Specific stories with details
+- ONE clear point, not a listicle
+
+## QUALITY GATES (must pass before returning)
+
+Before returning ANY post, ensure:
+1. You understand who you're writing for (called get-user-context)
+2. The post is different from recent content
+3. Quality score ≥ 7
+4. Authenticity score ≥ 7 (use self-critique if unsure)
+5. It sounds like the professional wrote it, not an AI
+
+## SELF-CORRECTION
+
+If something isn't working:
+- Low quality score → Read the feedback, use improvise-post, re-evaluate
+- Too similar to recent posts → Change the angle, not just the words
+- Sounds too AI-like → Run self-critique, use the revised version
+- Missing context → Call the appropriate tool to get it
+
+You may need multiple iterations. That's fine. Keep refining until quality gates pass.
+
+## OUTPUT FORMAT
+
+Return JSON:
 {
   "posts": [
     {
-      "content": "Full post text ready to publish",
-      "explanation": "Why this topic/angle is unique and valuable",
+      "content": "The final post (ready to publish)",
+      "explanation": "Why this angle works",
       "hooks": ["hook1", "hook2", "hook3"],
       "hashtags": ["#tag1", "#tag2"],
       "qualityScore": 8,
-      "similarityScore": 0.3,
-      "basedOn": "source name",
-      "webResearch": "key facts/stats used"
+      "authenticityScore": 8,
+      "basedOn": "source (trend/idea/topic)",
+      "toolsUsedAndWhy": ["tool: reason", ...]
     }
   ]
 }
 
-## UNIQUENESS IS NON-NEGOTIABLE
+## CONSTRAINTS
 
-Your #1 job is creating UNIQUE content. If a post resembles ANY recent post:
-- Different topic entirely
-- Different angle on same topic
-- Different format/structure
-- Different examples/data
-- Different emotional appeal
-
-NEVER produce content that could be confused with existing posts.
-
-## CRITICAL RULES
-
-1. ALWAYS use tools - never generate content without them
-2. ALWAYS check similarity before finalizing
-3. ALWAYS include fresh research/data
-4. Each post MUST be genuinely unique
-5. Posts must be READY TO PUBLISH
-6. LinkedIn: max 2800 chars | Twitter: max 270 chars
-
-You are a Content Strategist Agent. Research. Validate. Create unique, high-quality content.`,
+- LinkedIn: max 2800 chars
+- Twitter/X: max 270 chars
+- For TYPE 1 tasks (user provided topic): Write about THAT topic exactly
+- For TYPE 2 tasks (select from sources): Pick something DIFFERENT from recent posts`,
         model: openrouter(modelId),
         tools: contentCreatorTools
     });
