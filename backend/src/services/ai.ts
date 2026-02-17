@@ -411,18 +411,36 @@ Return a JSON object with the following structure:
             } catch (innerE) {
                 // Attempt 3: Aggressive cleanup of control characters and common JSON syntax errors
                 try {
-                    const extraClean = cleanText
+                    let extraClean = cleanText
                         .replace(/\n/g, '\\n') // Escape actual newlines
                         .replace(/\r/g, '\\r')
-                        .replace(/\t/g, '\\t')
-                        .replace(/\\"/g, '"') // Unescape all quotes
+                        .replace(/\t/g, '\\t');
+
+                    // Fix single quotes to double quotes for keys and values if it looks like invalid JSON
+                    // This is heuristic and might break content with apostrophes, but it's a fallback
+                    if (extraClean.includes("'")) {
+                        // Replace 'key': with "key":
+                        extraClean = extraClean.replace(/'([^']+?)'\s*:/g, '"$1":');
+                        // Replace : 'value' with : "value"
+                        extraClean = extraClean.replace(/:\s*'([^']+?)'/g, ': "$1"');
+                        // Replace array elements 'value',
+                        extraClean = extraClean.replace(/['"]?topics['"]?\s*:\s*\[([\s\S]*?)\]/g, (match, arrayContent) => {
+                            const fixedArray = arrayContent.replace(/'([^']+?)'/g, '"$1"');
+                            return `"topics": [${fixedArray}]`;
+                        });
+                    }
+
+                    extraClean = extraClean
+                        .replace(/\\"/g, '"') // Unescape all quotes (start fresh)
                         .replace(/"/g, '\\"') // Escape all quotes
                         .replace(/^\\"/, '"') // Unescape first quote
-                        .replace(/\\"$/, '"') // Unescape last quote
+                        // .replace(/\\"$/, '"') // Unescape last quote - removed because it might be wrong if last char is }
                         .replace(/\\":\\"/g, '":"') // Fix key-value separator
                         .replace(/\\",\\"/g, '","') // Fix comma separator
                         .replace(/{\\"/g, '{"') // Fix start
-                        .replace(/\\"}/g, '"}'); // Fix end
+                        .replace(/\\"}/g, '"}') // Fix end
+                        .replace(/\\":\[/g, '":[') // Fix array start
+                        .replace(/],\\"/g, '],"'); // Fix array end comma
 
                     return JSON.parse(extraClean);
                 } catch (lastE) {
@@ -436,6 +454,13 @@ Return a JSON object with the following structure:
                             summary: extractedSummary || "Summary extraction failed"
                         };
                     }
+
+                    // Specific fallback for trending topics
+                    const extractedTopics = this.extractRegexArray(cleanText, "topics");
+                    if (extractedTopics) {
+                        return { topics: extractedTopics };
+                    }
+
                     throw lastE;
                 }
             }
@@ -450,6 +475,25 @@ Return a JSON object with the following structure:
         if (match && match[1]) {
             // Clean up common LLM "escaping" that isn't valid in JS strings but helpful in raw text
             return match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').trim();
+        }
+        return null;
+    }
+
+    private static extractRegexArray(text: string, fieldName: string): any[] | null {
+        // Look for "fieldName": [...] 
+        const regex = new RegExp(`"${fieldName}"\\s*:\\s*\\[([\\s\\S]*?)\\]`);
+        const match = text.match(regex);
+        if (match && match[1]) {
+            try {
+                // Try to parse just the array part by wrapping it in braces
+                const arrayContent = match[1];
+                // basic cleanup of single quotes inside the array if needed, though cleanText might have handled it
+                // heuristic: if it looks like 'item', 'item', replace with "item", "item"
+                const fixedContent = arrayContent.replace(/'([^']+?)'/g, '"$1"');
+                return JSON.parse(`[${fixedContent}]`);
+            } catch (e) {
+                return null;
+            }
         }
         return null;
     }
@@ -496,8 +540,8 @@ ${expertiseAreas && expertiseAreas.length > 0 ? `Expertise areas: ${expertiseAre
     ): Promise<Array<{ title: string; description: string; tags: string[]; suggestedPostShape: string; suggestedEffortLevel: string }>> {
         const config = await this.getUnifiedConfig(tenantId, params.authorUrn);
         const { companyName, industry, companyDescription, expertiseAreas, contentPillars,
-                targetAudience, audiencePainPoints, toneOverride, batchTheme, trendingTopics,
-                count, authorUrn, excludeTitles } = params;
+            targetAudience, audiencePainPoints, toneOverride, batchTheme, trendingTopics,
+            count, authorUrn, excludeTitles } = params;
 
         let SYSTEM_PROMPT = `You are a strategic content planning assistant for LinkedIn and Twitter.
 
@@ -888,7 +932,9 @@ Return a JSON object:
 - Return ONLY valid JSON. No markdown blocks, no explanations.
 - Topics must be CURRENT and REAL - use web search to verify.
 - Be specific - avoid generic topics like "AI" or "Technology".
-- ALWAYS include source URLs - these are essential for fact-checking and content creation.`;
+- ALWAYS include source URLs - these are essential for fact-checking and content creation.
+- **DO NOT** use single quotes for keys or string values. Use double quotes only.
+- **DO NOT** leave trailing commas.`;
 
         console.log('[AIService] Fetching trending topics');
 
