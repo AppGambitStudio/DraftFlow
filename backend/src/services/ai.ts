@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Settings, Idea, Post } from '../db';
 import fs from 'fs';
 import path from 'path';
+import { getMCPManager, MCPServerConfig } from './mcpManager';
 
 export interface AIContext {
     apiKey: string | null;
@@ -71,6 +72,106 @@ export class AIService {
             console.error('AI Service Error:', error.response?.data || error.message);
             throw new Error('Failed to generate AI response: ' + (error.response?.data?.error?.message || error.message));
         }
+    }
+
+    /**
+     * Get MCP server configs for a tenant.
+     */
+    private static async getMCPServers(tenantId: string): Promise<MCPServerConfig[]> {
+        try {
+            const settings = await Settings.findOne({ where: { tenantId } });
+            const servers: MCPServerConfig[] = JSON.parse(settings?.mcpServers || '[]');
+            return servers.filter(s => s.enabled);
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Calls OpenRouter with MCP tool support. If MCP tools are available,
+     * runs a tool-calling loop. Otherwise falls back to regular callOpenRouter.
+     * Uses context-aware server selection to only connect relevant MCPs.
+     */
+    private static async callOpenRouterWithTools(
+        config: AIContext,
+        systemPrompt: string,
+        userContent: string,
+        tenantId: string,
+        maxIterations: number = 5
+    ): Promise<string> {
+        const mcpServers = await this.getMCPServers(tenantId);
+        if (mcpServers.length === 0 || !config.apiKey) {
+            return this.callOpenRouter(config, systemPrompt, userContent);
+        }
+
+        const mcpManager = getMCPManager();
+        const modelId = config.modelId || 'anthropic/claude-sonnet-4';
+        const { tools: toolDefs, cacheKey } = await mcpManager.getToolDefinitionsForContext(
+            tenantId, mcpServers, userContent, config.apiKey, modelId
+        );
+        if (toolDefs.length === 0) {
+            return this.callOpenRouter(config, systemPrompt, userContent);
+        }
+
+        if (!config.apiKey) {
+            throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
+        }
+
+        const messages: any[] = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userContent },
+        ];
+
+        for (let i = 0; i < maxIterations; i++) {
+            const response = await axios.post(
+                'https://openrouter.ai/api/v1/chat/completions',
+                {
+                    model: config.modelId || 'anthropic/claude-sonnet-4',
+                    messages,
+                    tools: toolDefs,
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${config.apiKey}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': 'http://localhost:3000',
+                        'X-Title': 'LinkedIn Post Scheduler',
+                    },
+                }
+            );
+
+            const message = response.data.choices[0].message;
+
+            // If no tool calls, return the text
+            if (!message.tool_calls || message.tool_calls.length === 0) {
+                return message.content?.trim() || '';
+            }
+
+            // Execute tool calls and add results
+            messages.push(message);
+            for (const toolCall of message.tool_calls) {
+                try {
+                    const args = JSON.parse(toolCall.function.arguments);
+                    const result = await mcpManager.executeToolCall(cacheKey, toolCall.function.name, args);
+                    messages.push({
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: typeof result === 'string' ? result : JSON.stringify(result),
+                    });
+                } catch (error: any) {
+                    console.error(`[AIService] MCP tool call failed (${toolCall.function.name}):`, error.message);
+                    messages.push({
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: `Error: ${error.message}`,
+                    });
+                }
+            }
+        }
+
+        // Max iterations reached, return last assistant message
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+        return lastAssistant?.content?.trim() || '';
     }
 
     private static async getTopPerformingPosts(tenantId: string, authorUrn?: string | null, limit: number = 3): Promise<string[]> {
@@ -178,7 +279,7 @@ Return ONLY the refined LinkedIn post, formatted and ready to publish. No explan
 
         console.log(`[AIService] Improving LinkedIn post:\n\n${content}`);
 
-        return this.callOpenRouter(config, SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`);
+        return this.callOpenRouterWithTools(config, SYSTEM_PROMPT, `Improve this LinkedIn post:\n\n${content}`, tenantId);
     }
 
     static async generate(
@@ -359,7 +460,7 @@ Return a JSON object with the following structure:
         console.log("[AIService] SYSTEM_PROMPT:", SYSTEM_PROMPT);
         console.log("[AIService] Prompt:", prompt);
 
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, prompt);
+        const response = await this.callOpenRouterWithTools(config, SYSTEM_PROMPT, prompt, tenantId);
 
         try {
             const parsed = this.extractAndParseJson(response);
@@ -611,7 +712,7 @@ Return a JSON object:
 CRITICAL: Return ONLY valid JSON. No markdown blocks.`;
 
         console.log('[AIService] Generating idea batch, count:', count);
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate ${count} content ideas now.`);
+        const response = await this.callOpenRouterWithTools(config, SYSTEM_PROMPT, `Generate ${count} content ideas now.`, tenantId);
 
         try {
             const parsed = this.extractAndParseJson(response);
@@ -1013,7 +1114,7 @@ Return a JSON object:
         }
 
         // When Tavily provides results, skip OpenRouter's web plugin to avoid redundant/stale search
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userPrompt, !useTavilyResults);
+        const response = await this.callOpenRouterWithTools(config, SYSTEM_PROMPT, userPrompt, tenantId);
 
         try {
             const parsed = this.extractAndParseJson(response);

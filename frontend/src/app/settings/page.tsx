@@ -19,9 +19,24 @@ import {
     Copy,
     Building2,
     Search,
+    Plus,
+    Trash2,
+    Globe,
+    ChevronDown,
+    ChevronUp,
+    CheckCircle2,
+    Loader2,
 } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
+
+interface MCPServer {
+    name: string;
+    url: string;
+    headers: Record<string, string>;
+    enabled: boolean;
+    description: string;
+}
 
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
@@ -58,7 +73,11 @@ export default function SettingsPage() {
         expertiseAreas: "",
         contentPillars: "",
         tavilyApiKey: "",
+        mcpServers: [] as MCPServer[],
     });
+
+    const [mcpTestResults, setMcpTestResults] = useState<Record<number, { loading: boolean; success?: boolean; tools?: string[]; error?: string }>>({});
+    const [expandedHeaders, setExpandedHeaders] = useState<Record<number, boolean>>({});
 
     useEffect(() => {
         fetchSettings();
@@ -92,6 +111,7 @@ export default function SettingsPage() {
                 expertiseAreas: res.data.expertiseAreas ? JSON.parse(res.data.expertiseAreas).join(', ') : "",
                 contentPillars: res.data.contentPillars ? JSON.parse(res.data.contentPillars).join(', ') : "",
                 tavilyApiKey: res.data.tavilyApiKey || "",
+                mcpServers: res.data.mcpServers ? JSON.parse(res.data.mcpServers) : [],
             });
             setConfig({
                 isLinkedinConfigured: res.data.isLinkedinConfigured || false,
@@ -127,6 +147,7 @@ export default function SettingsPage() {
                 contentPillars: formData.contentPillars
                     ? formData.contentPillars.split(',').map((s: string) => s.trim()).filter(Boolean)
                     : [],
+                mcpServers: formData.mcpServers,
             };
             await api.post("/settings", payload);
             toast.success("Settings saved successfully");
@@ -165,6 +186,70 @@ export default function SettingsPage() {
             toast.error("Failed to scan organizations");
         } finally {
             setLoading(false);
+        }
+    };
+
+    // MCP Server management
+    const addMCPServer = () => {
+        setFormData({
+            ...formData,
+            mcpServers: [
+                ...formData.mcpServers,
+                { name: "", url: "", headers: {}, enabled: true, description: "" },
+            ],
+        });
+    };
+
+    const removeMCPServer = (index: number) => {
+        const updated = formData.mcpServers.filter((_: MCPServer, i: number) => i !== index);
+        setFormData({ ...formData, mcpServers: updated });
+        // Clean up test results and expanded state
+        const newResults = { ...mcpTestResults };
+        delete newResults[index];
+        setMcpTestResults(newResults);
+        const newExpanded = { ...expandedHeaders };
+        delete newExpanded[index];
+        setExpandedHeaders(newExpanded);
+    };
+
+    const updateMCPServer = (index: number, field: keyof MCPServer, value: any) => {
+        const updated = [...formData.mcpServers];
+        updated[index] = { ...updated[index], [field]: value };
+        setFormData({ ...formData, mcpServers: updated });
+    };
+
+    const updateMCPServerHeader = (index: number, key: string, value: string) => {
+        const updated = [...formData.mcpServers];
+        updated[index] = { ...updated[index], headers: { ...updated[index].headers, [key]: value } };
+        setFormData({ ...formData, mcpServers: updated });
+    };
+
+    const testMCPConnection = async (index: number) => {
+        const server = formData.mcpServers[index];
+        if (!server?.url) {
+            toast.error("Please enter a server URL first");
+            return;
+        }
+
+        setMcpTestResults({ ...mcpTestResults, [index]: { loading: true } });
+
+        try {
+            const res = await api.post("/settings/mcp/test", {
+                url: server.url,
+                headers: server.headers,
+            });
+            setMcpTestResults({
+                ...mcpTestResults,
+                [index]: { loading: false, success: true, tools: res.data.tools },
+            });
+            toast.success(`Connected! Found ${res.data.tools.length} tool(s)`);
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.error || "Connection failed";
+            setMcpTestResults({
+                ...mcpTestResults,
+                [index]: { loading: false, success: false, error: errorMsg },
+            });
+            toast.error(errorMsg);
         }
     };
 
@@ -384,6 +469,174 @@ export default function SettingsPage() {
                                     </p>
                                 </div>
                             </div>
+                        </div>
+
+                        <div className="h-px bg-slate-100" />
+
+                        {/* MCP Servers */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Globe className="h-4 w-4 text-slate-400" />
+                                    <Label className="text-sm font-semibold">External Data Sources (MCP)</Label>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={addMCPServer}
+                                    className="gap-1"
+                                >
+                                    <Plus className="h-3 w-3" />
+                                    Add Server
+                                </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Connect external data sources (CRM, analytics, wikis) via MCP servers so the AI can use richer context during content creation.
+                            </p>
+
+                            {formData.mcpServers.length === 0 ? (
+                                <div className="p-6 border border-dashed rounded-xl text-center text-sm text-muted-foreground">
+                                    No MCP servers configured. Click "Add Server" to connect an external data source.
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {formData.mcpServers.map((server: MCPServer, index: number) => (
+                                        <div key={index} className="p-4 border rounded-xl bg-slate-50/50 space-y-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => updateMCPServer(index, 'enabled', !server.enabled)}
+                                                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${server.enabled ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                                                    >
+                                                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${server.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                                                    </button>
+                                                    <span className={`text-xs font-medium ${server.enabled ? 'text-slate-700' : 'text-slate-400'}`}>
+                                                        {server.name || 'Unnamed server'}
+                                                    </span>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeMCPServer(index)}
+                                                    className="text-red-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">Server Name</Label>
+                                                    <Input
+                                                        value={server.name}
+                                                        onChange={(e) => updateMCPServer(index, 'name', e.target.value)}
+                                                        placeholder="My CRM"
+                                                        className="bg-white h-9 text-sm"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <Label className="text-xs">Server URL</Label>
+                                                    <Input
+                                                        value={server.url}
+                                                        onChange={(e) => updateMCPServer(index, 'url', e.target.value)}
+                                                        placeholder="https://mcp.example.com/sse"
+                                                        className="bg-white h-9 text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Description - when to use this server */}
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">When to use (helps AI pick the right server)</Label>
+                                                <Input
+                                                    value={server.description || ''}
+                                                    onChange={(e) => updateMCPServer(index, 'description', e.target.value)}
+                                                    placeholder="e.g., Web search for current news, statistics, and fact-checking"
+                                                    className="bg-white h-9 text-sm"
+                                                />
+                                            </div>
+
+                                            {/* Collapsible Auth Headers */}
+                                            <div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedHeaders({ ...expandedHeaders, [index]: !expandedHeaders[index] })}
+                                                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+                                                >
+                                                    {expandedHeaders[index] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                                    Auth Headers (optional)
+                                                </button>
+                                                {expandedHeaders[index] && (
+                                                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs">Header Name</Label>
+                                                            <Input
+                                                                value={Object.keys(server.headers || {})[0] || ''}
+                                                                onChange={(e) => {
+                                                                    const oldKey = Object.keys(server.headers || {})[0] || '';
+                                                                    const oldValue = server.headers?.[oldKey] || '';
+                                                                    const newHeaders: Record<string, string> = {};
+                                                                    if (e.target.value) newHeaders[e.target.value] = oldValue;
+                                                                    updateMCPServer(index, 'headers', newHeaders);
+                                                                }}
+                                                                placeholder="Authorization"
+                                                                className="bg-white h-9 text-sm"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs">Header Value</Label>
+                                                            <Input
+                                                                type="password"
+                                                                value={Object.values(server.headers || {})[0] || ''}
+                                                                onChange={(e) => {
+                                                                    const key = Object.keys(server.headers || {})[0] || 'Authorization';
+                                                                    updateMCPServerHeader(index, key, e.target.value);
+                                                                }}
+                                                                placeholder="Bearer xxx..."
+                                                                className="bg-white h-9 text-sm"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Test Connection */}
+                                            <div className="flex items-center gap-3">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => testMCPConnection(index)}
+                                                    disabled={mcpTestResults[index]?.loading || !server.url}
+                                                    className="gap-1 text-xs"
+                                                >
+                                                    {mcpTestResults[index]?.loading ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                        <RefreshCw className="h-3 w-3" />
+                                                    )}
+                                                    Test Connection
+                                                </Button>
+                                                {mcpTestResults[index]?.success && (
+                                                    <span className="flex items-center gap-1 text-xs text-green-600">
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                        {mcpTestResults[index].tools?.length} tool(s) available
+                                                    </span>
+                                                )}
+                                                {mcpTestResults[index]?.success === false && (
+                                                    <span className="flex items-center gap-1 text-xs text-red-500">
+                                                        <AlertCircle className="h-3 w-3" />
+                                                        {mcpTestResults[index].error || 'Connection failed'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

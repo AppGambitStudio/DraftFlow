@@ -2,6 +2,8 @@ import express, { Response } from 'express';
 import { Settings } from '../db';
 import axios from 'axios';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
+import { getMCPManager } from '../services/mcpManager';
+import { getMastraAgentService } from '../services/mastraAgent';
 
 const router = express.Router();
 
@@ -52,7 +54,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         openRouterApiKey, openRouterModelId, targetAudiences, maxHistoryItems,
         globalTone, accountTones, aiPersona,
         companyName, companyDescription, industry, expertiseAreas, contentPillars,
-        tavilyApiKey
+        tavilyApiKey, mcpServers
     } = req.body;
     console.log('Received settings update for tenant:', tenantId);
 
@@ -75,6 +77,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
                 expertiseAreas: expertiseAreas ? JSON.stringify(expertiseAreas) : '[]',
                 contentPillars: contentPillars ? JSON.stringify(contentPillars) : '[]',
                 tavilyApiKey: tavilyApiKey || null,
+                mcpServers: mcpServers ? JSON.stringify(mcpServers) : '[]',
             },
         });
 
@@ -92,12 +95,42 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             expertiseAreas: expertiseAreas !== undefined ? JSON.stringify(expertiseAreas) : setting.expertiseAreas,
             contentPillars: contentPillars !== undefined ? JSON.stringify(contentPillars) : setting.contentPillars,
             tavilyApiKey: tavilyApiKey !== undefined ? (tavilyApiKey || null) : setting.tavilyApiKey,
+            mcpServers: mcpServers !== undefined ? JSON.stringify(mcpServers) : setting.mcpServers,
         });
+
+        // Invalidate MCP and agent caches when mcpServers change
+        if (mcpServers !== undefined) {
+            const mcpManager = getMCPManager();
+            await mcpManager.disconnectAll(tenantId);
+            getMastraAgentService().clearCache(tenantId);
+        }
 
         res.json(setting);
     } catch (error: any) {
         console.log(error);
         res.status(500).json({ error: 'Failed to save settings, ' + error?.toString() });
+    }
+});
+
+// Test MCP server connection
+router.post('/mcp/test', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const { url, headers } = req.body;
+
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+
+    try {
+        const mcpManager = getMCPManager();
+        const result = await mcpManager.testConnection(url, headers);
+        if (result.success) {
+            res.json({ success: true, tools: result.tools });
+        } else {
+            res.status(400).json({ success: false, error: 'Failed to connect to MCP server', tools: [] });
+        }
+    } catch (error: any) {
+        console.error('[MCP Test] Error:', error.message);
+        res.status(500).json({ success: false, error: error.message, tools: [] });
     }
 });
 

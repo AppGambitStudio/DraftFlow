@@ -194,6 +194,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare expertiseAreas: string | null; // JSON string array
     declare contentPillars: string | null; // JSON string array
     declare tavilyApiKey: string | null;
+    declare mcpServers: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -279,6 +280,11 @@ Settings.init({
     tavilyApiKey: {
         type: DataTypes.TEXT,
         allowNull: true,
+    },
+    mcpServers: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        defaultValue: '[]',
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,

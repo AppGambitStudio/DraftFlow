@@ -6,6 +6,7 @@ import { AIService } from './ai';
 import { Settings, Idea, SavedTrend, Post, CaseStudy } from '../db';
 import { Op } from 'sequelize';
 import axios from 'axios';
+import { getMCPManager, MCPServerConfig } from './mcpManager';
 
 // Helper to create OpenRouter provider with tenant's API key
 function createOpenRouterForTenant(apiKey: string) {
@@ -1393,8 +1394,18 @@ export const contentCreatorTools = {
  * @param apiKey - The OpenRouter API key from tenant settings
  * @param modelId - The model identifier (e.g., 'anthropic/claude-sonnet-4')
  */
-export function createContentCreatorAgent(apiKey: string, modelId: string = 'anthropic/claude-sonnet-4') {
+export function createContentCreatorAgent(
+    apiKey: string,
+    modelId: string = 'anthropic/claude-sonnet-4',
+    mcpTools: Record<string, ReturnType<typeof createTool>> = {}
+) {
     const openrouter = createOpenRouterForTenant(apiKey);
+
+    // Build dynamic MCP tools section for agent instructions
+    const mcpToolNames = Object.keys(mcpTools);
+    const mcpInstructions = mcpToolNames.length > 0
+        ? `\n\n## EXTERNAL DATA SOURCES (MCP)\n\nYou have access to ${mcpToolNames.length} external tool(s) from connected data sources. These tools are prefixed with "mcp_" and can provide richer context from CRMs, analytics, wikis, and other systems. Use them when they are relevant to the content you're creating.\n\nAvailable MCP tools: ${mcpToolNames.join(', ')}\n`
+        : '';
 
     return new Agent({
         id: 'content-creator-agent',
@@ -1529,9 +1540,9 @@ Return JSON:
 - LinkedIn: max 2800 chars
 - Twitter/X: max 270 chars
 - For TYPE 1 tasks (user provided topic): Write about THAT topic exactly
-- For TYPE 2 tasks (select from sources): Pick something DIFFERENT from recent posts`,
+- For TYPE 2 tasks (select from sources): Pick something DIFFERENT from recent posts` + mcpInstructions,
         model: openrouter(modelId),
-        tools: contentCreatorTools
+        tools: { ...contentCreatorTools, ...mcpTools }
     });
 }
 
@@ -1565,13 +1576,23 @@ export class MastraAgentService {
     /**
      * Get or create an agent for a specific tenant
      */
-    private async getAgentForTenant(tenantId: string): Promise<ReturnType<typeof createContentCreatorAgent>> {
-        // Check cache first
+    private async getAgentForTenant(tenantId: string, mcpTools?: Record<string, ReturnType<typeof createTool>>): Promise<ReturnType<typeof createContentCreatorAgent>> {
+        // If MCP tools are provided, create a fresh agent (not cached — tools vary per request)
+        if (mcpTools && Object.keys(mcpTools).length > 0) {
+            const settings = await Settings.findOne({ where: { tenantId } });
+            if (!settings?.openRouterApiKey) {
+                throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
+            }
+            const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
+            console.log(`[MastraAgent] Creating agent with ${Object.keys(mcpTools).length} MCP tools for this request`);
+            return createContentCreatorAgent(settings.openRouterApiKey, modelId, mcpTools);
+        }
+
+        // No MCP tools — use cached base agent
         if (this.agentCache.has(tenantId)) {
             return this.agentCache.get(tenantId)!;
         }
 
-        // Fetch tenant settings to get API key
         const settings = await Settings.findOne({ where: { tenantId } });
         if (!settings?.openRouterApiKey) {
             throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
@@ -1580,7 +1601,6 @@ export class MastraAgentService {
         const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
         const agent = createContentCreatorAgent(settings.openRouterApiKey, modelId);
 
-        // Cache the agent
         this.agentCache.set(tenantId, agent);
         return agent;
     }
@@ -1591,7 +1611,27 @@ export class MastraAgentService {
     async chat(input: AgentDraftInput): Promise<AgentDraftOutput> {
         const { tenantId, userMessage, conversationHistory = [], authorUrn } = input;
 
-        const agent = await this.getAgentForTenant(tenantId);
+        // Select relevant MCP servers based on the user message
+        let mcpTools: Record<string, ReturnType<typeof createTool>> = {};
+        try {
+            const settings = await Settings.findOne({ where: { tenantId } });
+            const mcpServers: MCPServerConfig[] = JSON.parse(settings?.mcpServers || '[]');
+            const enabledServers = mcpServers.filter(s => s.enabled);
+            if (enabledServers.length > 0 && settings?.openRouterApiKey) {
+                const mcpManager = getMCPManager();
+                const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
+                mcpTools = await mcpManager.getToolsForContext(
+                    tenantId, enabledServers, userMessage, settings.openRouterApiKey, modelId
+                );
+                if (Object.keys(mcpTools).length > 0) {
+                    console.log(`[MastraAgent] Selected MCP tools for this request: ${Object.keys(mcpTools).join(', ')}`);
+                }
+            }
+        } catch (error: any) {
+            console.error(`[MastraAgent] MCP server selection failed:`, error.message);
+        }
+
+        const agent = await this.getAgentForTenant(tenantId, mcpTools);
 
         // Build messages array with context
         const contextMessage = `[Context: tenantId=${tenantId}${authorUrn ? `, authorUrn=${authorUrn}` : ''}]`;
