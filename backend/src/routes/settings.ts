@@ -51,7 +51,8 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const {
         openRouterApiKey, openRouterModelId, targetAudiences, maxHistoryItems,
         globalTone, accountTones, aiPersona,
-        companyName, companyDescription, industry, expertiseAreas, contentPillars
+        companyName, companyDescription, industry, expertiseAreas, contentPillars,
+        tavilyApiKey
     } = req.body;
     console.log('Received settings update for tenant:', tenantId);
 
@@ -73,6 +74,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
                 industry: industry || null,
                 expertiseAreas: expertiseAreas ? JSON.stringify(expertiseAreas) : '[]',
                 contentPillars: contentPillars ? JSON.stringify(contentPillars) : '[]',
+                tavilyApiKey: tavilyApiKey || null,
             },
         });
 
@@ -89,6 +91,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             industry: industry !== undefined ? industry : setting.industry,
             expertiseAreas: expertiseAreas !== undefined ? JSON.stringify(expertiseAreas) : setting.expertiseAreas,
             contentPillars: contentPillars !== undefined ? JSON.stringify(contentPillars) : setting.contentPillars,
+            tavilyApiKey: tavilyApiKey !== undefined ? (tavilyApiKey || null) : setting.tavilyApiKey,
         });
 
         res.json(setting);

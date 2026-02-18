@@ -36,22 +36,26 @@ export class AIService {
         };
     }
 
-    private static async callOpenRouter(config: AIContext, systemPrompt: string, userContent: string): Promise<string> {
+    private static async callOpenRouter(config: AIContext, systemPrompt: string, userContent: string, useWebPlugin: boolean = true): Promise<string> {
         if (!config.apiKey) {
             throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
         }
 
         try {
+            const body: any = {
+                model: config.modelId || 'anthropic/claude-sonnet-4.5',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userContent }
+                ]
+            };
+            if (useWebPlugin) {
+                body.plugins = [{ id: 'web' }];
+            }
+
             const response = await axios.post(
                 'https://openrouter.ai/api/v1/chat/completions',
-                {
-                    model: config.modelId || 'anthropic/claude-sonnet-4.5',
-                    "plugins": [{ "id": "web" }],
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userContent }
-                    ]
-                },
+                body,
                 {
                     headers: {
                         'Authorization': `Bearer ${config.apiKey}`,
@@ -856,6 +860,40 @@ Return a JSON object:
         }
     }
 
+    static async searchWithTavily(
+        tavilyApiKey: string,
+        query: string,
+        options: { topic?: string; timeRange?: string; maxResults?: number } = {}
+    ): Promise<Array<{ title: string; url: string; content: string; score: number }>> {
+        const { topic = 'news', timeRange = 'day', maxResults = 5 } = options;
+
+        try {
+            const response = await axios.post(
+                'https://api.tavily.com/search',
+                {
+                    query,
+                    topic,
+                    time_range: timeRange,
+                    max_results: maxResults,
+                    search_depth: 'basic',
+                    include_answer: true,
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${tavilyApiKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            console.log(`[AIService] Tavily search for "${query}" returned ${response.data.results?.length || 0} results`);
+            return response.data.results || [];
+        } catch (error: any) {
+            console.error('[AIService] Tavily search error:', error.response?.data || error.message);
+            return [];
+        }
+    }
+
     static async getTrendingTopics(
         tenantId: string,
         params: {
@@ -866,6 +904,8 @@ Return a JSON object:
         }
     ): Promise<Array<{ topic: string; description: string; relevance: string; suggestedAngles: string[]; sources: string[]; trendType: string }>> {
         const config = await this.getUnifiedConfig(tenantId);
+        const settings = await Settings.findOne({ where: { tenantId } });
+        const tavilyApiKey = settings?.tavilyApiKey;
         const { industry, contentPillars, targetAudience, count = 5 } = params;
 
         // Include current date for accurate trending topics
@@ -876,13 +916,41 @@ Return a JSON object:
             day: 'numeric'
         });
 
+        // If Tavily is configured, use two-step flow: search first, then analyze
+        let tavilyContext = '';
+        if (tavilyApiKey) {
+            console.log('[AIService] Using Tavily for fresh web search results');
+            const searchQuery = industry
+                ? `latest trending news and developments in ${industry}`
+                : 'latest trending technology business news today';
+
+            const results = await this.searchWithTavily(tavilyApiKey, searchQuery, {
+                topic: 'news',
+                timeRange: 'day',
+                maxResults: 10,
+            });
+
+            if (results.length > 0) {
+                tavilyContext = `\n\n**REAL-TIME SEARCH RESULTS (fetched just now via web search):**\nUse these fresh search results as your PRIMARY source for identifying trends. These are verified, real-time results:\n\n`;
+                results.forEach((r, i) => {
+                    tavilyContext += `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   ${r.content}\n\n`;
+                });
+                tavilyContext += `\nAnalyze these search results to identify the most significant trending topics. You MUST use the actual URLs from the search results above as sources. Do NOT fabricate URLs.`;
+            }
+        }
+
+        const useTavilyResults = !!tavilyContext;
+
         let SYSTEM_PROMPT = `You are a social media trend analyst with expertise in identifying trending topics and conversations relevant to professional content creation.
 
 **TODAY'S DATE:** ${currentDate}
 
 Your task is to identify ${count} current trending topics that would be relevant for LinkedIn/Twitter content creation.
 
-**IMPORTANT:** You have access to web search. Use it to find CURRENT trending topics, news, and discussions from the past 7 days (as of ${currentDate}). Search for recent news and trends.`;
+${useTavilyResults
+    ? `**IMPORTANT:** You have been provided with real-time web search results below. Analyze them to identify trending topics. Use the actual source URLs provided in the results.`
+    : `**IMPORTANT:** You have access to web search. Use it to find CURRENT trending topics, news, and discussions from the past 7 days (as of ${currentDate}). Search for recent news and trends.`
+}`;
 
         if (industry) {
             SYSTEM_PROMPT += `\n\n**INDUSTRY FOCUS:** ${industry}\nPrioritize trends relevant to this industry.`;
@@ -936,11 +1004,16 @@ Return a JSON object:
 - **DO NOT** use single quotes for keys or string values. Use double quotes only.
 - **DO NOT** leave trailing commas.`;
 
-        console.log('[AIService] Fetching trending topics');
+        console.log(`[AIService] Fetching trending topics${useTavilyResults ? ' (with Tavily search results)' : ' (via OpenRouter web plugin)'}`);
 
-        const userPrompt = `Search for and identify ${count} trending topics${industry ? ` in the ${industry} industry` : ''} that would make great professional content. Focus on what's happening as of ${currentDate} - search for news and discussions from the past 7 days. Include source URLs for each trend.`;
+        let userPrompt = `Search for and identify ${count} trending topics${industry ? ` in the ${industry} industry` : ''} that would make great professional content. Focus on what's happening as of ${currentDate} - search for news and discussions from the past 7 days. Include source URLs for each trend.`;
 
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userPrompt);
+        if (tavilyContext) {
+            userPrompt += tavilyContext;
+        }
+
+        // When Tavily provides results, skip OpenRouter's web plugin to avoid redundant/stale search
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userPrompt, !useTavilyResults);
 
         try {
             const parsed = this.extractAndParseJson(response);

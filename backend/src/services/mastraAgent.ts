@@ -699,14 +699,45 @@ export const webSearchTool = createTool({
     execute: async (inputData) => {
         const { tenantId, query, purpose } = inputData;
 
-        // Get API key for web search (using OpenRouter with web plugin)
         const settings = await Settings.findOne({ where: { tenantId } });
         if (!settings?.openRouterApiKey) {
             throw new Error('OpenRouter API Key not configured');
         }
 
         try {
-            // Use OpenRouter with web search enabled
+            // Use Tavily if configured for fresher, more accurate results
+            if (settings.tavilyApiKey) {
+                console.log(`[webSearchTool] Using Tavily for query: "${query}"`);
+                const tavilyResponse = await axios.post(
+                    'https://api.tavily.com/search',
+                    {
+                        query,
+                        topic: purpose === 'recent-news' ? 'news' : 'general',
+                        time_range: purpose === 'recent-news' ? 'day' : 'week',
+                        max_results: 5,
+                        search_depth: 'basic',
+                        include_answer: true,
+                    },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${settings.tavilyApiKey}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                const tavilyResults = tavilyResponse.data.results || [];
+                return {
+                    results: tavilyResults.map((r: any) => ({
+                        title: r.title || '',
+                        snippet: r.content || '',
+                        url: r.url || ''
+                    })),
+                    summary: tavilyResponse.data.answer || tavilyResults.map((r: any) => r.content).join(' ').substring(0, 500)
+                };
+            }
+
+            // Fallback: Use OpenRouter with web search plugin
             const response = await axios.post(
                 'https://openrouter.ai/api/v1/chat/completions',
                 {

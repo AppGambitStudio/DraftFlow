@@ -18,6 +18,7 @@ import {
     AlertCircle,
     Copy,
     Building2,
+    Search,
 } from "lucide-react";
 
 import { ConfirmationDialog } from "@/components/ConfirmationDialog";
@@ -56,6 +57,7 @@ export default function SettingsPage() {
         companyDescription: "",
         expertiseAreas: "",
         contentPillars: "",
+        tavilyApiKey: "",
     });
 
     useEffect(() => {
@@ -89,6 +91,7 @@ export default function SettingsPage() {
                 companyDescription: res.data.companyDescription || "",
                 expertiseAreas: res.data.expertiseAreas ? JSON.parse(res.data.expertiseAreas).join(', ') : "",
                 contentPillars: res.data.contentPillars ? JSON.parse(res.data.contentPillars).join(', ') : "",
+                tavilyApiKey: res.data.tavilyApiKey || "",
             });
             setConfig({
                 isLinkedinConfigured: res.data.isLinkedinConfigured || false,
@@ -353,6 +356,33 @@ export default function SettingsPage() {
                                 <p className="text-xs text-muted-foreground">
                                     Recommended: <code>anthropic/claude-3.5-sonnet</code>
                                 </p>
+                            </div>
+                        </div>
+
+                        <div className="h-px bg-slate-100" />
+
+                        {/* Web Search API */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Search className="h-4 w-4 text-slate-400" />
+                                <Label className="text-sm font-semibold">Web Search API (Optional)</Label>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="tavilyApiKey">Tavily API Key</Label>
+                                    <Input
+                                        id="tavilyApiKey"
+                                        name="tavilyApiKey"
+                                        type="password"
+                                        value={formData.tavilyApiKey}
+                                        onChange={handleChange}
+                                        placeholder="tvly-..."
+                                        className="bg-slate-50/30"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Provides more accurate and fresher search results for trend discovery. Get your key from <a href="https://tavily.com" target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">tavily.com</a>
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </CardContent>

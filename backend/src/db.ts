@@ -193,6 +193,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare companyDescription: string | null;
     declare expertiseAreas: string | null; // JSON string array
     declare contentPillars: string | null; // JSON string array
+    declare tavilyApiKey: string | null;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -274,6 +275,10 @@ Settings.init({
         type: DataTypes.TEXT,
         allowNull: true,
         defaultValue: '[]',
+    },
+    tavilyApiKey: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
