@@ -3,10 +3,11 @@ import { createTool } from '@mastra/core/tools';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod';
 import { AIService } from './ai';
-import { Settings, Idea, SavedTrend, Post, CaseStudy } from '../db';
+import { Settings, Idea, SavedTrend, Post, CaseStudy, sequelize } from '../db';
 import { Op } from 'sequelize';
 import axios from 'axios';
 import { getMCPManager, MCPServerConfig } from './mcpManager';
+import * as cheerio from 'cheerio';
 
 // Helper to create OpenRouter provider with tenant's API key
 function createOpenRouterForTenant(apiKey: string) {
@@ -365,6 +366,72 @@ export const getUserContextTool = createTool({
             globalTone: settings.globalTone,
             aiPersona: settings.aiPersona
         };
+    }
+});
+
+/**
+ * Tool: Get saved user preferences (Episodic Memory)
+ */
+export const getUserPreferencesTool = createTool({
+    id: 'get-user-preferences',
+    description: 'Retrieves explicitly saved rules, formatting preferences, and instructions for the user (e.g., "Do not use emojis", "Always use short sentences"). ALWAYS check these before generating content.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID for the user')
+    }),
+    outputSchema: z.object({
+        preferences: z.array(z.string()).describe('List of stylistic rules and preferences')
+    }),
+    execute: async (inputData) => {
+        const { tenantId } = inputData;
+        const settings = await Settings.findOne({ where: { tenantId } });
+        try {
+            return {
+                preferences: settings?.userPreferences ? JSON.parse(settings.userPreferences) : []
+            };
+        } catch (e) {
+            return { preferences: [] };
+        }
+    }
+});
+
+/**
+ * Tool: Save user preference (Episodic Memory)
+ */
+export const saveUserPreferenceTool = createTool({
+    id: 'save-user-preference',
+    description: 'Saves a new stylistic rule, preference, or instruction based on user feedback (e.g., if the user says "Stop writing like that", save a rule so you do not do it again).',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID for the user'),
+        preference: z.string().describe('The rule or preference to save (e.g., "Never use the word \'synergy\'")')
+    }),
+    outputSchema: z.object({
+        success: z.boolean(),
+        preferences: z.array(z.string()).describe('The updated list of preferences')
+    }),
+    execute: async (inputData) => {
+        const { tenantId, preference } = inputData;
+        let settings = await Settings.findOne({ where: { tenantId } });
+
+        if (!settings) {
+            // Create default settings if they don't exist yet
+            settings = await Settings.create({ tenantId, userPreferences: '[]' } as any);
+        }
+
+        let preferences: string[] = [];
+        try {
+            preferences = settings.userPreferences ? JSON.parse(settings.userPreferences) : [];
+        } catch (e) {
+            preferences = [];
+        }
+
+        // Avoid exact duplicates
+        if (!preferences.includes(preference)) {
+            preferences.push(preference);
+            settings.userPreferences = JSON.stringify(preferences);
+            await settings.save();
+        }
+
+        return { success: true, preferences };
     }
 });
 
@@ -1350,176 +1417,236 @@ Return ONLY this JSON:
     }
 });
 
+/**
+ * Tool: Read Webpage Content (Deep URL Analysis)
+ */
+export const readWebpageContentTool = createTool({
+    id: 'read-webpage-content',
+    description: 'Fetches and reads the full text content of a specific URL. Use this when the user provides a link to an article, documentation, or blog post and wants you to analyze or generate content based on it.',
+    inputSchema: z.object({
+        url: z.string().url().describe('The full URL to read')
+    }),
+    outputSchema: z.object({
+        title: z.string().describe('The title of the webpage'),
+        content: z.string().describe('The main text content extracted from the webpage'),
+        error: z.string().optional().describe('Any error encountered during fetching')
+    }),
+    execute: async (inputData) => {
+        const { url } = inputData;
+        try {
+            const response = await axios.get(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                timeout: 10000 // 10 seconds timeout
+            });
+
+            const html = response.data;
+            const $ = cheerio.load(html);
+
+            // Remove unwanted elements
+            $('script, style, noscript, nav, footer, header, aside, .footer, .header, .nav, .sidebar, iframe').remove();
+
+            const title = $('title').text().trim() || 'No Title Found';
+
+            // Try to find the main content article or fall back to body
+            let mainContent = $('article, main, .content, .post-content, .article-content').text();
+            if (!mainContent || mainContent.trim().length < 200) {
+                mainContent = $('body').text();
+            }
+
+            // Clean up whitespace
+            const cleanContent = mainContent
+                .replace(/\s+/g, ' ')
+                .replace(/\n+/g, '\n')
+                .trim();
+
+            // Truncate to avoid blowing up the context window (~25k chars is a safe limit)
+            const MAX_CHARS = 25000;
+            const truncatedContent = cleanContent.length > MAX_CHARS
+                ? cleanContent.substring(0, MAX_CHARS) + '\n\n[CONTENT TRUNCATED DUE TO LENGTH]'
+                : cleanContent;
+
+            return {
+                title,
+                content: truncatedContent
+            };
+        } catch (error: any) {
+            console.error(`[readWebpageContentTool] Error fetching ${url}:`, error.message);
+            return {
+                title: 'Error reading URL',
+                content: '',
+                error: `Failed to read webpage: ${error.message}`
+            };
+        }
+    }
+});
+
 // ============================================================================
 // All tools collection
 // ============================================================================
 
-export const contentCreatorTools = {
-    // Planning tools (Phase 1)
-    createPlanTool,
-    getUserContextTool,
-    getSavedTrendsTool,
-    getSavedIdeasTool,
-    getCaseStudiesTool,
-    getRecentPostsTool,
-    // Research tools (Phase 1-2)
-    webSearchTool,
-    // Generation tools (Phase 2 - Execution)
-    generatePostTool,
-    generateFromIdeaTool,
-    generateFromCaseStudyTool,
-    improvisePostTool,
-    generateHooksTool,
-    generateVariationsTool,
-    // Evaluation & refinement tools (Phase 3)
-    evaluatePostTool,
-    checkSimilarityTool,
-    alignWithBrandTool,
-    // Self-critique tools (Phase 4)
-    selfCritiqueTool,
-    // Enhancement tools
-    suggestHashtagsTool,
-    generateIdeasTool,
-    suggestPillarsTool,
-    getTrendingTopicsTool,
-    enhanceIdeaTool
+export const researcherTools = {
+    'get-user-context': getUserContextTool,
+    'get-user-preferences': getUserPreferencesTool,
+    'get-recent-posts': getRecentPostsTool,
+    'get-saved-trends': getSavedTrendsTool,
+    'get-saved-ideas': getSavedIdeasTool,
+    'get-case-studies': getCaseStudiesTool,
+    'web-search': webSearchTool,
+    'read-webpage-content': readWebpageContentTool
+};
+
+export const strategistTools = {
+    'create-plan': createPlanTool,
+    'generate-hooks': generateHooksTool,
+    'generate-ideas': generateIdeasTool,
+    'suggest-pillars': suggestPillarsTool
+};
+
+export const writerTools = {
+    'generate-post': generatePostTool,
+    'generate-from-idea': generateFromIdeaTool,
+    'generate-from-case-study': generateFromCaseStudyTool
+};
+
+export const editorTools = {
+    'evaluate-post': evaluatePostTool,
+    'check-similarity': checkSimilarityTool,
+    'align-with-brand': alignWithBrandTool,
+    'self-critique': selfCritiqueTool,
+    'improvise-post': improvisePostTool,
+    'suggest-hashtags': suggestHashtagsTool,
+    'save-user-preference': saveUserPreferenceTool
 };
 
 // ============================================================================
-// Content Creator Agent
+// Specialized Agents (Phase 4)
 // ============================================================================
 
-/**
- * Creates a Mastra agent configured for content creation tasks
- * @param apiKey - The OpenRouter API key from tenant settings
- * @param modelId - The model identifier (e.g., 'anthropic/claude-sonnet-4')
- */
-export function createContentCreatorAgent(
+export function createResearcherAgent(
     apiKey: string,
     modelId: string = 'anthropic/claude-sonnet-4',
     mcpTools: Record<string, ReturnType<typeof createTool>> = {}
 ) {
     const openrouter = createOpenRouterForTenant(apiKey);
-
-    // Build dynamic MCP tools section for agent instructions
     const mcpToolNames = Object.keys(mcpTools);
     const mcpInstructions = mcpToolNames.length > 0
-        ? `\n\n## EXTERNAL DATA SOURCES (MCP)\n\nYou have access to ${mcpToolNames.length} external tool(s) from connected data sources. These tools are prefixed with "mcp_" and can provide richer context from CRMs, analytics, wikis, and other systems. Use them when they are relevant to the content you're creating.\n\nAvailable MCP tools: ${mcpToolNames.join(', ')}\n`
+        ? `\n\n## EXTERNAL DATA SOURCES (MCP)\n\nYou have access to ${mcpToolNames.length} external tool(s). Available MCP tools: ${mcpToolNames.join(', ')}\n`
         : '';
 
     return new Agent({
-        id: 'content-creator-agent',
-        name: 'Content Strategist Agent',
-        instructions: `You are a GHOSTWRITER for busy professionals. You write in THEIR voice, as if THEY wrote it.
-
-## YOUR IDENTITY
-
-You are NOT an AI assistant sharing insights. You ARE the professional themselves - writing their thoughts, opinions, and experiences. Every post should sound like it came directly from a human expert who has strong opinions and real experience.
+        id: 'researcher-agent',
+        name: 'Research Agent',
+        instructions: `You are the Lead Researcher for a Ghostwriting agency. Your job is to gather and synthesize context.
 
 ## YOUR GOAL
+Gather all necessary facts, user preferences, past posts, and external data so the Strategy team can formulate a plan.
+Always call get-user-context and get-user-preferences first to understand who you are working for.
 
-Create a post that meets ALL these criteria:
-1. **Authenticity Score ≥ 7** - Sounds like a real human wrote it
-2. **Quality Score ≥ 7** - Valuable, well-structured, engaging
-3. **Unique** - Different from recent posts (not repetitive)
-4. **On-brand** - Matches the professional's voice and style
+## AVAILABLE TOOLS
+- \`get-user-context\` - Who are you ghostwriting for?
+- \`get-user-preferences\` - Have they given specific stylistic instructions?
+- \`get-recent-posts\` - What have they posted? Avoid repetition.
+- \`get-saved-trends\` - Current trends to potentially write about.
+- \`get-saved-ideas\` - Pre-saved content ideas.
+- \`get-case-studies\` - Client success stories to showcase.
+- \`web-search\` - Find current stats, facts, or fresh angles.
+- \`read-webpage-content\` - Extract article content from a specific URL.
 
-You have tools to help you achieve this. Use your judgment to decide WHICH tools you need and WHEN.
+Return a detailed markdown summary of all your findings so the next agent can use it.` + mcpInstructions,
+        model: openrouter(modelId),
+        tools: { ...researcherTools, ...mcpTools }
+    });
+}
 
-## AVAILABLE TOOLS (use as needed)
+export function createStrategistAgent(
+    apiKey: string,
+    modelId: string = 'anthropic/claude-sonnet-4'
+) {
+    const openrouter = createOpenRouterForTenant(apiKey);
+    return new Agent({
+        id: 'strategist-agent',
+        name: 'Strategist Agent',
+        instructions: `You are the Content Strategist for a Ghostwriting agency. Your job is to formulate a plan.
 
-**Understanding Context:**
-- \`get-user-context\` - Who are you ghostwriting for? Their company, tone, pillars
-- \`get-recent-posts\` - What have they posted? Avoid repetition
-- \`get-saved-trends\` - Current trends to potentially write about
-- \`get-saved-ideas\` - Pre-saved content ideas
-- \`get-case-studies\` - Client success stories to showcase
+## YOUR GOAL
+Given the context from the Researcher, determine the best angle, create an outline, and generate alternative hooks.
 
-**Planning & Research:**
+## AVAILABLE TOOLS
 - \`create-plan\` - Think through your angle before writing
-- \`web-search\` - Find current stats, facts, or fresh angles
+- \`generate-hooks\` - Alternative opening lines
+- \`generate-ideas\` - Brainstorm new post concepts
+- \`suggest-pillars\` - Ensure content fits strategy
 
-**Content Generation:**
-- \`generate-post\` - Create the post
+Return a structured strategy in markdown.`,
+        model: openrouter(modelId),
+        tools: strategistTools
+    });
+}
+
+export function createWriterAgent(
+    apiKey: string,
+    modelId: string = 'anthropic/claude-sonnet-4',
+    topPostsContext: string = ''
+) {
+    const openrouter = createOpenRouterForTenant(apiKey);
+    const voiceExamples = topPostsContext ? `\n\n## EXAMPLES OF MY VOICE\n\nHere are some of my best-performing past posts. You MUST analyze these examples for cadence, sentence length, hook structure, and formatting, and proactively replicate my style in your generated draft.\n\n${topPostsContext}\n` : '';
+
+    return new Agent({
+        id: 'writer-agent',
+        name: 'Writer Agent',
+        instructions: `You are a GHOSTWRITER for busy professionals. You write in THEIR voice, as if THEY wrote it.${voiceExamples}
+
+## YOUR GOAL
+Execute the Strategist's plan using the Researcher's context. 
+Write a first draft that embodies the human voice constraints:
+- "I was wrong about X for years."
+- Contractions (I'm, don't, can't)
+- Specific stories with details
+Avoid AI jargon ("In today's fast-paced world...", "Leverage").
+
+## AVAILABLE TOOLS
+- \`generate-post\` - Create the standard post
 - \`generate-from-idea\` - Generate from a saved idea
 - \`generate-from-case-study\` - Generate from a case study
-- \`improvise-post\` - Refine/improve existing content
 
-**Quality Checks:**
+Return the raw generated post text. Do not wrap in JSON.`,
+        model: openrouter(modelId),
+        tools: writerTools
+    });
+}
+
+export function createEditorAgent(
+    apiKey: string,
+    modelId: string = 'anthropic/claude-sonnet-4'
+) {
+    const openrouter = createOpenRouterForTenant(apiKey);
+    return new Agent({
+        id: 'editor-agent',
+        name: 'Editor Agent',
+        instructions: `You are the Chief Editor of a Ghostwriting agency.
+
+## YOUR GOAL
+Review the Writer's draft to ensure it meets our quality bar.
+
+## AVAILABLE TOOLS
 - \`evaluate-post\` - Score quality (aim for ≥ 7)
 - \`check-similarity\` - Is it too similar to recent posts?
 - \`align-with-brand\` - Does it match their voice?
 - \`self-critique\` - Detect AI phrases, jargon, authenticity issues
-
-**Enhancements:**
-- \`generate-hooks\` - Alternative opening lines
+- \`improvise-post\` - Refine/improve the draft based on feedback
 - \`suggest-hashtags\` - Relevant hashtags
+- \`save-user-preference\` - Save stylistic rules if the user complained
 
-## HOW TO THINK
-
-**Before writing, understand:**
-- Who is this person? What do they care about?
-- What have they already posted? (Don't repeat)
-- What angle would be FRESH and UNIQUE?
-
-**When generating:**
-- Would fresh data/stats make this stronger? → web-search
-- Is the topic complex? → create-plan first
-- Is this based on a trend/idea/case study? → use the appropriate tool
-
-**After generating, verify:**
-- Is quality score ≥ 7? If not → improvise and re-check
-- Is it too similar to recent posts? If yes → change the angle
-- Does it sound like AI wrote it? → self-critique to fix
-
-**Key decision points:**
-- If you're unsure about the angle → create-plan
-- If claims need backing → web-search
-- If first draft scores < 7 → improvise based on feedback
-- If authenticity feels off → self-critique
-
-## WHAT MAKES A POST SOUND HUMAN
-
-❌ AI-SOUNDING (the agent should fix these):
-- "In today's fast-paced world..."
-- "Let me share a valuable insight..."
-- "I'm excited to announce..."
-- "Leverage", "synergy", "game-changer"
-- Perfect grammar, no contractions
-- Hedging ("might", "could possibly")
-- Generic lists of tips
-
-✅ HUMAN-SOUNDING (what we want):
-- "I was wrong about X for years."
-- "Most advice about X is backwards."
-- "I've made this mistake 3 times."
-- Contractions (I'm, don't, can't)
-- Strong opinions, not hedging
-- Specific stories with details
-- ONE clear point, not a listicle
-
-## QUALITY GATES (must pass before returning)
-
-Before returning ANY post, ensure:
-1. You understand who you're writing for (called get-user-context)
-2. The post is different from recent content
-3. Quality score ≥ 7
-4. Authenticity score ≥ 7 (use self-critique if unsure)
-5. It sounds like the professional wrote it, not an AI
-
-## SELF-CORRECTION
-
-If something isn't working:
-- Low quality score → Read the feedback, use improvise-post, re-evaluate
-- Too similar to recent posts → Change the angle, not just the words
-- Sounds too AI-like → Run self-critique, use the revised version
-- Missing context → Call the appropriate tool to get it
-
-You may need multiple iterations. That's fine. Keep refining until quality gates pass.
+## INSTRUCTIONS
+1. Run \`evaluate-post\` to check quality.
+2. Run \`self-critique\` to find AI jargon or authenticity issues.
+3. Call \`improvise-post\` to fix ANY spotted issues.
+4. Call \`suggest-hashtags\` to finalize.
 
 ## OUTPUT FORMAT
-
-Return JSON:
+Return JSON EXACTLY matching this structure alongside any conversational response:
 {
   "posts": [
     {
@@ -1530,19 +1657,12 @@ Return JSON:
       "qualityScore": 8,
       "authenticityScore": 8,
       "basedOn": "source (trend/idea/topic)",
-      "toolsUsedAndWhy": ["tool: reason", ...]
+      "toolsUsedAndWhy": ["tool: reason"]
     }
   ]
-}
-
-## CONSTRAINTS
-
-- LinkedIn: max 2800 chars
-- Twitter/X: max 270 chars
-- For TYPE 1 tasks (user provided topic): Write about THAT topic exactly
-- For TYPE 2 tasks (select from sources): Pick something DIFFERENT from recent posts` + mcpInstructions,
+}`,
         model: openrouter(modelId),
-        tools: { ...contentCreatorTools, ...mcpTools }
+        tools: editorTools
     });
 }
 
@@ -1571,135 +1691,153 @@ export interface AgentDraftOutput {
 // ============================================================================
 
 export class MastraAgentService {
-    private agentCache: Map<string, ReturnType<typeof createContentCreatorAgent>> = new Map();
 
     /**
-     * Get or create an agent for a specific tenant
-     */
-    private async getAgentForTenant(tenantId: string, mcpTools?: Record<string, ReturnType<typeof createTool>>): Promise<ReturnType<typeof createContentCreatorAgent>> {
-        // If MCP tools are provided, create a fresh agent (not cached — tools vary per request)
-        if (mcpTools && Object.keys(mcpTools).length > 0) {
-            const settings = await Settings.findOne({ where: { tenantId } });
-            if (!settings?.openRouterApiKey) {
-                throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
-            }
-            const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
-            console.log(`[MastraAgent] Creating agent with ${Object.keys(mcpTools).length} MCP tools for this request`);
-            return createContentCreatorAgent(settings.openRouterApiKey, modelId, mcpTools);
-        }
-
-        // No MCP tools — use cached base agent
-        if (this.agentCache.has(tenantId)) {
-            return this.agentCache.get(tenantId)!;
-        }
-
-        const settings = await Settings.findOne({ where: { tenantId } });
-        if (!settings?.openRouterApiKey) {
-            throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
-        }
-
-        const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
-        const agent = createContentCreatorAgent(settings.openRouterApiKey, modelId);
-
-        this.agentCache.set(tenantId, agent);
-        return agent;
-    }
-
-    /**
-     * Process a user message through the agent
+     * Process a user message through the sequential multi-agent workflow
      */
     async chat(input: AgentDraftInput): Promise<AgentDraftOutput> {
         const { tenantId, userMessage, conversationHistory = [], authorUrn } = input;
 
-        // Select relevant MCP servers based on the user message
+        // 1. Setup Models and Top Posts Context
+        const settings = await Settings.findOne({ where: { tenantId } });
+        if (!settings?.openRouterApiKey) {
+            throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
+        }
+        const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
+        const apiKey = settings.openRouterApiKey;
+
+        const topPosts = await Post.findAll({
+            where: { tenantId, status: 'PUBLISHED' },
+            order: [[sequelize.literal('likesCount + commentsCount + repostsCount'), 'DESC']],
+            limit: 3,
+            attributes: ['content']
+        });
+        const topPostsContext = topPosts.map(p => p.content).join('\n---\n');
+
+        // 2. Select MCP Tools
         let mcpTools: Record<string, ReturnType<typeof createTool>> = {};
         try {
-            const settings = await Settings.findOne({ where: { tenantId } });
             const mcpServers: MCPServerConfig[] = JSON.parse(settings?.mcpServers || '[]');
             const enabledServers = mcpServers.filter(s => s.enabled);
-            if (enabledServers.length > 0 && settings?.openRouterApiKey) {
+            if (enabledServers.length > 0) {
                 const mcpManager = getMCPManager();
-                const modelId = settings.openRouterModelId || 'anthropic/claude-sonnet-4';
                 mcpTools = await mcpManager.getToolsForContext(
-                    tenantId, enabledServers, userMessage, settings.openRouterApiKey, modelId
+                    tenantId, enabledServers, userMessage, apiKey, modelId
                 );
-                if (Object.keys(mcpTools).length > 0) {
-                    console.log(`[MastraAgent] Selected MCP tools for this request: ${Object.keys(mcpTools).join(', ')}`);
-                }
             }
         } catch (error: any) {
             console.error(`[MastraAgent] MCP server selection failed:`, error.message);
         }
 
-        const agent = await this.getAgentForTenant(tenantId, mcpTools);
-
-        // Build messages array with context
         const contextMessage = `[Context: tenantId=${tenantId}${authorUrn ? `, authorUrn=${authorUrn}` : ''}]`;
+        const historyText = conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n\n');
 
-        // Use string format for messages - Mastra accepts string[] as MessageListInput
-        const prompt = [
-            ...conversationHistory.map(msg => `${msg.role}: ${msg.content}`),
-            `user: ${contextMessage}\n\n${userMessage}`
-        ].join('\n\n');
+        const allToolCalls: any[] = [];
+        const allToolResults: any[] = [];
 
-        console.log('[MastraAgent] Calling agent.generate with prompt length:', prompt.length);
-        console.log('[MastraAgent] Agent tools:', Object.keys((agent as any).tools || {}));
+        const onStepFinish = (step: any) => {
+            if (step.toolCalls?.length) allToolCalls.push(...step.toolCalls);
+            if (step.toolResults?.length) allToolResults.push(...step.toolResults);
+        };
 
-        // maxSteps > 1 enables tool calling iterations
-        // The agent will loop: generate -> tool call -> process result -> generate -> ...
-        const response = await agent.generate(prompt, {
-            maxSteps: 20,  // Allow up to 10 tool calling iterations
-            onStepFinish: (step: any) => {
-                console.log('[MastraAgent] Step finished:', step.stepType, step.toolCalls?.length || 0, 'tool calls');
+        // --- STAGE 1: RESEARCH ---
+        console.log('[MastraAgent] Stage 1: Researcher');
+        const researcher = createResearcherAgent(apiKey, modelId, mcpTools);
+        const researchPrompt = `${historyText}\n\nuser: ${contextMessage}\n${userMessage}\n\nGather all necessary context for this request.`;
+        const resResearch = await researcher.generate(researchPrompt, { maxSteps: 5, onStepFinish });
+        const researchContext = resResearch.text;
+
+        // --- STAGE 2: STRATEGY ---
+        console.log('[MastraAgent] Stage 2: Strategist');
+        const strategist = createStrategistAgent(apiKey, modelId);
+        const strategyPrompt = `${contextMessage}\n\nBased on the user request:\n${userMessage}\n\nAnd this research context:\n${researchContext}\n\nCreate a content strategy. Call create-plan using the tenantId exactly as provided in the context.`;
+        const resStrategy = await strategist.generate(strategyPrompt, { maxSteps: 5, onStepFinish });
+        const strategyContext = resStrategy.text;
+
+        // --- STAGE 3: WRITING ---
+        console.log('[MastraAgent] Stage 3: Writer');
+        const writer = createWriterAgent(apiKey, modelId, topPostsContext);
+        const writePrompt = `${contextMessage}\n\nRequest:\n${userMessage}\n\nResearch:\n${researchContext}\n\nStrategy:\n${strategyContext}\n\nWrite the post draft. If you call tools, use the exact tenantId provided in the context.`;
+        const resWriter = await writer.generate(writePrompt, { maxSteps: 5, onStepFinish });
+        const draftContext = resWriter.text;
+
+        // --- STAGE 4: EDITING ---
+        console.log('[MastraAgent] Stage 4: Editor');
+        const editor = createEditorAgent(apiKey, modelId);
+        const editPrompt = `${contextMessage}\n\nRequest:\n${userMessage}\n\nDraft:\n${draftContext}\n\nEvaluate and edit the draft ensuring Quality Score >= 7. Use the exact tenantId in tool calls.\n\nCRITICAL: YOUR FINAL RESPONSE MUST BE ONLY THE FINAL JSON OBJECT MATCHING THE OUTPUT FORMAT. NO CONVERSATIONAL TEXT.`;
+        const resEditor = await editor.generate(editPrompt, { maxSteps: 5, onStepFinish });
+        const finalJsonText = resEditor.text;
+
+        // Collect Tools
+        const toolsUsed = [...new Set(allToolCalls.map(tc => (tc as { toolName?: string }).toolName).filter(Boolean))] as string[];
+
+        // Extract generated content from tools if possible
+        let generatedContent = this.extractGeneratedContent(allToolResults);
+
+        // Fallback: Look for JSON in the Editor's response text
+        if (!generatedContent || generatedContent.type !== 'post') {
+            try {
+                const jsonMatch = finalJsonText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (parsed.posts && parsed.posts.length > 0) {
+                        generatedContent = { type: 'post', data: parsed.posts[0] };
+                    }
+                }
+            } catch (e) {
+                console.warn('[MastraAgent] Failed to parse Editor raw JSON', e);
             }
-        });
+        }
 
-        console.log('[MastraAgent] Response keys:', Object.keys(response));
-        console.log('[MastraAgent] toolCalls:', response.toolCalls?.length || 0);
-        console.log('[MastraAgent] toolResults:', response.toolResults?.length || 0);
-
-        const toolsUsed = response.toolCalls?.map((tc) => (tc as { toolName?: string }).toolName).filter(Boolean) as string[] || [];
+        // Clean the Editor's text to remove the big JSON block if it exists so the UI bubble is clean
+        let cleanResponse = finalJsonText;
+        const jsonMatchForCleaning = cleanResponse.match(/\{\s*"posts"[\s\S]*\}/);
+        if (jsonMatchForCleaning && generatedContent) {
+            cleanResponse = cleanResponse.replace(jsonMatchForCleaning[0], '').replace(/```json/g, '').replace(/```/g, '').trim();
+            if (!cleanResponse) cleanResponse = "I've drafted the content for you through the multi-agent pipeline! Check it out below.";
+        }
 
         return {
-            response: response.text || '',
+            response: cleanResponse || '',
             toolsUsed,
-            generatedContent: this.extractGeneratedContent(response.toolResults)
+            generatedContent
         };
     }
 
     /**
-     * Stream a response from the agent
+     * Stream a response from the agent (Fallback to Writer agent for speed)
      */
     async *streamChat(input: AgentDraftInput): AsyncGenerator<{ text?: string; toolCall?: string; done?: boolean }> {
         const { tenantId, userMessage, conversationHistory = [], authorUrn } = input;
 
-        const agent = await this.getAgentForTenant(tenantId);
+        const settings = await Settings.findOne({ where: { tenantId } });
+        if (!settings?.openRouterApiKey) throw new Error('OpenRouter API Key missing');
+
+        const topPosts = await Post.findAll({
+            where: { tenantId, status: 'PUBLISHED' },
+            order: [[sequelize.literal('likesCount + commentsCount + repostsCount'), 'DESC']],
+            limit: 3,
+            attributes: ['content']
+        });
+        const topPostsContext = topPosts.map(p => p.content).join('\\n---\\n');
+
+        const writer = createWriterAgent(settings.openRouterApiKey, settings.openRouterModelId || 'anthropic/claude-sonnet-4', topPostsContext);
 
         const contextMessage = `[Context: tenantId=${tenantId}${authorUrn ? `, authorUrn=${authorUrn}` : ''}]`;
-
         const prompt = [
             ...conversationHistory.map(msg => `${msg.role}: ${msg.content}`),
-            `user: ${contextMessage}\n\n${userMessage}`
+            `user: ${contextMessage}\n\n${userMessage}\n\n(Write the response directly.)`
         ].join('\n\n');
 
-        const stream = await agent.stream(prompt);
-
+        const stream = await writer.stream(prompt);
         for await (const chunk of stream.textStream) {
             yield { text: chunk };
         }
-
         yield { done: true };
     }
 
-    /**
-     * Clear cached agent for a tenant (call when settings change)
-     */
     clearCache(tenantId?: string) {
-        if (tenantId) {
-            this.agentCache.delete(tenantId);
-        } else {
-            this.agentCache.clear();
-        }
+        // Multi-agent pipeline is dynamically instantiated per-request now, no-op.
     }
 
     private extractGeneratedContent(toolResults: unknown): AgentDraftOutput['generatedContent'] | undefined {
