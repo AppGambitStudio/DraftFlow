@@ -72,7 +72,7 @@ export default function DashboardPage() {
         setIsModalOpen(true);
     };
 
-    const handleSavePost = async (id: number, data: { content: string; scheduledTime: string }) => {
+    const handleSavePost = async (id: number, data: any) => {
         try {
             await api.put(`/posts/${id}`, data);
             toast.success("Post updated");

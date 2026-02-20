@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ interface GeneratedIdea {
     selected: boolean;
 }
 
-export default function GenerateIdeasPage() {
+function GenerateIdeasContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { settings, refreshSettings } = useSettings();
@@ -358,13 +358,12 @@ export default function GenerateIdeasPage() {
                 {[1, 2, 3, 4, 5].map((s) => (
                     <div key={s} className="flex items-center gap-2">
                         <div
-                            className={`flex items-center justify-center h-8 w-8 rounded-full text-sm font-medium transition-colors ${
-                                s < step
+                            className={`flex items-center justify-center h-8 w-8 rounded-full text-sm font-medium transition-colors ${s < step
                                     ? "bg-indigo-600 text-white"
                                     : s === step
-                                    ? "bg-indigo-100 text-indigo-700 border-2 border-indigo-600"
-                                    : "bg-slate-100 text-slate-400"
-                            }`}
+                                        ? "bg-indigo-100 text-indigo-700 border-2 border-indigo-600"
+                                        : "bg-slate-100 text-slate-400"
+                                }`}
                         >
                             {s < step ? <Check className="h-4 w-4" /> : s}
                         </div>
@@ -728,18 +727,16 @@ export default function GenerateIdeasPage() {
                                     <div
                                         key={index}
                                         onClick={() => toggleIdeaSelection(index)}
-                                        className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                                            idea.selected
+                                        className={`p-4 rounded-xl border cursor-pointer transition-all ${idea.selected
                                                 ? "bg-indigo-50/50 border-indigo-200 shadow-sm"
                                                 : "bg-slate-50/50 border-slate-200 opacity-60"
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex items-start gap-3">
-                                            <div className={`mt-0.5 flex items-center justify-center h-5 w-5 rounded border shrink-0 transition-colors ${
-                                                idea.selected
+                                            <div className={`mt-0.5 flex items-center justify-center h-5 w-5 rounded border shrink-0 transition-colors ${idea.selected
                                                     ? "bg-indigo-600 border-indigo-600 text-white"
                                                     : "border-slate-300 bg-white"
-                                            }`}>
+                                                }`}>
                                                 {idea.selected && <Check className="h-3 w-3" />}
                                             </div>
                                             <div className="flex-1 space-y-2">
@@ -913,5 +910,13 @@ export default function GenerateIdeasPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function GenerateIdeasPage() {
+    return (
+        <Suspense fallback={<div className="container max-w-4xl mx-auto py-12 px-4 text-center text-muted-foreground text-sm">Loading generator...</div>}>
+            <GenerateIdeasContent />
+        </Suspense>
     );
 }

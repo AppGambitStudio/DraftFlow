@@ -8,13 +8,13 @@ services:
     ports:
       - "5002:5002"
     volumes:
-      - ./backend:/app
-      - /app/node_modules
       - backend_data:/app/data
+      - backend_uploads:/app/uploads
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=file:/app/data/dev.db
       - PORT=5002
-    command: npm run dev
 
   frontend:
     build:
@@ -22,12 +22,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5003:5003"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:5002/api
-    command: npm run dev
 
 volumes:
   backend_data:
+  backend_uploads:
