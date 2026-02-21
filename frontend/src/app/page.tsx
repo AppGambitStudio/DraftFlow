@@ -17,7 +17,7 @@ interface Post {
     id: number;
     content: string;
     scheduledTime: string;
-    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'GENERATING';
     mediaUrls?: string;
     platforms?: string;
 }
@@ -169,7 +169,7 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            {posts.filter((p) => p.status === "DRAFT").length}
+                            {posts.filter((p) => p.status === "DRAFT" || p.status === "GENERATING").length}
                         </div>
                     </CardContent>
                 </Card>
@@ -235,7 +235,7 @@ export default function DashboardPage() {
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <span className={cn(
                                                     "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                                                    post.status === 'SCHEDULED' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+                                                    post.status === 'SCHEDULED' ? "bg-blue-100 text-blue-800" : post.status === 'GENERATING' ? "bg-amber-100 text-amber-800 animate-pulse" : "bg-gray-100 text-gray-800"
                                                 )}>
                                                     {post.status}
                                                 </span>
@@ -274,7 +274,7 @@ export default function DashboardPage() {
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <span className={cn(
                                                     "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-                                                    post.status === 'SCHEDULED' ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+                                                    post.status === 'SCHEDULED' ? "bg-blue-100 text-blue-800" : post.status === 'GENERATING' ? "bg-amber-100 text-amber-800 animate-pulse" : "bg-gray-100 text-gray-800"
                                                 )}>
                                                     {post.status}
                                                 </span>

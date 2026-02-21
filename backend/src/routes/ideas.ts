@@ -1,5 +1,5 @@
 import express, { Response } from 'express';
-import { Idea, Settings } from '../db';
+import { Idea, Post, Settings } from '../db';
 import { AIService } from '../services/ai';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
@@ -159,28 +159,61 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
     }
 });
 
-// Generate post from idea
+// Generate post from idea (async — returns immediately, post appears in drafts when ready)
 router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
         const tenantId = req.tenantId!;
         const { id } = req.params;
-        const { platform, targetAudience, additionalContext } = req.body; // 'LINKEDIN' or 'TWITTER'
+        const { platform, targetAudience, additionalContext } = req.body;
         console.log(`[Idea Generate] id=${id}, platform=${platform}, additionalContext="${additionalContext || 'none'}"`);
-        const idea = await Idea.findOne({ where: { id, tenantId } });
 
+        const idea = await Idea.findOne({ where: { id, tenantId } });
         if (!idea) {
             return res.status(404).json({ error: 'Idea not found or unauthorized' });
         }
 
-        const { content } = await AIService.generateForIdea(
+        // Create a placeholder post with GENERATING status
+        const post = await Post.create({
+            userId,
             tenantId,
-            idea,
-            platform,
-            additionalContext
-        );
+            content: `Generating post from idea: ${idea.title}...`,
+            status: 'GENERATING',
+            platforms: JSON.stringify([platform || 'LINKEDIN']),
+            authorUrn: idea.authorUrn,
+            authorName: idea.authorName,
+        });
 
-        res.json({ content });
+        // Mark idea as DRAFTED
+        await idea.update({ status: 'DRAFTED' });
+
+        // Respond immediately so the user can navigate away
+        res.json({ postId: post.id, status: 'GENERATING' });
+
+        // Run AI generation in the background
+        (async () => {
+            try {
+                console.log(`[Idea Generate] Background generation started for post ${post.id}`);
+                const { content } = await AIService.generateForIdea(
+                    tenantId,
+                    idea,
+                    platform,
+                    additionalContext
+                );
+
+                await post.update({
+                    content,
+                    status: 'DRAFT',
+                });
+                console.log(`[Idea Generate] Post ${post.id} generated successfully`);
+            } catch (error: any) {
+                console.error(`[Idea Generate] Background generation failed for post ${post.id}:`, error.message);
+                await post.update({
+                    status: 'FAILED',
+                    error: error.message || 'AI generation failed',
+                });
+            }
+        })();
     } catch (error: any) {
         console.error('Generate error:', error);
         res.status(500).json({ error: 'Failed to generate post' });

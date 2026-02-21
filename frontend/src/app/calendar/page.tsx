@@ -9,7 +9,7 @@ interface Post {
     id: number;
     content: string;
     scheduledTime: string;
-    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'GENERATING';
 }
 
 export default function CalendarPage() {

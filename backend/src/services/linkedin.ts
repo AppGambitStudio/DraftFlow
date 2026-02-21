@@ -3,6 +3,64 @@ import fs from 'fs';
 import { Settings } from '../db';
 
 class LinkedInService {
+    /**
+     * Refresh the LinkedIn access token using the stored refresh token.
+     * Returns the new access token, or throws if refresh fails.
+     */
+    private async refreshAccessToken(setting: any): Promise<string> {
+        if (!setting.linkedinRefreshToken) {
+            throw new Error('LinkedIn access token expired and no refresh token available. Please reconnect your LinkedIn account.');
+        }
+
+        const clientId = setting.linkedinClientId || process.env.LINKEDIN_CLIENT_ID;
+        const clientSecret = setting.linkedinClientSecret || process.env.LINKEDIN_CLIENT_SECRET;
+
+        if (!clientId || !clientSecret) {
+            throw new Error('LinkedIn access token expired and client credentials are missing for refresh. Please reconnect your LinkedIn account.');
+        }
+
+        console.log('[LinkedIn] Access token expired, attempting refresh...');
+
+        const response = await axios.post('https://www.linkedin.com/oauth/v2/accessToken', null, {
+            params: {
+                grant_type: 'refresh_token',
+                refresh_token: setting.linkedinRefreshToken,
+                client_id: clientId,
+                client_secret: clientSecret
+            },
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        });
+
+        const { access_token, expires_in, refresh_token } = response.data;
+        const expiresAt = new Date(Date.now() + expires_in * 1000);
+
+        await setting.update({
+            linkedinAccessToken: access_token,
+            linkedinRefreshToken: refresh_token || setting.linkedinRefreshToken,
+            linkedinExpiresAt: expiresAt
+        });
+
+        console.log('[LinkedIn] Token refreshed successfully, new expiry:', expiresAt.toISOString());
+        return access_token;
+    }
+
+    /**
+     * Get a valid access token, refreshing if expired.
+     */
+    private async getValidAccessToken(setting: any): Promise<string> {
+        if (setting.linkedinExpiresAt && new Date() > setting.linkedinExpiresAt) {
+            try {
+                return await this.refreshAccessToken(setting);
+            } catch (error: any) {
+                console.error('[LinkedIn] Token refresh failed:', error.response?.data || error.message);
+                throw new Error('LinkedIn access token expired and refresh failed. Please reconnect your LinkedIn account in Settings.');
+            }
+        }
+        return setting.linkedinAccessToken;
+    }
+
     async publishPost(tenantId: string, content: string, authorUrn?: string, attachments?: any[]) {
         const setting = await Settings.findOne({ where: { tenantId } });
 
@@ -10,12 +68,7 @@ class LinkedInService {
             throw new Error('LinkedIn access token not found in settings.');
         }
 
-        // Check if token is expired
-        if (setting.linkedinExpiresAt && new Date() > setting.linkedinExpiresAt) {
-            throw new Error('LinkedIn access token expired.');
-        }
-
-        const accessToken = setting.linkedinAccessToken;
+        const accessToken = await this.getValidAccessToken(setting);
         let finalAuthorUrn = authorUrn;
 
         // If no authorUrn provided, default to "Self"
@@ -171,7 +224,7 @@ class LinkedInService {
         const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return [];
 
-        const accessToken = setting.linkedinAccessToken;
+        const accessToken = await this.getValidAccessToken(setting);
         const isOrg = authorUrn?.includes(':organization:');
 
         console.log(`[LinkedIn] Fetching stats for ${postUrns.length} posts, isOrg=${isOrg}, authorUrn=${authorUrn}`);
@@ -223,7 +276,7 @@ class LinkedInService {
         const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return null;
 
-        const accessToken = setting.linkedinAccessToken;
+        const accessToken = await this.getValidAccessToken(setting);
         const headers = {
             'Authorization': `Bearer ${accessToken}`,
             'X-Restli-Protocol-Version': '2.0.0'
@@ -282,7 +335,7 @@ class LinkedInService {
         const setting = await Settings.findOne({ where: { tenantId } });
         if (!setting || !setting.linkedinAccessToken) return [];
 
-        const accessToken = setting.linkedinAccessToken;
+        const accessToken = await this.getValidAccessToken(setting);
         let finalAuthorUrn = authorUrn;
 
         if (!finalAuthorUrn) {

@@ -13,7 +13,7 @@ interface Post {
     id: number;
     content: string;
     scheduledTime: string | null;
-    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'GENERATING';
     mediaUrls?: string;
     platforms?: string;
     authorUrn?: string;
@@ -122,6 +122,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     if (!isOpen || !post) return null;
 
     const isPublished = post.status === 'PUBLISHED';
+    const isGenerating = post.status === 'GENERATING';
 
     const handleUndo = () => {
         if (contentHistory.length === 0) return;
@@ -219,7 +220,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                 scheduledTime: finalScheduledTime || null,
                 authorUrn: selectedAuthorUrn,
                 authorName: selectedAuthor?.name || "",
-                status: post.status, // Maintain current status
+                status: post.status === 'GENERATING' ? 'DRAFT' : post.status,
                 mediaUrls: attachments
             });
             onClose();
@@ -341,9 +342,10 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${post.status === 'PUBLISHED' ? 'bg-green-50 text-green-700 border-green-200' :
                                         post.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                             post.status === 'FAILED' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                'bg-gray-50 text-gray-700 border-gray-200'
+                                                post.status === 'GENERATING' ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' :
+                                                    'bg-gray-50 text-gray-700 border-gray-200'
                                         }`}>
-                                        {post.status}
+                                        {post.status === 'GENERATING' ? 'Generating...' : post.status}
                                     </span>
                                     {post.platforms && JSON.parse(post.platforms).map((platform: string) => (
                                         <span key={platform} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-slate-100 text-slate-700 border-slate-200">
@@ -359,7 +361,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                     id="author"
                                     value={selectedAuthorUrn}
                                     onChange={(e) => setSelectedAuthorUrn(e.target.value)}
-                                    disabled={isPublished || isLoading || authorsLoading}
+                                    disabled={isPublished || isGenerating || isLoading || authorsLoading}
                                     className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {authors.map((author, index) => (
@@ -395,7 +397,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                             <select
                                                 value={selectedAudience}
                                                 onChange={(e) => setSelectedAudience(e.target.value)}
-                                                disabled={isPublished || isLoading}
+                                                disabled={isPublished || isGenerating || isLoading}
                                                 className="h-8 w-[180px] rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 <option value="">Post Audience (Optional)</option>
@@ -485,7 +487,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                 id="content"
                                 value={content}
                                 onChange={(e) => setContent(e.target.value)}
-                                disabled={isPublished || isLoading}
+                                disabled={isPublished || isGenerating || isLoading}
                                 className="min-h-[200px]"
                             />
                             <div className="flex justify-end">
@@ -510,7 +512,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                 type="datetime-local"
                                 value={scheduledTime}
                                 onChange={(e) => setScheduledTime(e.target.value)}
-                                disabled={isPublished || isLoading}
+                                disabled={isPublished || isGenerating || isLoading}
                             />
                         </div>
 

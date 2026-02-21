@@ -13,7 +13,7 @@ import {
     addMonths,
     subMonths
 } from "date-fns";
-import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, FileText, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, CheckCircle2, AlertCircle, FileText, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PostDetailsModal } from "./PostDetailsModal";
 import api from "@/lib/api";
@@ -23,7 +23,7 @@ interface Post {
     id: number;
     content: string;
     scheduledTime: string | null;
-    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED';
+    status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'GENERATING';
 }
 
 interface CalendarViewProps {
@@ -182,7 +182,8 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                                                 post.status === "PUBLISHED" && "text-green-700 dark:text-green-400",
                                                 post.status === "FAILED" && "text-red-700 dark:text-red-400",
                                                 post.status === "DRAFT" && "text-slate-600 dark:text-slate-400",
-                                                post.status === "SCHEDULED" && "text-blue-700 dark:text-blue-400"
+                                                post.status === "SCHEDULED" && "text-blue-700 dark:text-blue-400",
+                                                post.status === "GENERATING" && "text-amber-600 dark:text-amber-400 animate-pulse"
                                             )}
                                             title={`${post.status}${post.scheduledTime ? ` - ${format(new Date(post.scheduledTime), "HH:mm")}` : ""}: ${post.content}`}
                                         >
@@ -190,6 +191,7 @@ export function CalendarView({ posts, onPostUpdated }: CalendarViewProps) {
                                             {post.status === "FAILED" && <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
                                             {post.status === "DRAFT" && <FileText className="h-3.5 w-3.5 shrink-0" />}
                                             {post.status === "SCHEDULED" && <Clock className="h-3.5 w-3.5 shrink-0" />}
+                                            {post.status === "GENERATING" && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}
 
                                             <span className="truncate">
                                                 {post.scheduledTime && <span>{format(new Date(post.scheduledTime), "HH:mm")} </span>}

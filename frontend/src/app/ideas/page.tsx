@@ -266,27 +266,22 @@ export default function IdeasPage() {
         if (!pendingIdea) return;
 
         const idea = pendingIdea;
-        setGeneratingId(idea.id);
         setContextModalOpen(false);
 
         try {
-            const res = await api.post(`/ideas/${idea.id}/generate`, {
+            await api.post(`/ideas/${idea.id}/generate`, {
                 platform: 'LINKEDIN',
                 targetAudience: idea.targetAudience || undefined,
                 additionalContext: additionalContext || undefined
             });
-            const content = res.data.content;
 
-            // Store idea info for regeneration on create page
-            localStorage.setItem('draftPostContent', content);
-            localStorage.setItem('draftPostAttachments', '[]'); // Do not carry over reference documents
-            localStorage.setItem('draftIdeaId', String(idea.id));
-            localStorage.setItem('draftIdeaTitle', idea.title);
-            router.push('/create?source=idea');
+            // Update the idea status locally to reflect DRAFTED
+            setIdeas(prev => prev.map(i => i.id === idea.id ? { ...i, status: 'DRAFTED' } : i));
+
+            toast.success("Post is being generated! It will appear in your drafts shortly.", { duration: 4000 });
         } catch (error) {
-            toast.error("Failed to generate post");
+            toast.error("Failed to start post generation");
         } finally {
-            setGeneratingId(null);
             setPendingIdea(null);
         }
     };
