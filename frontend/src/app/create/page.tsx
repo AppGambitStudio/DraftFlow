@@ -43,6 +43,8 @@ export default function CreatePostPage() {
     const directionDropdownRef = useRef<HTMLDivElement>(null);
     const [ideaId, setIdeaId] = useState<string | null>(null);
     const [ideaTitle, setIdeaTitle] = useState<string | null>(null);
+    const [showAIToolsDropdown, setShowAIToolsDropdown] = useState(false);
+    const aiToolsDropdownRef = useRef<HTMLDivElement>(null);
     const [showRegenerateModal, setShowRegenerateModal] = useState(false);
     const [regenerateContext, setRegenerateContext] = useState('');
     const [regenerateLoading, setRegenerateLoading] = useState(false);
@@ -190,6 +192,9 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
         const handleClickOutside = (event: MouseEvent) => {
             if (directionDropdownRef.current && !directionDropdownRef.current.contains(event.target as Node)) {
                 setShowDirectionDropdown(false);
+            }
+            if (aiToolsDropdownRef.current && !aiToolsDropdownRef.current.contains(event.target as Node)) {
+                setShowAIToolsDropdown(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -550,54 +555,63 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
                                         </div>
                                     )}
                                 </div>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleAIImprovise}
-                                    disabled={aiLoading || variationsLoading || !content}
-                                    className="text-primary hover:text-primary hover:bg-primary/10"
-                                >
-                                    <Sparkles className="mr-2 h-4 w-4" />
-                                    {aiLoading ? "Improvising..." : "AImprovise"}
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleGenerateVariations}
-                                    disabled={!content || aiLoading || variationsLoading}
-                                    className="text-primary hover:text-primary hover:bg-primary/10"
-                                >
-                                    <GitBranch className="mr-2 h-4 w-4" />
-                                    Variations
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleGenerateHooks}
-                                    disabled={!content || aiLoading || hooksLoading}
-                                    className="text-primary hover:text-primary hover:bg-primary/10"
-                                >
-                                    <Zap className="mr-2 h-4 w-4" />
-                                    Hooks
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleGenerateHashtags}
-                                    disabled={!content || hashtagsLoading}
-                                    className="text-primary hover:text-primary hover:bg-primary/10"
-                                >
-                                    {hashtagsLoading ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Hash className="mr-2 h-4 w-4" />
+                                <div className="relative" ref={aiToolsDropdownRef}>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowAIToolsDropdown(!showAIToolsDropdown)}
+                                        className="text-primary border-primary/20 hover:bg-primary/5"
+                                    >
+                                        <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
+                                        AI Tools
+                                        <ChevronDown className="ml-2 h-4 w-4" />
+                                    </Button>
+                                    {showAIToolsDropdown && (
+                                        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-md border border-input bg-background shadow-lg py-1">
+                                            <button
+                                                type="button"
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={() => { setShowAIToolsDropdown(false); handleAIImprovise(); }}
+                                                disabled={aiLoading || variationsLoading || !content}
+                                            >
+                                                <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
+                                                {aiLoading ? "Improvising..." : "AImprovise"}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={() => { setShowAIToolsDropdown(false); handleGenerateVariations(); }}
+                                                disabled={!content || aiLoading || variationsLoading}
+                                            >
+                                                <GitBranch className="mr-2 h-4 w-4 text-blue-500" />
+                                                Variations
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={() => { setShowAIToolsDropdown(false); handleGenerateHooks(); }}
+                                                disabled={!content || aiLoading || hooksLoading}
+                                            >
+                                                <Zap className="mr-2 h-4 w-4 text-orange-500" />
+                                                Hooks
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={() => { setShowAIToolsDropdown(false); handleGenerateHashtags(); }}
+                                                disabled={!content || hashtagsLoading}
+                                            >
+                                                {hashtagsLoading ? (
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-500" />
+                                                ) : (
+                                                    <Hash className="mr-2 h-4 w-4 text-green-500" />
+                                                )}
+                                                Hashtags
+                                            </button>
+                                        </div>
                                     )}
-                                    Hashtags
-                                </Button>
+                                </div>
                             </div>
                         </div>
                         <Textarea
