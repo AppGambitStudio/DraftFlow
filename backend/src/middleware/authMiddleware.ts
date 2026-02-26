@@ -11,17 +11,17 @@ export interface AuthRequest extends Request {
 }
 
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    let token: string | undefined;
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        res.status(401).json({ error: 'No token provided' });
-        return;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+    } else if (req.query.token) {
+        token = req.query.token as string;
     }
 
-    const token = authHeader.split(' ')[1];
-
     if (!token) {
-        res.status(401).json({ error: 'Invalid token format' });
+        res.status(401).json({ error: 'No token provided' });
         return;
     }
 
@@ -37,7 +37,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         req.user = user;
 
         // Resolve Tenant
-        const headerTenantId = req.headers['x-tenant-id'];
+        const headerTenantId = req.headers['x-tenant-id'] || req.query.tenantId;
         let member: TenantMember | null = null;
 
         if (headerTenantId) {

@@ -310,7 +310,14 @@ export default function SettingsPage() {
                                     {config.isLinkedinConfigured ? (
                                         <Button
                                             type="button"
-                                            onClick={() => window.location.href = `${api.defaults.baseURL}/auth/linkedin/connect`}
+                                            onClick={() => {
+                                                const token = localStorage.getItem('token');
+                                                const tenantId = localStorage.getItem('tenantId');
+                                                let url = `${api.defaults.baseURL}/auth/linkedin/connect`;
+                                                if (token) url += `?token=${token}`;
+                                                if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+                                                window.location.href = url;
+                                            }}
                                             className="w-full sm:w-auto"
                                         >
                                             <RefreshCw className="mr-2 h-4 w-4" />
@@ -380,7 +387,14 @@ export default function SettingsPage() {
                                     {config.isTwitterConfigured ? (
                                         <Button
                                             type="button"
-                                            onClick={() => window.location.href = `${api.defaults.baseURL}/auth/twitter/connect`}
+                                            onClick={() => {
+                                                const token = localStorage.getItem('token');
+                                                const tenantId = localStorage.getItem('tenantId');
+                                                let url = `${api.defaults.baseURL}/auth/twitter/connect`;
+                                                if (token) url += `?token=${token}`;
+                                                if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+                                                window.location.href = url;
+                                            }}
                                             className="w-full sm:w-auto"
                                         >
                                             <RefreshCw className="mr-2 h-4 w-4" />
