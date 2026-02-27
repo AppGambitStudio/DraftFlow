@@ -78,8 +78,10 @@ export default function SettingsPage() {
 
     const [mcpTestResults, setMcpTestResults] = useState<Record<number, { loading: boolean; success?: boolean; tools?: string[]; error?: string }>>({});
     const [expandedHeaders, setExpandedHeaders] = useState<Record<number, boolean>>({});
+    const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
+        setIsMounted(true);
         fetchSettings();
         fetchAuthors();
     }, []);
@@ -877,7 +879,7 @@ export default function SettingsPage() {
                             <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Workspace ID (X-Tenant-ID)</Label>
                                 <div className="flex items-center gap-2">
-                                    <code className="flex-1 p-2 bg-white border rounded text-xs font-mono">{typeof window !== 'undefined' ? localStorage.getItem('tenantId') : ''}</code>
+                                    <code className="flex-1 p-2 bg-white border rounded text-xs font-mono">{isMounted ? localStorage.getItem('tenantId') : ''}</code>
                                     <Button type="button" variant="ghost" size="sm" onClick={() => {
                                         navigator.clipboard.writeText(localStorage.getItem('tenantId') || '');
                                         toast.success("Copied Workspace ID");
@@ -911,7 +913,7 @@ export default function SettingsPage() {
                                         <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">Headers Required</span>
                                     </div>
                                     <div className="grid grid-cols-1 gap-2 text-[10px] font-mono text-slate-400">
-                                        <div>X-Tenant-ID: {typeof window !== 'undefined' ? localStorage.getItem('tenantId') : ''}</div>
+                                        <div>X-Tenant-ID: {isMounted ? localStorage.getItem('tenantId') : ''}</div>
                                         <div>X-Webhook-Secret: {formData.webhookSecret || 'YOUR_SECRET'}</div>
                                     </div>
                                     <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
@@ -941,7 +943,7 @@ export default function SettingsPage() {
                                         <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 uppercase font-bold">API Context</span>
                                     </div>
                                     <div className="grid grid-cols-1 gap-2 text-[10px] font-mono text-slate-400">
-                                        <div>X-Tenant-ID: {typeof window !== 'undefined' ? localStorage.getItem('tenantId') : ''}</div>
+                                        <div>X-Tenant-ID: {isMounted ? localStorage.getItem('tenantId') : ''}</div>
                                         <div>X-Webhook-Secret: {formData.webhookSecret || 'YOUR_SECRET'}</div>
                                     </div>
                                     <pre className="text-white text-[11px] font-mono leading-relaxed opacity-90">
