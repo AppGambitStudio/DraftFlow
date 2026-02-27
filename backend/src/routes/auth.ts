@@ -7,10 +7,20 @@ import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
-// Helper to get settings or throw
-const getSettings = async (userId: string) => {
-    const settings = await Settings.findOne({ where: { userId } });
-    if (!settings) throw new Error("Settings not found for user: " + userId);
+// Helper to get settings or create if missing
+const getSettings = async (userId: string, tenantId?: string) => {
+    let settings = await Settings.findOne({ where: { userId } });
+
+    if (!settings && tenantId) {
+        settings = await Settings.findOne({ where: { tenantId } });
+    }
+
+    if (!settings) {
+        settings = await Settings.create({
+            userId,
+            tenantId: tenantId || null
+        });
+    }
     return settings;
 };
 
@@ -20,7 +30,8 @@ const getSettings = async (userId: string) => {
 router.get('/linkedin/connect', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
-        const settings = await getSettings(userId);
+        const tenantId = req.tenantId; // Optional depending on authMiddleware
+        const settings = await getSettings(userId, tenantId);
         const clientId = settings.linkedinClientId || process.env.LINKEDIN_CLIENT_ID;
 
         if (!clientId) {
@@ -29,18 +40,18 @@ router.get('/linkedin/connect', authMiddleware, async (req: AuthRequest, res: Re
         }
 
         const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/linkedin/callback`;
-        const state = `${Math.random().toString(36).substring(7)}:${userId}`;
+        const state = `${Math.random().toString(36).substring(7)}:${userId}${tenantId ? ':' + tenantId : ''}`;
 
-        // Scopes: OIDC for identity, Community Management for posting (member + org)
-        const requestedScopes = [
-            'openid',
-            'profile',
-            'email',
+        // Scopes: Member Profile and Email, plus Community Management for posting
+        // These are the scopes provided by the "Share on LinkedIn" and "Sign In with LinkedIn V2" products
+        const defaultScopes = [
+            'r_basicprofile',
             'w_member_social',
             'w_organization_social',
             'r_organization_social',
             'rw_organization_admin'
         ];
+        const requestedScopes = process.env.LINKEDIN_SCOPES ? process.env.LINKEDIN_SCOPES.split(',') : defaultScopes;
 
         const scope = encodeURIComponent(requestedScopes.join(' '));
         const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=${scope}`;
@@ -48,6 +59,7 @@ router.get('/linkedin/connect', authMiddleware, async (req: AuthRequest, res: Re
         res.redirect(authUrl);
     } catch (error) {
         console.error("LinkedIn Connect Error:", error);
+        require('fs').writeFileSync('/tmp/linkedin_error.log', String((error as any).stack || error));
         res.status(500).send("Failed to initiate LinkedIn connection.");
     }
 });
@@ -70,12 +82,14 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
         const stateStr = state as string;
         const stateParts = stateStr.split(':');
         const userIdStr = stateParts[1];
+        const tenantIdStr = stateParts[2];
         if (!userIdStr) {
             throw new Error("Invalid state: missing userId");
         }
         const userId = userIdStr;
+        const tenantId = tenantIdStr;
 
-        const settings = await getSettings(userId);
+        const settings = await getSettings(userId, tenantId);
         const clientId = settings.linkedinClientId || process.env.LINKEDIN_CLIENT_ID;
         const clientSecret = settings.linkedinClientSecret || process.env.LINKEDIN_CLIENT_SECRET;
 
@@ -157,12 +171,13 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
 // --- Twitter OAuth (OAuth 2.0 PKCE) ---
 
 // In-memory store for PKCE verifiers
-// Key: state, Value: { codeVerifier, state, userId }
-const twitterAuthStore: Record<string, { codeVerifier: string, state: string, userId: string }> = {};
+// Key: state, Value: { codeVerifier, state, userId, tenantId }
+const twitterAuthStore: Record<string, { codeVerifier: string, state: string, userId: string, tenantId?: string }> = {};
 
 router.get('/twitter/connect', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user!.id;
+        const tenantId = req.tenantId;
         const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/twitter/callback`;
 
         const { url, codeVerifier, state } = await twitterService.getAuthUrl(
@@ -171,7 +186,7 @@ router.get('/twitter/connect', authMiddleware, async (req: AuthRequest, res: Res
         );
 
         // Store verifier for the callback
-        twitterAuthStore[state] = { codeVerifier, state, userId };
+        twitterAuthStore[state] = { codeVerifier, state, userId, tenantId };
 
         res.redirect(url);
     } catch (error) {
@@ -200,7 +215,8 @@ router.get('/twitter/callback', async (req: Request, res: Response) => {
 
     try {
         const userId = storedAuth.userId;
-        const settings = await getSettings(userId);
+        const tenantId = storedAuth.tenantId;
+        const settings = await getSettings(userId, tenantId);
         const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/twitter/callback`;
 
         const { accessToken, refreshToken, expiresIn } = await twitterService.getAccessToken(
