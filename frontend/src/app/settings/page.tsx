@@ -311,12 +311,14 @@ export default function SettingsPage() {
                                         <Button
                                             type="button"
                                             onClick={() => {
-                                                const token = localStorage.getItem('token');
-                                                const tenantId = localStorage.getItem('tenantId');
-                                                let url = `${api.defaults.baseURL}/auth/linkedin/connect`;
-                                                if (token) url += `?token=${token}`;
-                                                if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
-                                                window.location.href = url;
+                                                if (typeof window !== 'undefined') {
+                                                    const token = window.localStorage.getItem('token');
+                                                    const tenantId = window.localStorage.getItem('tenantId');
+                                                    let url = `${api.defaults.baseURL}/auth/linkedin/connect`;
+                                                    if (token) url += `?token=${token}`;
+                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+                                                    window.location.href = url;
+                                                }
                                             }}
                                             className="w-full sm:w-auto"
                                         >
@@ -388,12 +390,14 @@ export default function SettingsPage() {
                                         <Button
                                             type="button"
                                             onClick={() => {
-                                                const token = localStorage.getItem('token');
-                                                const tenantId = localStorage.getItem('tenantId');
-                                                let url = `${api.defaults.baseURL}/auth/twitter/connect`;
-                                                if (token) url += `?token=${token}`;
-                                                if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
-                                                window.location.href = url;
+                                                if (typeof window !== 'undefined') {
+                                                    const token = window.localStorage.getItem('token');
+                                                    const tenantId = window.localStorage.getItem('tenantId');
+                                                    let url = `${api.defaults.baseURL}/auth/twitter/connect`;
+                                                    if (token) url += `?token=${token}`;
+                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+                                                    window.location.href = url;
+                                                }
                                             }}
                                             className="w-full sm:w-auto"
                                         >
@@ -964,6 +968,6 @@ export default function SettingsPage() {
                     </Button>
                 </div>
             </form>
-        </div>
+        </div >
     );
 }

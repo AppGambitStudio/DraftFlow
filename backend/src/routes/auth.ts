@@ -159,7 +159,7 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
         }
 
         // Redirect back to frontend settings
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5003';
         res.redirect(`${frontendUrl}/settings?linkedin_connected=true`);
     } catch (error: any) {
         console.error("LinkedIn Callback Error Details:", error.response?.data || error.message);
