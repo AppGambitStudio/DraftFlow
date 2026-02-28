@@ -297,15 +297,36 @@ export default function SettingsPage() {
                                         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                                         <span className="font-medium text-green-800">Linked to personal profile</span>
                                     </div>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDisconnect('linkedin')}
-                                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                    >
-                                        Disconnect
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                                if (typeof window !== 'undefined') {
+                                                    const token = window.localStorage.getItem('token');
+                                                    const tenantId = window.localStorage.getItem('tenantId');
+                                                    let url = `${api.defaults.baseURL}/auth/linkedin/connect`;
+                                                    if (token) url += `?token=${token}`;
+                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+                                                    window.location.href = url;
+                                                }
+                                            }}
+                                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                        >
+                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            Reconnect
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDisconnect('linkedin')}
+                                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                        >
+                                            Disconnect
+                                        </Button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div>
@@ -376,15 +397,36 @@ export default function SettingsPage() {
                                         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                                         <span className="font-medium text-green-800">Connected</span>
                                     </div>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDisconnect('twitter')}
-                                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                                    >
-                                        Disconnect
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                                if (typeof window !== 'undefined') {
+                                                    const token = window.localStorage.getItem('token');
+                                                    const tenantId = window.localStorage.getItem('tenantId');
+                                                    let url = `${api.defaults.baseURL}/auth/twitter/connect`;
+                                                    if (token) url += `?token=${token}`;
+                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+                                                    window.location.href = url;
+                                                }
+                                            }}
+                                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                        >
+                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            Reconnect
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDisconnect('twitter')}
+                                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                                        >
+                                            Disconnect
+                                        </Button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div>
