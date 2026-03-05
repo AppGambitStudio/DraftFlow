@@ -8,11 +8,16 @@ import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 const router = express.Router();
 
 // Helper to get settings or create if missing
+// Prioritize tenantId lookup to match the rest of the app (GET/POST /settings)
 const getSettings = async (userId: string, tenantId?: string) => {
-    let settings = await Settings.findOne({ where: { userId } });
+    let settings = null;
 
-    if (!settings && tenantId) {
+    if (tenantId) {
         settings = await Settings.findOne({ where: { tenantId } });
+    }
+
+    if (!settings) {
+        settings = await Settings.findOne({ where: { userId } });
     }
 
     if (!settings) {
@@ -22,6 +27,14 @@ const getSettings = async (userId: string, tenantId?: string) => {
         });
     }
     return settings;
+};
+
+// Build a stable redirect URI from env or request, avoiding req.protocol mismatches on prod
+const getRedirectUri = (req: express.Request, path: string) => {
+    if (process.env.BACKEND_URL) {
+        return `${process.env.BACKEND_URL}${path}`;
+    }
+    return `${req.protocol}://${req.get('host')}${path}`;
 };
 
 // --- LinkedIn OAuth ---
@@ -39,7 +52,7 @@ router.get('/linkedin/connect', authMiddleware, async (req: AuthRequest, res: Re
             return;
         }
 
-        const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/linkedin/callback`;
+        const redirectUri = getRedirectUri(req, '/api/auth/linkedin/callback');
         const state = `${Math.random().toString(36).substring(7)}:${userId}${tenantId ? ':' + tenantId : ''}`;
 
         // Scopes: Member Profile and Email, plus Community Management for posting
@@ -97,9 +110,9 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
             throw new Error("LinkedIn credentials missing in database and .env");
         }
 
-        const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/linkedin/callback`;
+        const redirectUri = getRedirectUri(req, '/api/auth/linkedin/callback');
 
-        console.log("Exchanging LinkedIn code for token...");
+        console.log("Exchanging LinkedIn code for token...", { redirectUri, settingsId: settings.id, settingsTenantId: settings.tenantId });
         const response = await axios.post('https://www.linkedin.com/oauth/v2/accessToken', null, {
             params: {
                 grant_type: 'authorization_code',
@@ -123,6 +136,8 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
             linkedinRefreshToken: refresh_token || settings.linkedinRefreshToken,
             linkedinExpiresAt: expiresAt
         });
+
+        console.log("LinkedIn token saved successfully", { settingsId: settings.id, tenantId: settings.tenantId, hasToken: !!access_token });
 
         // Parse user info to get name for confirmation
         try {
@@ -178,7 +193,7 @@ router.get('/twitter/connect', authMiddleware, async (req: AuthRequest, res: Res
     try {
         const userId = req.user!.id;
         const tenantId = req.tenantId;
-        const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/twitter/callback`;
+        const redirectUri = getRedirectUri(req, '/api/auth/twitter/callback');
 
         const { url, codeVerifier, state } = await twitterService.getAuthUrl(
             userId,
@@ -217,7 +232,7 @@ router.get('/twitter/callback', async (req: Request, res: Response) => {
         const userId = storedAuth.userId;
         const tenantId = storedAuth.tenantId;
         const settings = await getSettings(userId, tenantId);
-        const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/twitter/callback`;
+        const redirectUri = getRedirectUri(req, '/api/auth/twitter/callback');
 
         const { accessToken, refreshToken, expiresIn } = await twitterService.getAccessToken(
             userId,
