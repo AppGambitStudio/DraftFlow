@@ -18,6 +18,11 @@ const getSettings = async (userId: string, tenantId?: string) => {
 
     if (!settings) {
         settings = await Settings.findOne({ where: { userId } });
+        // Migrate legacy record: if found by userId but missing tenantId, stamp it
+        if (settings && !settings.tenantId && tenantId) {
+            console.log(`[getSettings] Migrating settings id=${settings.id} to tenantId=${tenantId}`);
+            await settings.update({ tenantId });
+        }
     }
 
     if (!settings) {
@@ -26,6 +31,7 @@ const getSettings = async (userId: string, tenantId?: string) => {
             tenantId: tenantId || null
         });
     }
+
     return settings;
 };
 
@@ -54,6 +60,7 @@ router.get('/linkedin/connect', authMiddleware, async (req: AuthRequest, res: Re
 
         const redirectUri = getRedirectUri(req, '/api/auth/linkedin/callback');
         const state = `${Math.random().toString(36).substring(7)}:${userId}${tenantId ? ':' + tenantId : ''}`;
+        console.log("[LinkedIn Connect] Building state:", { userId, tenantId, state });
 
         // Scopes: Member Profile and Email, plus Community Management for posting
         // These are the scopes provided by the "Share on LinkedIn" and "Sign In with LinkedIn V2" products
@@ -96,6 +103,7 @@ router.get('/linkedin/callback', async (req: Request, res: Response) => {
         const stateParts = stateStr.split(':');
         const userIdStr = stateParts[1];
         const tenantIdStr = stateParts[2];
+        console.log("[LinkedIn Callback] State parsed:", { stateStr, userIdStr, tenantIdStr, totalParts: stateParts.length });
         if (!userIdStr) {
             throw new Error("Invalid state: missing userId");
         }
