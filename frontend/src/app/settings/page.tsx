@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +39,17 @@ interface MCPServer {
     description: string;
 }
 
-export default function SettingsPage() {
+export default function SettingsPageWrapper() {
+    return (
+        <Suspense fallback={<div className="container max-w-5xl mx-auto py-8 px-4">Loading settings...</div>}>
+            <SettingsPage />
+        </Suspense>
+    );
+}
+
+function SettingsPage() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [scannedOrgs, setScannedOrgs] = useState<any[]>([]);
     const [authors, setAuthors] = useState<any[]>([]);
@@ -48,6 +59,15 @@ export default function SettingsPage() {
         isLinkedinConnected: false,
         isTwitterConnected: false
     });
+
+    const getConnectUrl = useCallback((platform: 'linkedin' | 'twitter') => {
+        const token = window.localStorage.getItem('token');
+        const tenantId = window.localStorage.getItem('tenantId');
+        let url = `${api.defaults.baseURL}/auth/${platform}/connect`;
+        if (token) url += `?token=${token}`;
+        if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
+        return url;
+    }, []);
 
     // Dialog State
     const [disconnectDialog, setDisconnectDialog] = useState<{
@@ -85,6 +105,20 @@ export default function SettingsPage() {
         fetchSettings();
         fetchAuthors();
     }, []);
+
+    // Handle OAuth redirect success params
+    useEffect(() => {
+        const linkedinConnected = searchParams.get('linkedin_connected');
+        const twitterConnected = searchParams.get('twitter_connected');
+        if (linkedinConnected === 'true') {
+            toast.success('LinkedIn connected successfully!');
+            router.replace('/settings', { scroll: false });
+        }
+        if (twitterConnected === 'true') {
+            toast.success('Twitter connected successfully!');
+            router.replace('/settings', { scroll: false });
+        }
+    }, [searchParams, router]);
 
     const fetchAuthors = async () => {
         try {
@@ -302,16 +336,7 @@ export default function SettingsPage() {
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => {
-                                                if (typeof window !== 'undefined') {
-                                                    const token = window.localStorage.getItem('token');
-                                                    const tenantId = window.localStorage.getItem('tenantId');
-                                                    let url = `${api.defaults.baseURL}/auth/linkedin/connect`;
-                                                    if (token) url += `?token=${token}`;
-                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
-                                                    window.location.href = url;
-                                                }
-                                            }}
+                                            onClick={() => { window.location.href = getConnectUrl('linkedin'); }}
                                             className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                                         >
                                             <RefreshCw className="mr-2 h-4 w-4" />
@@ -333,19 +358,10 @@ export default function SettingsPage() {
                                     {config.isLinkedinConfigured ? (
                                         <Button
                                             type="button"
-                                            onClick={() => {
-                                                if (typeof window !== 'undefined') {
-                                                    const token = window.localStorage.getItem('token');
-                                                    const tenantId = window.localStorage.getItem('tenantId');
-                                                    let url = `${api.defaults.baseURL}/auth/linkedin/connect`;
-                                                    if (token) url += `?token=${token}`;
-                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
-                                                    window.location.href = url;
-                                                }
-                                            }}
+                                            onClick={() => { window.location.href = getConnectUrl('linkedin'); }}
                                             className="w-full sm:w-auto"
                                         >
-                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            <Link2 className="mr-2 h-4 w-4" />
                                             Connect LinkedIn
                                         </Button>
                                     ) : (
@@ -402,16 +418,7 @@ export default function SettingsPage() {
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => {
-                                                if (typeof window !== 'undefined') {
-                                                    const token = window.localStorage.getItem('token');
-                                                    const tenantId = window.localStorage.getItem('tenantId');
-                                                    let url = `${api.defaults.baseURL}/auth/twitter/connect`;
-                                                    if (token) url += `?token=${token}`;
-                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
-                                                    window.location.href = url;
-                                                }
-                                            }}
+                                            onClick={() => { window.location.href = getConnectUrl('twitter'); }}
                                             className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                                         >
                                             <RefreshCw className="mr-2 h-4 w-4" />
@@ -433,19 +440,10 @@ export default function SettingsPage() {
                                     {config.isTwitterConfigured ? (
                                         <Button
                                             type="button"
-                                            onClick={() => {
-                                                if (typeof window !== 'undefined') {
-                                                    const token = window.localStorage.getItem('token');
-                                                    const tenantId = window.localStorage.getItem('tenantId');
-                                                    let url = `${api.defaults.baseURL}/auth/twitter/connect`;
-                                                    if (token) url += `?token=${token}`;
-                                                    if (tenantId) url += `${token ? '&' : '?'}tenantId=${tenantId}`;
-                                                    window.location.href = url;
-                                                }
-                                            }}
+                                            onClick={() => { window.location.href = getConnectUrl('twitter'); }}
                                             className="w-full sm:w-auto"
                                         >
-                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                            <Link2 className="mr-2 h-4 w-4" />
                                             Connect Twitter
                                         </Button>
                                     ) : (

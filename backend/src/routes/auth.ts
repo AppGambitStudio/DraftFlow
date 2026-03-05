@@ -237,7 +237,7 @@ router.get('/twitter/callback', async (req: Request, res: Response) => {
             twitterExpiresAt: expiresAt
         });
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5003';
         res.redirect(`${frontendUrl}/settings?twitter_connected=true`);
 
     } catch (error) {
