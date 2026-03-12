@@ -1,107 +1,131 @@
 # DraftFlow
 
-A powerful, self-hosted application to schedule and publish posts to LinkedIn and Twitter. Features an Idea Board, AI-powered content improvement, and Markdown support.
+A self-hosted, AI-powered social media scheduling platform. Create, refine, and publish posts to LinkedIn and Twitter with AI assistance, trend tracking, and a weekly digest feature.
 
 ## Features
-- **Multi-Platform Publishing**: Schedule posts for LinkedIn and Twitter.
-- **Idea Board**: Capture thoughts and convert them into full posts using AI.
-- **AI Smart Writing**: Improve your content with AI (powered by OpenRouter/Claude).
-- **Markdown Support**: Use `**bold**` and `*italic*` syntax, automatically converted to Unicode for LinkedIn.
-- **Calendar View**: Visualize your content schedule.
-- **Draft Management**: Save drafts and refine them later.
 
-## Prerequisites
-- **Docker** and **Docker Compose** (Recommended for easiest setup)
-- **Node.js** v18+ (If running locally without Docker)
+- **Multi-Platform Publishing** — Schedule and publish posts to LinkedIn and Twitter/X
+- **Idea Board** — Capture ideas and convert them into polished posts with AI
+- **AI Writing Assistant** — Generate, improve, and iterate on content using Claude/OpenRouter
+- **Trending Topics** — Discover what's trending in your industry with web search (Tavily)
+- **Weekly Digest** — Auto-curate the biggest stories of the week into a short-form post
+- **Calendar View** — Visualize your content schedule at a glance
+- **Recurring Posts** — Set up ideas that auto-generate on a daily, weekly, or monthly schedule
+- **Multi-Tenant** — Support for multiple workspaces and team collaboration
+- **Markdown Support** — Write in `**bold**` and `*italic*`, auto-converted to Unicode for LinkedIn
+- **MCP Integration** — Extend AI capabilities with Model Context Protocol servers
+
+## Architecture
+
+```
+frontend/          Next.js (React 19) dashboard
+backend/           Express + TypeScript API server
+  ├── src/
+  │   ├── routes/       API endpoints
+  │   ├── services/     Business logic (AI, LinkedIn, Twitter, Scheduler)
+  │   ├── middleware/   Auth middleware
+  │   └── db.ts         Sequelize models (SQLite)
+  └── migrations/       SQL migration files
+```
 
 ## Quick Start (Docker)
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd post-scheduler
-    ```
+```bash
+git clone https://github.com/AppGambitStudio/DraftFlow.git
+cd draftflow
 
-2.  **Start the application:**
-    ```bash
-    docker-compose up --build
-    ```
-    This will build the frontend and backend images and start the services.
-    - **Backend**: Runs on port `5002`
-    - **Frontend**: Runs on port `5003`
+# Copy and configure environment
+cp backend/.env.example backend/.env
+# Edit backend/.env — set JWT_SECRET (required) and other keys
 
-3.  **Access the Dashboard:**
-    Open your browser and navigate to [http://localhost:5003](http://localhost:5003).
+# Start everything
+docker-compose up --build
+```
 
-4.  **Configure Settings:**
-    Go to the **Settings** page in the sidebar to configure your API keys:
-    - **LinkedIn**: Client ID, Client Secret, Access Token (Long-lived recommended).
-    - **Twitter**: API Key, Secret, Access Token, Secret (OAuth 1.0a or 2.0).
-    - **OpenRouter**: API Key (for AI features).
+- **Frontend**: http://localhost:5003
+- **Backend API**: http://localhost:5002
 
-## Manual Setup (Local Development)
+## Local Development
 
-If you prefer to run the services locally without Docker:
+### Prerequisites
+
+- Node.js v18+
+- npm
 
 ### Backend
-1.  Navigate to the backend directory:
-    ```bash
-    cd backend
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Create a `.env` file (optional, defaults are provided in code):
-    ```env
-    PORT=5002
-    DATABASE_URL="file:./dev.db"
-    ```
-4.  Start the server:
-    ```bash
-    npm run dev
-    ```
 
-### OAuth Configuration
-To enable "Connect with LinkedIn" and "Connect with Twitter", you must configure your apps on their respective developer portals and add the credentials to `backend/.env`.
-
-1.  **Redirect URIs (Callback URLs):**
-    -   **LinkedIn**: `http://localhost:5002/api/auth/linkedin/callback`
-    -   **Twitter**: `http://localhost:5002/api/auth/twitter/callback`
-
-2.  **Environment Variables (`backend/.env`):**
-    ```env
-    PORT=5002
-    DATABASE_URL="file:./dev.db"
-
-    # LinkedIn OAuth
-    LINKEDIN_CLIENT_ID="your_client_id"
-    LINKEDIN_CLIENT_SECRET="your_client_secret"
-
-    # Twitter OAuth (OAuth 2.0 PKCE)
-    TWITTER_CLIENT_ID="your_client_id"
-    TWITTER_CLIENT_SECRET="your_client_secret"
-    ```
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Edit .env — JWT_SECRET is required
+npm run dev
+```
 
 ### Frontend
-1.  Navigate to the frontend directory:
-    ```bash
-    cd frontend
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Start the development server:
-    ```bash
-    npm run dev
-    ```
-    (Ensure it runs on port 5003, or update `package.json` script).
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend runs on port 5003, backend on port 5002.
+
+### First Run
+
+1. Open http://localhost:5003 and create an account (Sign Up)
+2. Go to **Settings** and configure:
+   - **OpenRouter API Key** — Required for AI features ([openrouter.ai](https://openrouter.ai))
+   - **LinkedIn OAuth** — Client ID & Secret for LinkedIn publishing
+   - **Twitter OAuth** — Client ID & Secret for Twitter publishing
+   - **Tavily API Key** — Optional, for web search / trending topics ([tavily.com](https://tavily.com))
+
+### OAuth Callback URLs
+
+When setting up OAuth apps on LinkedIn/Twitter developer portals:
+
+- **LinkedIn**: `http://localhost:5002/api/auth/linkedin/callback`
+- **Twitter**: `http://localhost:5002/api/auth/twitter/callback`
 
 ## Database
-The application uses **SQLite**.
-- **Initialization**: The database schema is automatically created/updated on startup via Sequelize (`sync({ alter: true })`). No manual migrations are needed.
-- **Location**:
-    - **Docker**: Persisted in a docker volume `backend_data` mounted at `/app/data/dev.db`.
-    - **Local**: Stored as `dev.db` in the `backend` directory.
-- **Never delete the database** file as it will break the application.
+
+DraftFlow uses **SQLite** via Sequelize ORM.
+
+- New tables are auto-created on startup via `sequelize.sync()`
+- Schema changes to existing tables require manual migrations
+
+### Running Migrations
+
+Migrations are SQL files in `backend/migrations/`. Apply them with:
+
+```bash
+cd backend
+sqlite3 dev.db < migrations/YYYYMMDD_HHMMSS_description.sql
+```
+
+## Environment Variables
+
+See [`backend/.env.example`](backend/.env.example) for all available variables.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JWT_SECRET` | Yes | Secret key for JWT token signing |
+| `DATABASE_URL` | No | SQLite path (default: `file:./dev.db`) |
+| `PORT` | No | Backend port (default: `5002`) |
+| `FRONTEND_URL` | No | Frontend URL for invite links (default: `http://localhost:3000`) |
+| `LINKEDIN_CLIENT_ID` | No | LinkedIn OAuth (can also set in Settings UI) |
+| `LINKEDIN_CLIENT_SECRET` | No | LinkedIn OAuth secret |
+| `TWITTER_CLIENT_ID` | No | Twitter OAuth (can also set in Settings UI) |
+| `TWITTER_CLIENT_SECRET` | No | Twitter OAuth secret |
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, Tailwind CSS, Recharts
+- **Backend**: Express 5, TypeScript, Sequelize, SQLite
+- **AI**: OpenRouter API (Claude, GPT, etc.), Tavily web search
+- **Agent Framework**: Mastra.io with MCP support
+
+## License
+
+[ISC](LICENSE)

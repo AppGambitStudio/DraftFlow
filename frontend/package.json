@@ -1,6 +1,9 @@
 {
-  "name": "frontend",
-  "version": "3.0.0-20251228",
+  "name": "@draftflow/frontend",
+  "version": "3.0.0",
+  "description": "DraftFlow frontend — Next.js dashboard for AI-powered social media post scheduling",
+  "author": "APPGAMBiT",
+  "license": "ISC",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 5003",

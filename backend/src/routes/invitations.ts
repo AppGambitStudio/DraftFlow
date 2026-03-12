@@ -102,10 +102,12 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             expiresAt
         });
 
-        // In a real app, send email here.
-        console.log(`[INVITE LINK] http://localhost:3000/accept-invite?token=${token}`);
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const inviteLink = `${frontendUrl}/accept-invite?token=${token}`;
 
-        res.json({ message: 'Invitation created', invitation, link: `http://localhost:3000/accept-invite?token=${token}` });
+        console.log(`[INVITE LINK] ${inviteLink}`);
+
+        res.json({ message: 'Invitation created', invitation, link: inviteLink });
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to create invitation' });
     }

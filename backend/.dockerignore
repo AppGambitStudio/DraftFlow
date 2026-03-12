@@ -1,4 +1,9 @@
 node_modules
-npm-debug.log
 dist
 .env
+dev.db
+dev.db-journal
+dev.db-wal
+uploads
+*.log
+.DS_Store

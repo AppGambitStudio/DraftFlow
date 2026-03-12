@@ -881,39 +881,7 @@ export const initDB = async () => {
         await sequelize.sync(); // Use migrations for schema changes
         console.log('Database synced successfully.');
 
-        // 1. Create Default User if not exists
-        const email = 'dhaval.b.nagar@gmail.com';
-        let defaultUser = await User.findOne({ where: { email } });
-        if (!defaultUser) {
-            const hashedPassword = await bcrypt.hash('Test@1234', 10);
-            defaultUser = await User.create({
-                email,
-                password: hashedPassword,
-            });
-            console.log('Default User created:', email, 'ID:', defaultUser.id);
-        }
-
-        // 2. Data Migration: Assign orphaned records to Default User
-        const orphanedSettings = await Settings.update({ userId: defaultUser.id }, { where: { userId: null } });
-        const orphanedPosts = await Post.update({ userId: defaultUser.id }, { where: { userId: null } });
-        const orphanedIdeas = await Idea.update({ userId: defaultUser.id }, { where: { userId: null } });
-
-        if (orphanedSettings[0] > 0 || orphanedPosts[0] > 0 || orphanedIdeas[0] > 0) {
-            console.log(`Migrated: ${orphanedSettings[0]} settings, ${orphanedPosts[0]} posts, ${orphanedIdeas[0]} ideas to ${email}`);
-        }
-
-        // 3. Ensure Settings exists for the user (double check / seeding)
-        const userSettings = await Settings.findOne({ where: { userId: defaultUser.id } });
-        if (!userSettings) {
-            await Settings.create({
-                userId: defaultUser.id,
-                linkedinOrganizations: '[]',
-                webhookSecret: crypto.randomBytes(16).toString('hex'),
-            });
-            console.log('Default settings created for the user.');
-        }
-
-        // 4. Ensure all settings have a webhookSecret (self-healing)
+        // Self-healing: Ensure all settings have a webhookSecret
         const allSettings = await Settings.findAll({ where: { webhookSecret: null } });
         for (const s of allSettings) {
             await s.update({ webhookSecret: crypto.randomBytes(16).toString('hex') });

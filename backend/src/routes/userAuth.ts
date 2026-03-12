@@ -5,7 +5,7 @@ import { User, Tenant, TenantMember } from '../db';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-change-this';
+const JWT_SECRET = process.env.JWT_SECRET!;
 
 // Login
 router.post('/login', async (req: Request, res: Response) => {

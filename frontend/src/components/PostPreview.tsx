@@ -25,8 +25,8 @@ export function PostPreview({ content, attachments = [] }: PostPreviewProps) {
                 <div className="flex gap-3">
                     <div className="h-12 w-12 rounded-full bg-slate-200" /> {/* Placeholder for Avatar */}
                     <div>
-                        <div className="font-semibold text-sm text-slate-900">Dhaval Nagar</div>
-                        <div className="text-xs text-slate-500">Post Scheduler User • 1st</div>
+                        <div className="font-semibold text-sm text-slate-900">Your Name</div>
+                        <div className="text-xs text-slate-500">DraftFlow User • 1st</div>
                         <div className="text-xs text-slate-500">1h • <span className="text-slate-400">🌐</span></div>
                     </div>
                 </div>

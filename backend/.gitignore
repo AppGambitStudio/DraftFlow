@@ -1,13 +1,20 @@
 node_modules
-# Keep environment variables out of version control
 .env
 
-/generated/prisma
+# Build output
+dist/
 
-# TypeScript build artifacts (project uses ts-node directly)
+# TypeScript build artifacts (project uses ts-node in dev)
 src/**/*.js
 src/**/*.d.ts
 src/**/*.js.map
 src/**/*.d.ts.map
 
+# User uploads
 uploads/**
+!uploads/.gitkeep
+
+# Database
+dev.db
+dev.db-journal
+dev.db-wal
