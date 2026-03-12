@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List, Timer, CheckCircle2, FileText, Paperclip, Download, Check } from "lucide-react";
+import { Plus, Lightbulb, Pencil, Trash2, Sparkles, Repeat, BookOpen, X, Wand2, LayoutGrid, List, Timer, CheckCircle2, FileText, Paperclip, Download, Check, ExternalLink } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
 
@@ -908,7 +908,11 @@ export default function IdeasPage() {
             {/* History Modal */}
             {viewingHistoryId && (() => {
                 const idea = ideas.find(i => i.id === viewingHistoryId);
-                const summaries = idea ? JSON.parse(idea.generatedSummaries || '[]') : [];
+                const rawEntries = idea ? JSON.parse(idea.generatedSummaries || '[]') : [];
+                // Support both old format (string[]) and new format ({summary, postId}[])
+                const entries: { summary: string; postId?: number }[] = rawEntries.map((entry: any) =>
+                    typeof entry === 'string' ? { summary: entry } : entry
+                );
 
                 return (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -925,24 +929,33 @@ export default function IdeasPage() {
                                     These summaries are used by AI to avoid generating duplicate content.
                                 </p>
 
-                                {summaries.length === 0 ? (
+                                {entries.length === 0 ? (
                                     <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                                         <p>No previous posts generated yet.</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        {summaries.map((summary: string, idx: number) => (
+                                        {[...entries].reverse().map((entry, idx) => (
                                             <div key={idx} className="p-4 rounded-lg bg-muted/50 border">
-                                                <div className="flex items-center gap-2 mb-2">
+                                                <div className="flex items-center justify-between mb-2">
                                                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                                                        Run #{summaries.length - idx}
+                                                        Run #{entries.length - idx}
                                                     </span>
+                                                    {entry.postId && (
+                                                        <a
+                                                            href={`/create?postId=${entry.postId}`}
+                                                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                                                        >
+                                                            <ExternalLink className="h-3 w-3" />
+                                                            View Post #{entry.postId}
+                                                        </a>
+                                                    )}
                                                 </div>
                                                 <p className="text-sm text-foreground/90 leading-relaxed">
-                                                    {summary}
+                                                    {entry.summary}
                                                 </p>
                                             </div>
-                                        )).reverse()}
+                                        ))}
                                     </div>
                                 )}
                             </div>

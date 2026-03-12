@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Settings, Idea, Post } from '../db';
+import { Settings, Idea, Post, WeeklyDigest } from '../db';
 import fs from 'fs';
 import path from 'path';
 import { getMCPManager, MCPServerConfig } from './mcpManager';
@@ -379,7 +379,7 @@ Your post must be about the PROMPT TOPIC, not about what these examples discuss.
         }
 
         if (keyTakeaway) {
-            SYSTEM_PROMPT += `\n**Mandatory Key Takeaway:**\nThe post MUST end with or clearly drive towards this conclusion: "${keyTakeaway}". Ensure the entire argument supports this final point.\n`;
+            SYSTEM_PROMPT += `\n**Mandatory Key Takeaway (THEMATIC GUIDE):**\nThe post must drive towards this core message: "${keyTakeaway}".\nIMPORTANT: This is a THEMATIC DIRECTION, not literal text. Paraphrase and weave this insight naturally into the post's conclusion using your own words. DO NOT copy-paste this text verbatim into the post.\n`;
         }
 
         if (previousSummaries.length > 0) {
@@ -416,10 +416,10 @@ Unless the "Post Shape" instruction above dictates otherwise, follow this high-l
 4. **CTA** - Encouraging engagement or reflection.
 
 **Topics & Focus:**
-- STRICTLY focus on the topics provided in the "Idea Title", "Core Concept", and "Tags".
-- **Primary Anchor:** If "SPECIFIC USER INSTRUCTIONS" were provided above, they are your primary source of truth for the post's angle and content.
+- STRICTLY focus on the topics provided in the "Idea Title", "Creative Brief / Description", and "Topic Tags".
+- **Primary Anchor:** If "SPECIFIC USER INSTRUCTIONS" were provided above, they are your primary source of truth for the post's angle and content. The "Creative Brief / Description" is your secondary anchor — it contains specific angles, examples, and framing to follow.
 - Do NOT force unrelated topics unless they are part of the input.
-- If the input is broad, narrow it down to the specific angle requested by the user.
+- If the input is broad or lists multiple angles, pick ONE specific angle and go deep on it rather than covering everything superficially.
 
 **Tone & Style**:
 ${effectiveTone ? `**IMPORTANT: You MUST strictly follow these specific style guidelines:**\n${effectiveTone}` : `- Professional yet conversational (like a smart colleague, not a textbook).
@@ -436,9 +436,20 @@ ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCa
 - Use bold text **sparingly** to highlight key phrases (not entire sentences).
 - Use clear visual breaks (white space).
 
+**URLs & Links (HARD CONSTRAINT):**
+- DO NOT fabricate, hallucinate, or invent URLs. This is a critical trust violation.
+- You may ONLY include URLs that were explicitly provided in the "Reference Material", "Source Links", or user prompt.
+- If no source URLs were provided, do NOT include any links in the post.
+- If a source URL was provided, you may reference it naturally (e.g., as a parenthetical citation).
+
+**Hashtags (REQUIRED):**
+- End the post with 3-6 relevant hashtags.
+- Hashtags should reflect the post's core topics (e.g., #AWS, #Serverless, #CloudArchitecture).
+- Do NOT use generic hashtags like #Innovation or #Technology — be specific to the content.
+
 **Engagement Optimization:**
 - The first line must be a "scroll stopper".
-- End with a question or a thought-provoking statement that invites comments.
+- End with a question or a thought-provoking statement that invites comments (before the hashtags).
 - Focus on *value* for the reader—why should they care?
 
 **Response Format:**
@@ -465,17 +476,64 @@ Return a JSON object with the following structure:
         try {
             const parsed = this.extractAndParseJson(response);
             return {
-                content: parsed.postContent || parsed.content || response,
+                content: this.sanitizePostContent(parsed.postContent || parsed.content || response, prompt),
                 summary: parsed.summary || "Summary generation failed or returned empty"
             };
         } catch (e: any) {
             console.error("[AIService] Failed to parse AI response as JSON:", e.message);
             // Fallback - try to extract anything that looks like a post if parsing fails
             return {
-                content: response.length > 100 ? response : "Failed to generate valid post content.",
+                content: this.sanitizePostContent(response.length > 100 ? response : "Failed to generate valid post content.", prompt),
                 summary: "Summary parsing failed"
             };
         }
+    }
+
+    /**
+     * Strip hallucinated URLs from generated content.
+     * Only keeps URLs that were present in the original prompt (source links, reference material).
+     */
+    private static sanitizePostContent(content: string, originalPrompt: string): string {
+        // Extract all URLs from the original prompt to build an allowlist
+        const urlRegex = /https?:\/\/[^\s\])"',]+/g;
+        const allowedUrls = new Set<string>();
+        let match;
+        while ((match = urlRegex.exec(originalPrompt)) !== null) {
+            // Store the domain as allowed
+            try {
+                const domain = new URL(match[0]).hostname;
+                allowedUrls.add(domain);
+            } catch { /* skip malformed URLs */ }
+        }
+
+        // Remove markdown links [text](url) where the URL domain is not in the allowlist
+        let sanitized = content.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, (fullMatch, text, url) => {
+            try {
+                const domain = new URL(url).hostname;
+                if (allowedUrls.has(domain)) {
+                    return fullMatch; // Keep — domain was in the prompt
+                }
+            } catch { /* malformed URL */ }
+            console.warn(`[AIService] Stripped hallucinated link: ${url}`);
+            return text; // Strip the link, keep the text
+        });
+
+        // Also remove bare URLs that aren't from allowed domains
+        sanitized = sanitized.replace(/(?<!\()(https?:\/\/[^\s\])"',]+)/g, (fullMatch, url) => {
+            try {
+                const domain = new URL(url).hostname;
+                if (allowedUrls.has(domain)) {
+                    return fullMatch;
+                }
+            } catch { /* malformed URL */ }
+            console.warn(`[AIService] Stripped hallucinated bare URL: ${url}`);
+            return '';
+        });
+
+        // Clean up any leftover empty parentheses or extra whitespace from removals
+        sanitized = sanitized.replace(/\(\s*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+
+        return sanitized;
     }
 
 
@@ -1137,6 +1195,141 @@ Return a JSON object:
         }
     }
 
+    /**
+     * Generate a weekly digest post curating the biggest stories of the week.
+     * Searches Tavily for each topic, then has the LLM curate top stories into a formatted post.
+     */
+    static async generateWeeklyDigest(
+        tenantId: string,
+        params: {
+            topics: string[];
+            platform?: string;
+            authorUrn?: string;
+            storyCount?: number;
+            additionalContext?: string;
+        }
+    ): Promise<{ content: string; stories: Array<{ headline: string; summary: string; url: string }>; digestId: number }> {
+        const config = await this.getUnifiedConfig(tenantId, params.authorUrn);
+        const settings = await Settings.findOne({ where: { tenantId } });
+        const tavilyApiKey = settings?.tavilyApiKey;
+        const { topics, platform, storyCount = 5, additionalContext } = params;
+
+        if (!tavilyApiKey) {
+            throw new Error('Tavily API key is required for Weekly Digest. Configure it in Settings.');
+        }
+
+        const currentDate = new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
+        // Search Tavily for each topic with week-long timeRange
+        console.log(`[AIService] Weekly Digest: searching ${topics.length} topics via Tavily`);
+        const allResults: Array<{ topic: string; results: Array<{ title: string; url: string; content: string; score: number }> }> = [];
+
+        for (const topic of topics) {
+            const results = await this.searchWithTavily(tavilyApiKey, `latest news and developments: ${topic}`, {
+                topic: 'news',
+                timeRange: 'week',
+                maxResults: 8,
+            });
+            allResults.push({ topic, results });
+        }
+
+        // Build context from all search results
+        let searchContext = '';
+        allResults.forEach(({ topic, results }) => {
+            searchContext += `\n### Topic: "${topic}" (${results.length} results)\n`;
+            results.forEach((r, i) => {
+                searchContext += `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   ${r.content}\n\n`;
+            });
+        });
+
+        const SYSTEM_PROMPT = `You are an expert content curator who creates compelling weekly digest posts for LinkedIn/Twitter.
+
+**TODAY'S DATE:** ${currentDate}
+
+Your task is to curate the ${storyCount} BIGGEST and most impactful stories from the past week into a short, punchy digest post.
+
+**FORMAT RULES:**
+1. Start with a bold, opinionated opening line (1-2 sentences) that ties the stories together with a theme or insight. This should feel like a hot take or observation, NOT a generic "here's what happened this week."
+2. Then list each story as a separate block:
+   - Story headline in bold (use unicode bold characters like 𝐁𝐨𝐥𝐝 𝐓𝐞𝐱𝐭)
+   - 1-2 sentence description of what happened and why it matters. Be specific, not generic.
+   - Include the source URL in markdown format: [domain.com](url)
+3. End with a one-line pattern observation or takeaway (what ties these stories together)
+4. End with 3-5 relevant hashtags
+
+**STYLE GUIDELINES:**
+- Be opinionated and insightful, not just reporting facts
+- Each story description should explain the "so what" — why should the reader care
+- Use conversational, professional tone
+- Keep it scannable — readers should get the gist in 10 seconds
+- Don't use emojis excessively (0-2 max)
+- ONLY use URLs from the search results provided. NEVER fabricate URLs.
+${platform?.toUpperCase() === 'TWITTER' || platform?.toUpperCase() === 'X'
+    ? '\n**PLATFORM:** Twitter/X — Keep total post under 270 characters. You may need to reduce to 2-3 stories max.'
+    : '\n**PLATFORM:** LinkedIn — Keep total post under 2800 characters.'}
+
+${additionalContext ? `\n**ADDITIONAL INSTRUCTIONS:** ${additionalContext}` : ''}
+
+**RESPONSE FORMAT:**
+Return a JSON object:
+{
+    "content": "The full formatted post text ready to publish",
+    "stories": [
+        {
+            "headline": "Story headline",
+            "summary": "Brief description",
+            "url": "https://actual-source-url.com/article"
+        }
+    ]
+}
+
+**CRITICAL:**
+- Return ONLY valid JSON. No markdown blocks, no explanations.
+- Use ONLY real URLs from the search results.
+- Select stories by IMPACT and RELEVANCE, not just recency.
+- Stories should be diverse — don't pick 3 stories about the same sub-topic.`;
+
+        const userPrompt = `Here are the web search results from the past week for the topics: ${topics.join(', ')}
+
+${searchContext}
+
+Curate the ${storyCount} biggest, most impactful stories from these results into a weekly digest post. Pick stories that would resonate with a professional audience interested in these topics.`;
+
+        console.log(`[AIService] Weekly Digest: sending ${allResults.reduce((sum, r) => sum + r.results.length, 0)} search results to LLM for curation`);
+
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, userPrompt, false);
+
+        let content: string;
+        let stories: Array<{ headline: string; summary: string; url: string }> = [];
+
+        try {
+            const parsed = this.extractAndParseJson(response);
+            content = parsed.content || response;
+            stories = Array.isArray(parsed.stories) ? parsed.stories : [];
+        } catch (e: any) {
+            console.error('[AIService] Failed to parse weekly digest response, returning raw:', e.message);
+            content = response;
+        }
+
+        // Save to history
+        const digest = await WeeklyDigest.create({
+            tenantId,
+            content,
+            topics: JSON.stringify(topics),
+            stories: JSON.stringify(stories),
+            platform: platform || 'linkedin',
+            storyCount,
+            status: 'GENERATED',
+        });
+
+        return { content, stories, digestId: digest.id };
+    }
+
     static async enhanceIdeaDescription(tenantId: string, title: string, description: string): Promise<string> {
         const SYSTEM_PROMPT = `
             You are an expert content strategist. Your goal is to create a **Content Brief/Outline** for a future LinkedIn post.
@@ -1239,32 +1432,51 @@ Return a JSON object:
         tenantId: string,
         idea: Idea,
         platform: string = 'LinkedIn',
-        additionalContext?: string
+        additionalContext?: string,
+        postId?: number
     ): Promise<{ content: string; summary: string }> {
-        const prompt = `
-            Based on the following idea, write a professional and engaging ${platform} post.
-            
-            Title: ${idea.title}
-            Description: ${idea.description}
-            
-            The post should be ready to publish, with appropriate hashtags.
-        `;
-
+        // Build a structured, rich prompt from all idea metadata
+        const tags = JSON.parse(idea.tags || '[]');
         const links = JSON.parse(idea.sourceLinks || '[]');
         const attachments = JSON.parse(idea.attachments || '[]');
+
+        let prompt = `Create a ${platform} post based on the following creative brief.\n\n`;
+        prompt += `**Idea Title:** ${idea.title}\n`;
+
+        if (idea.description) {
+            prompt += `\n**Creative Brief / Description:**\n${idea.description}\n`;
+            prompt += `\nIMPORTANT: The description above contains the creative direction — specific angles, story arcs, examples, and framing instructions. Follow them closely. Pick ONE specific angle from the description if multiple are listed.\n`;
+        }
+
+        if (tags.length > 0) {
+            prompt += `\n**Topic Tags:** ${tags.join(', ')}\n`;
+        }
 
         const contextFromLinks = await this.gatherContextFromLinks(links);
         const contextFromAttachments = await this.gatherContextFromAttachments(attachments);
 
-        const fullPrompt = prompt + contextFromLinks + contextFromAttachments;
+        if (contextFromLinks) {
+            prompt += `\n**Reference Material (use to add depth, specifics, and credibility — cite insights but do NOT summarize the entire article):**${contextFromLinks}\n`;
+        }
+        if (contextFromAttachments) {
+            prompt += `\n**Attached Reference Material:**${contextFromAttachments}\n`;
+        }
+
+        const fullPrompt = prompt;
         const config = await this.getUnifiedConfig(tenantId, idea.authorUrn);
 
-        let previousSummaries: string[] = [];
+        // Parse existing summaries — supports both old format (string[]) and new format ({summary, postId}[])
+        let existingEntries: { summary: string; postId?: number }[] = [];
         try {
-            previousSummaries = JSON.parse(idea.generatedSummaries || '[]');
+            const raw = JSON.parse(idea.generatedSummaries || '[]');
+            existingEntries = raw.map((entry: any) =>
+                typeof entry === 'string' ? { summary: entry } : entry
+            );
         } catch (e) {
-            previousSummaries = [];
+            existingEntries = [];
         }
+
+        const previousSummaries = existingEntries.map(e => e.summary);
 
         const { content, summary } = await this.generate(
             tenantId,
@@ -1282,10 +1494,11 @@ Return a JSON object:
         );
 
         if (summary && summary !== "Summary parsing failed") {
-            const newSummaries = config.maxHistoryItems > 0
-                ? [...previousSummaries, summary].slice(-config.maxHistoryItems)
+            const newEntry = { summary, postId: postId || undefined };
+            const newEntries = config.maxHistoryItems > 0
+                ? [...existingEntries, newEntry].slice(-config.maxHistoryItems)
                 : [];
-            idea.generatedSummaries = JSON.stringify(newSummaries);
+            idea.generatedSummaries = JSON.stringify(newEntries);
             idea.lastGeneratedAt = new Date();
             await idea.save();
         }

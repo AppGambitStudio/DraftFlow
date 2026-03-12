@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { Post, Idea, Settings } from '../db';
+import { Post, Idea, Settings, WeeklyDigest } from '../db';
 import { linkedinService } from './linkedin';
 import { twitterService } from './twitter';
 import { Op } from 'sequelize';
@@ -118,8 +118,30 @@ export const startScheduler = () => {
             console.error('Error in scheduler:', error);
         }
 
+        // Clean up stuck GENERATING posts (older than 10 minutes)
+        try {
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+            const [stuckCount] = await Post.update(
+                { status: 'FAILED', error: 'Generation timed out' },
+                {
+                    where: {
+                        status: 'GENERATING',
+                        createdAt: { [Op.lte]: tenMinutesAgo }
+                    }
+                }
+            );
+            if (stuckCount > 0) {
+                console.log(`[Scheduler] Cleaned up ${stuckCount} stuck GENERATING post(s)`);
+            }
+        } catch (cleanupError) {
+            console.error('[Scheduler] Error cleaning up stuck posts:', cleanupError);
+        }
+
         // Check for recurring ideas
         await checkRecurringIdeas();
+
+        // Check for scheduled weekly digests
+        await checkScheduledDigests();
     });
 
     // Run every day at midnight
@@ -191,16 +213,7 @@ const checkRecurringIdeas = async () => {
 
                     console.log(`[Scheduler] Generation triggered for Idea ${idea.id}: "${idea.title}" (${idea.frequency})`);
 
-                    // Generate content and summary using consolidated logic
-                    const { content, summary } = await AIService.generateForIdea(
-                        idea.tenantId as string,
-                        idea,
-                        'LinkedIn'
-                    );
-
-                    // Calculate next scheduled time for the post
-                    // If generated today, maybe schedule for next occurrence?
-                    // Typically, if we generate it now, we want it to show up as a draft for the NEXT slot.
+                    // Calculate scheduled time for the post
                     const postScheduledTime = new Date();
                     if (idea.frequency === 'DAILY') {
                         postScheduledTime.setDate(postScheduledTime.getDate() + 1);
@@ -211,20 +224,38 @@ const checkRecurringIdeas = async () => {
                     }
                     postScheduledTime.setHours(targetHour, targetMinute, 0, 0);
 
-                    // Create Post
-                    await Post.create({
-                        content,
+                    // Create placeholder post first so we can link it in the idea's history
+                    const post = await Post.create({
+                        content: `Generating post from idea: ${idea.title}...`,
                         userId: idea.userId,
                         tenantId: idea.tenantId,
                         scheduledTime: postScheduledTime,
-                        status: 'DRAFT',
+                        status: 'GENERATING',
                         platforms: JSON.stringify(['LINKEDIN']),
                         authorUrn: idea.authorUrn,
                         authorName: idea.authorName,
-                        mediaUrls: '[]', // Do not carry over reference documents as post media
+                        mediaUrls: '[]',
                     });
 
-                    console.log(`[Scheduler] Successfully generated draft for Idea ${idea.id}`);
+                    // Generate content and summary, passing postId so it's stored in the idea's history
+                    try {
+                        const { content } = await AIService.generateForIdea(
+                            idea.tenantId as string,
+                            idea,
+                            'LinkedIn',
+                            undefined,
+                            post.id
+                        );
+
+                        await post.update({ content, status: 'DRAFT' });
+                        console.log(`[Scheduler] Successfully generated draft for Idea ${idea.id}`);
+                    } catch (genError: any) {
+                        console.error(`[Scheduler] AI generation failed for Idea ${idea.id}, Post ${post.id}:`, genError.message);
+                        await post.update({
+                            status: 'FAILED',
+                            error: genError.message || 'AI generation failed',
+                        });
+                    }
                 }
             } catch (ideaError: any) {
                 console.error(`[Scheduler] Error processing Idea ${idea.id}:`, ideaError);
@@ -232,5 +263,84 @@ const checkRecurringIdeas = async () => {
         }
     } catch (error) {
         console.error('[Scheduler] Error in checkRecurringIdeas:', error);
+    }
+};
+
+const checkScheduledDigests = async () => {
+    try {
+        // Find all settings with digestConfig that has scheduleEnabled
+        const allSettings = await Settings.findAll({
+            where: {
+                digestConfig: { [Op.not]: null }
+            }
+        });
+
+        const now = new Date();
+        const currentDayOfWeek = now.getDay(); // 0-6 (Sun-Sat)
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        for (const settings of allSettings) {
+            try {
+                const config = JSON.parse(settings.digestConfig || '{}');
+                if (!config.scheduleEnabled || !config.topics || config.topics.length === 0) continue;
+
+                const targetDayOfWeek = config.scheduleDayOfWeek ?? 1; // Monday default
+                if (currentDayOfWeek !== targetDayOfWeek) continue;
+
+                const timeParts = (config.scheduleTime || '09:00').split(':');
+                const targetHour = parseInt(timeParts[0] || '9', 10);
+                const targetMinute = parseInt(timeParts[1] || '0', 10);
+                const timeHasPassed = (currentHour > targetHour) || (currentHour === targetHour && currentMinute >= targetMinute);
+                if (!timeHasPassed) continue;
+
+                // Check if we already generated one today
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+
+                const existingToday = await WeeklyDigest.findOne({
+                    where: {
+                        tenantId: settings.tenantId,
+                        createdAt: { [Op.gte]: todayStart }
+                    }
+                });
+
+                if (existingToday) continue;
+
+                console.log(`[Scheduler] Auto-generating weekly digest for tenant ${settings.tenantId}`);
+
+                const result = await AIService.generateWeeklyDigest(settings.tenantId as string, {
+                    topics: config.topics,
+                    platform: config.platform || 'linkedin',
+                    storyCount: config.storyCount || 5,
+                    additionalContext: config.additionalContext || undefined,
+                    authorUrn: config.authorUrn || undefined,
+                });
+
+                // Auto-save as draft post
+                const post = await Post.create({
+                    content: result.content,
+                    tenantId: settings.tenantId,
+                    userId: settings.userId,
+                    platforms: JSON.stringify([(config.platform || 'linkedin').toUpperCase()]),
+                    status: 'DRAFT',
+                    scheduledTime: new Date(),
+                    authorUrn: config.authorUrn || null,
+                    mediaUrls: '[]',
+                });
+
+                // Link the digest to the post
+                const digest = await WeeklyDigest.findByPk(result.digestId);
+                if (digest) {
+                    await digest.update({ postId: post.id });
+                }
+
+                console.log(`[Scheduler] Weekly digest generated for tenant ${settings.tenantId}, post ${post.id}`);
+            } catch (err: any) {
+                console.error(`[Scheduler] Error generating weekly digest for tenant ${settings.tenantId}:`, err.message);
+            }
+        }
+    } catch (error) {
+        console.error('[Scheduler] Error in checkScheduledDigests:', error);
     }
 };

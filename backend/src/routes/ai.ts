@@ -1,6 +1,6 @@
 import express, { Response } from 'express';
 import { AIService } from '../services/ai';
-import { Settings, SavedTrend } from '../db';
+import { Settings, SavedTrend, WeeklyDigest, Post } from '../db';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { Op } from 'sequelize';
 
@@ -226,6 +226,148 @@ router.post('/trending-topics', authMiddleware, async (req: AuthRequest, res: Re
         }
 
         res.json({ topics });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Generate weekly digest post
+router.post('/weekly-digest', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { topics, platform, authorUrn, storyCount, additionalContext } = req.body;
+
+        if (!topics || !Array.isArray(topics) || topics.length === 0) {
+            res.status(400).json({ error: 'At least one topic is required' });
+            return;
+        }
+
+        const result = await AIService.generateWeeklyDigest(tenantId, {
+            topics,
+            platform,
+            authorUrn,
+            storyCount: storyCount || 5,
+            additionalContext
+        });
+
+        res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get weekly digest history
+router.get('/weekly-digest/history', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        const { count, rows } = await WeeklyDigest.findAndCountAll({
+            where: { tenantId },
+            order: [['createdAt', 'DESC']],
+            limit,
+            offset,
+        });
+
+        const digests = rows.map(d => ({
+            id: d.id,
+            content: d.content,
+            topics: JSON.parse(d.topics || '[]'),
+            stories: JSON.parse(d.stories || '[]'),
+            platform: d.platform,
+            storyCount: d.storyCount,
+            status: d.status,
+            postId: d.postId,
+            createdAt: d.createdAt,
+        }));
+
+        res.json({ digests, total: count });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete a digest from history
+router.delete('/weekly-digest/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const digest = await WeeklyDigest.findOne({ where: { id: req.params.id, tenantId } });
+        if (!digest) {
+            return res.status(404).json({ error: 'Digest not found' });
+        }
+        await digest.destroy();
+        res.json({ message: 'Digest deleted' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Save digest as draft post
+router.post('/weekly-digest/:id/save-draft', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const digest = await WeeklyDigest.findOne({ where: { id: req.params.id, tenantId } });
+        if (!digest) {
+            return res.status(404).json({ error: 'Digest not found' });
+        }
+
+        const { authorUrn, authorName } = req.body;
+
+        const post = await Post.create({
+            content: digest.content,
+            userId: req.user!.id,
+            tenantId,
+            platforms: JSON.stringify([digest.platform.toUpperCase()]),
+            status: 'DRAFT',
+            scheduledTime: new Date(),
+            authorUrn: authorUrn || null,
+            authorName: authorName || null,
+            mediaUrls: '[]',
+        });
+
+        await digest.update({ postId: post.id });
+        res.json({ postId: post.id });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get digest config
+router.get('/digest-config', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const settings = await Settings.findOne({ where: { tenantId } });
+        const config = settings?.digestConfig ? JSON.parse(settings.digestConfig) : null;
+        res.json({ config });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Save digest config
+router.put('/digest-config', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { topics, platform, storyCount, additionalContext, scheduleEnabled, scheduleDayOfWeek, scheduleTime, authorUrn } = req.body;
+
+        const config = {
+            topics: topics || [],
+            platform: platform || 'linkedin',
+            storyCount: storyCount || 5,
+            additionalContext: additionalContext || '',
+            scheduleEnabled: scheduleEnabled || false,
+            scheduleDayOfWeek: scheduleDayOfWeek ?? 1, // Monday default
+            scheduleTime: scheduleTime || '09:00',
+            authorUrn: authorUrn || null,
+        };
+
+        await Settings.update(
+            { digestConfig: JSON.stringify(config) },
+            { where: { tenantId } }
+        );
+
+        res.json({ config });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

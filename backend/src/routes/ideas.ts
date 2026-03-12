@@ -182,6 +182,7 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
             platforms: JSON.stringify([platform || 'LINKEDIN']),
             authorUrn: idea.authorUrn,
             authorName: idea.authorName,
+            scheduledTime: new Date(), // Set to now so it appears in dashboard "Today's Posts"
         });
 
         // Mark idea as DRAFTED
@@ -198,7 +199,8 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
                     tenantId,
                     idea,
                     platform,
-                    additionalContext
+                    additionalContext,
+                    post.id
                 );
 
                 await post.update({

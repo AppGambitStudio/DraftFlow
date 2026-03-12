@@ -196,6 +196,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare tavilyApiKey: string | null;
     declare mcpServers: string | null;
     declare userPreferences: string | null; // Added for episodic memory
+    declare digestConfig: string | null; // JSON: { topics, platform, storyCount, additionalContext, scheduleEnabled, scheduleDayOfWeek, scheduleTime, authorUrn }
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -291,6 +292,10 @@ Settings.init({
         type: DataTypes.TEXT,
         allowNull: true,
         defaultValue: '[]',
+    },
+    digestConfig: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
@@ -791,6 +796,82 @@ CaseStudy.init({
 
 Tenant.hasMany(CaseStudy, { foreignKey: 'tenantId' });
 CaseStudy.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+// WeeklyDigest Model
+export class WeeklyDigest extends Model<InferAttributes<WeeklyDigest>, InferCreationAttributes<WeeklyDigest>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']> | null;
+    declare content: string;
+    declare topics: string; // JSON string array
+    declare stories: string; // JSON string array of { headline, summary, url }
+    declare platform: string;
+    declare storyCount: number;
+    declare status: CreationOptional<string>; // GENERATING, GENERATED, FAILED
+    declare error: string | null;
+    declare postId: number | null; // linked Post if saved as draft
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+WeeklyDigest.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    content: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        defaultValue: '',
+    },
+    topics: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        defaultValue: '[]',
+    },
+    stories: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+        defaultValue: '[]',
+    },
+    platform: {
+        type: DataTypes.STRING,
+        defaultValue: 'linkedin',
+    },
+    storyCount: {
+        type: DataTypes.INTEGER,
+        defaultValue: 5,
+    },
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: 'GENERATED',
+    },
+    error: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    postId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'WeeklyDigest',
+    tableName: 'weekly_digests',
+    indexes: [
+        { fields: ['tenantId'] },
+        { fields: ['createdAt'] },
+    ]
+});
+
+Tenant.hasMany(WeeklyDigest, { foreignKey: 'tenantId' });
+WeeklyDigest.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
 // Sync database
 export const initDB = async () => {
