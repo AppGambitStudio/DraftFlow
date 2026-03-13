@@ -8,6 +8,7 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 - **Idea Board** — Capture ideas and convert them into polished posts with AI
 - **AI Writing Assistant** — Generate, improve, and iterate on content using Claude/OpenRouter
 - **Trending Topics** — Discover what's trending in your industry with web search (Tavily)
+- **RSS Feeds** — Subscribe to RSS feeds, browse articles, and turn them into posts or ideas
 - **Weekly Digest** — Auto-curate the biggest stories of the week into a short-form post
 - **Calendar View** — Visualize your content schedule at a glance
 - **Recurring Posts** — Set up ideas that auto-generate on a daily, weekly, or monthly schedule
