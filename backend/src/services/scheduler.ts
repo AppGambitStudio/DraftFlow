@@ -6,6 +6,7 @@ import { Op } from 'sequelize';
 import { markdownToUnicode } from '../utils/markdownToUnicode';
 import { AIService } from './ai';
 import { analyticsSyncService } from './analyticsSync';
+import { RssService } from './rss';
 
 export const startScheduler = () => {
     console.log('Scheduler started...');
@@ -147,6 +148,15 @@ export const startScheduler = () => {
     // Run every day at midnight
     cron.schedule('0 0 * * *', async () => {
         analyticsSyncService.syncAllRecentPosts();
+
+        // Refresh all RSS feeds daily
+        try {
+            console.log('[Scheduler] Starting daily RSS feed refresh...');
+            await RssService.refreshAllTenantFeeds();
+            console.log('[Scheduler] RSS feed refresh complete');
+        } catch (err) {
+            console.error('[Scheduler] RSS feed refresh error:', err);
+        }
     });
 };
 

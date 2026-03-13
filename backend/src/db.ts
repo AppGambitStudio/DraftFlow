@@ -873,6 +873,186 @@ WeeklyDigest.init({
 Tenant.hasMany(WeeklyDigest, { foreignKey: 'tenantId' });
 WeeklyDigest.belongsTo(Tenant, { foreignKey: 'tenantId' });
 
+// RssFeed Model
+export class RssFeed extends Model<InferAttributes<RssFeed>, InferCreationAttributes<RssFeed>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']> | null;
+    declare url: string;
+    declare title: string | null;
+    declare description: string | null;
+    declare siteUrl: string | null;
+    declare imageUrl: string | null;
+    declare status: CreationOptional<string>; // ACTIVE, PAUSED, ERROR
+    declare lastFetchedAt: Date | null;
+    declare lastError: string | null;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+RssFeed.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    url: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    title: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    siteUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    imageUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    status: {
+        type: DataTypes.STRING,
+        defaultValue: 'ACTIVE',
+    },
+    lastFetchedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+    lastError: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'RssFeed',
+    tableName: 'rss_feeds',
+    indexes: [
+        { fields: ['tenantId'] },
+    ]
+});
+
+Tenant.hasMany(RssFeed, { foreignKey: 'tenantId' });
+RssFeed.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+// RssFeedItem Model
+export class RssFeedItem extends Model<InferAttributes<RssFeedItem>, InferCreationAttributes<RssFeedItem>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']> | null;
+    declare feedId: ForeignKey<RssFeed['id']>;
+    declare guid: string; // unique identifier from feed
+    declare title: string;
+    declare description: string | null;
+    declare content: string | null; // full article content
+    declare link: string | null;
+    declare author: string | null;
+    declare pubDate: Date | null;
+    declare imageUrl: string | null;
+    declare categories: string | null; // JSON string array
+    declare isBookmarked: CreationOptional<boolean>;
+    declare isRead: CreationOptional<boolean>;
+    declare isUsed: CreationOptional<boolean>;
+    declare usedForPostId: number | null; // linked Post if used for generation
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+RssFeedItem.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    feedId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    guid: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    title: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    content: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    link: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    author: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    pubDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+    imageUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    categories: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        defaultValue: '[]',
+    },
+    isBookmarked: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    isRead: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    isUsed: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    usedForPostId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'RssFeedItem',
+    tableName: 'rss_feed_items',
+    indexes: [
+        { fields: ['tenantId'] },
+        { fields: ['feedId'] },
+        { fields: ['pubDate'] },
+        { unique: true, fields: ['feedId', 'guid'] },
+    ]
+});
+
+RssFeed.hasMany(RssFeedItem, { foreignKey: 'feedId', as: 'items' });
+RssFeedItem.belongsTo(RssFeed, { foreignKey: 'feedId', as: 'feed' });
+Tenant.hasMany(RssFeedItem, { foreignKey: 'tenantId' });
+RssFeedItem.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
 // Sync database
 export const initDB = async () => {
     try {

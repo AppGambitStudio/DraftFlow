@@ -84,6 +84,30 @@ export default function IdeasPage() {
         fetchAuthors();
     }, []);
 
+    // Handle feed-to-idea flow
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.get('fromFeed') === 'true') {
+            const feedData = localStorage.getItem('feedItemForIdea');
+            if (feedData) {
+                try {
+                    const item = JSON.parse(feedData);
+                    localStorage.removeItem('feedItemForIdea');
+                    setFormData((prev: any) => ({
+                        ...prev,
+                        title: item.title || "",
+                        description: item.description || "",
+                        sourceLinks: item.sourceLinks || [],
+                    }));
+                    setSourceLinksInputValue((item.sourceLinks || []).join('\n'));
+                    setIsModalOpen(true);
+                } catch (e) {
+                    console.error('Failed to parse feed item data', e);
+                }
+            }
+        }
+    }, []);
+
     const fetchAuthors = async () => {
         try {
             const res = await api.get('/settings/linkedin/authors');

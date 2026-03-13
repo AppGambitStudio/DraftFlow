@@ -15,6 +15,8 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 - **Markdown Support** — Write in `**bold**` and `*italic*`, auto-converted to Unicode for LinkedIn
 - **MCP Integration** — Extend AI capabilities with Model Context Protocol servers
 
+![alt text](docs/screenshots/1.png)
+
 ## Architecture
 
 ```

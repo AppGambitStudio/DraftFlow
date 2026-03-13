@@ -67,7 +67,12 @@ export class AIService {
                 }
             );
 
-            return response.data.choices[0].message.content.trim();
+            const content = response.data.choices?.[0]?.message?.content;
+            if (!content) {
+                console.error('[AIService] callOpenRouter: null/empty content from API. Response:', JSON.stringify(response.data.choices?.[0]));
+                throw new Error('AI returned empty response');
+            }
+            return content.trim();
         } catch (error: any) {
             console.error('AI Service Error:', error.response?.data || error.message);
             throw new Error('Failed to generate AI response: ' + (error.response?.data?.error?.message || error.message));
@@ -144,7 +149,11 @@ export class AIService {
 
             // If no tool calls, return the text
             if (!message.tool_calls || message.tool_calls.length === 0) {
-                return message.content?.trim() || '';
+                const text = message.content?.trim() || '';
+                if (!text) {
+                    console.warn('[AIService] callOpenRouterWithTools: AI returned empty content (no tool calls). Full response:', JSON.stringify(response.data.choices[0]));
+                }
+                return text;
             }
 
             // Execute tool calls and add results
@@ -468,10 +477,16 @@ Return a JSON object with the following structure:
 `;
 
 
-        console.log("[AIService] SYSTEM_PROMPT:", SYSTEM_PROMPT);
-        console.log("[AIService] Prompt:", prompt);
+        console.log("[AIService] Prompt length:", prompt.length);
 
         const response = await this.callOpenRouterWithTools(config, SYSTEM_PROMPT, prompt, tenantId);
+
+        console.log("[AIService] Raw response length:", response?.length, "preview:", response?.substring(0, 200));
+
+        if (!response || response.trim().length === 0) {
+            console.error("[AIService] AI returned empty response");
+            throw new Error('AI returned empty response. Please try again.');
+        }
 
         try {
             const parsed = this.extractAndParseJson(response);
@@ -480,7 +495,7 @@ Return a JSON object with the following structure:
                 summary: parsed.summary || "Summary generation failed or returned empty"
             };
         } catch (e: any) {
-            console.error("[AIService] Failed to parse AI response as JSON:", e.message);
+            console.error("[AIService] Failed to parse AI response as JSON:", e.message, "Response preview:", response.substring(0, 300));
             // Fallback - try to extract anything that looks like a post if parsing fails
             return {
                 content: this.sanitizePostContent(response.length > 100 ? response : "Failed to generate valid post content.", prompt),

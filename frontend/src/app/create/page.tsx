@@ -157,6 +157,19 @@ export default function CreatePostPage() {
                 }
             }
         }
+
+        if (searchParams.get('fromFeed') === 'true') {
+            const feedData = localStorage.getItem('feedItemForPost');
+            if (feedData) {
+                try {
+                    const item = JSON.parse(feedData);
+                    localStorage.removeItem('feedItemForPost');
+                    generatePostFromFeedItem(item);
+                } catch (e) {
+                    console.error('Failed to parse feed item data', e);
+                }
+            }
+        }
     }, []);
 
     const generatePostFromTrend = async (trend: { topic: string; description: string; relevance: string; suggestedAngles: string[]; trendType: string }) => {
@@ -183,6 +196,34 @@ Create an engaging post that provides value to the reader. Pick one of the sugge
             toast.success('Post generated from trend!', { id: 'trend-post' });
         } catch (error: any) {
             toast.error(error.response?.data?.error || 'Failed to generate post from trend', { id: 'trend-post' });
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const generatePostFromFeedItem = async (item: { title: string; description: string; link: string; author: string; source: string }) => {
+        setAiLoading(true);
+        toast.loading('Generating post from article...', { id: 'feed-post' });
+        try {
+            const res = await api.post("/ai/generate-from-context", {
+                context: `Write a professional LinkedIn post inspired by this article:
+
+TITLE: ${item.title}
+
+${item.description ? `SUMMARY: ${item.description}` : ''}
+
+${item.source ? `SOURCE: ${item.source}` : ''}
+${item.author ? `AUTHOR: ${item.author}` : ''}
+${item.link ? `LINK: ${item.link}` : ''}
+
+Create an engaging post that shares your perspective or key takeaway from this article. Add your own insight — don't just summarize.${item.link ? ` Include the source link.` : ''}`,
+                authorUrn: selectedAuthorUrn || undefined,
+                platform: platforms[0] || 'LINKEDIN'
+            });
+            setContent(res.data.content);
+            toast.success('Post generated from article!', { id: 'feed-post' });
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to generate post', { id: 'feed-post' });
         } finally {
             setAiLoading(false);
         }

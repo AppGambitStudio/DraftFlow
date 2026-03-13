@@ -9,7 +9,13 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["linkedin", "twitter", "social-media", "scheduler", "ai"],
+  "keywords": [
+    "linkedin",
+    "twitter",
+    "social-media",
+    "scheduler",
+    "ai"
+  ],
   "author": "APPGAMBiT",
   "license": "ISC",
   "dependencies": {
@@ -29,6 +35,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
+    "rss-parser": "^3.13.0",
     "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7",
     "twitter-api-v2": "^1.28.0",

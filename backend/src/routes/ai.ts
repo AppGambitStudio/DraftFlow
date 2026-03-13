@@ -383,6 +383,8 @@ router.post('/generate-from-context', authMiddleware, async (req: AuthRequest, r
             return res.status(400).json({ error: 'Context is required' });
         }
 
+        console.log('[generate-from-context] Generating for platform:', platform, 'context length:', context?.length);
+
         const result = await AIService.generate(
             tenantId,
             context,
@@ -397,6 +399,13 @@ router.post('/generate-from-context', authMiddleware, async (req: AuthRequest, r
             undefined, // manualToneOverride
             platform
         );
+
+        console.log('[generate-from-context] Result content length:', result.content?.length, 'summary:', result.summary?.substring(0, 50));
+
+        if (!result.content || result.content.trim().length === 0) {
+            console.error('[generate-from-context] Empty content returned from AI');
+            return res.status(500).json({ error: 'AI returned empty content. Please try again.' });
+        }
 
         res.json({ content: result.content });
     } catch (error: any) {
