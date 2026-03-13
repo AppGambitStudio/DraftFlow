@@ -11,6 +11,17 @@ const parser = new Parser({
     },
 });
 
+function sanitizeString(value: any): string | null {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.map(v => sanitizeString(v)).filter(Boolean).join(', ') || null;
+    if (typeof value === 'object') {
+        if (value.name) return sanitizeString(value.name);
+        if (value.$?.name) return sanitizeString(value.$.name);
+    }
+    return String(value);
+}
+
 const FEED_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -161,7 +172,7 @@ export class RssService {
                 description: item.contentSnippet || item.summary || null,
                 content: item['content:encoded'] || item.content || null,
                 link: item.link || null,
-                author: item.creator || item.author || null,
+                author: sanitizeString(item.creator || item.author),
                 pubDate: item.pubDate ? new Date(item.pubDate) : null,
                 imageUrl,
                 categories: JSON.stringify(item.categories || []),
