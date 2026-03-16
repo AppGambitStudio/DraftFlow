@@ -276,6 +276,9 @@ const checkRecurringIdeas = async () => {
     }
 };
 
+// Track in-progress digest generation to prevent race conditions
+const digestsInProgress = new Set<string>();
+
 const checkScheduledDigests = async () => {
     try {
         // Find all settings with digestConfig that has scheduleEnabled
@@ -292,6 +295,7 @@ const checkScheduledDigests = async () => {
 
         for (const settings of allSettings) {
             try {
+                const tenantId = settings.tenantId as string;
                 const config = JSON.parse(settings.digestConfig || '{}');
                 if (!config.scheduleEnabled || !config.topics || config.topics.length === 0) continue;
 
@@ -304,50 +308,61 @@ const checkScheduledDigests = async () => {
                 const timeHasPassed = (currentHour > targetHour) || (currentHour === targetHour && currentMinute >= targetMinute);
                 if (!timeHasPassed) continue;
 
+                // Skip if already generating for this tenant
+                if (digestsInProgress.has(tenantId)) continue;
+
                 // Check if we already generated one today
                 const todayStart = new Date();
                 todayStart.setHours(0, 0, 0, 0);
 
                 const existingToday = await WeeklyDigest.findOne({
                     where: {
-                        tenantId: settings.tenantId,
+                        tenantId,
                         createdAt: { [Op.gte]: todayStart }
                     }
                 });
 
                 if (existingToday) continue;
 
-                console.log(`[Scheduler] Auto-generating weekly digest for tenant ${settings.tenantId}`);
+                // Mark as in-progress to prevent duplicate runs
+                digestsInProgress.add(tenantId);
 
-                const result = await AIService.generateWeeklyDigest(settings.tenantId as string, {
-                    topics: config.topics,
-                    platform: config.platform || 'linkedin',
-                    storyCount: config.storyCount || 5,
-                    additionalContext: config.additionalContext || undefined,
-                    authorUrn: config.authorUrn || undefined,
-                });
+                console.log(`[Scheduler] Auto-generating weekly digest for tenant ${tenantId}`);
 
-                // Auto-save as draft post
-                const post = await Post.create({
-                    content: result.content,
-                    tenantId: settings.tenantId,
-                    userId: settings.userId,
-                    platforms: JSON.stringify([(config.platform || 'linkedin').toUpperCase()]),
-                    status: 'DRAFT',
-                    scheduledTime: new Date(),
-                    authorUrn: config.authorUrn || null,
-                    mediaUrls: '[]',
-                });
+                try {
+                    const result = await AIService.generateWeeklyDigest(tenantId, {
+                        topics: config.topics,
+                        platform: config.platform || 'linkedin',
+                        storyCount: config.storyCount || 5,
+                        additionalContext: config.additionalContext || undefined,
+                        authorUrn: config.authorUrn || undefined,
+                    });
 
-                // Link the digest to the post
-                const digest = await WeeklyDigest.findByPk(result.digestId);
-                if (digest) {
-                    await digest.update({ postId: post.id });
+                    // Auto-save as draft post
+                    const post = await Post.create({
+                        content: result.content,
+                        tenantId,
+                        userId: settings.userId,
+                        platforms: JSON.stringify([(config.platform || 'linkedin').toUpperCase()]),
+                        status: 'DRAFT',
+                        scheduledTime: new Date(),
+                        authorUrn: config.authorUrn || null,
+                        mediaUrls: '[]',
+                    });
+
+                    // Link the digest to the post
+                    const digest = await WeeklyDigest.findByPk(result.digestId);
+                    if (digest) {
+                        await digest.update({ postId: post.id });
+                    }
+
+                    console.log(`[Scheduler] Weekly digest generated for tenant ${tenantId}, post ${post.id}`);
+                } finally {
+                    digestsInProgress.delete(tenantId);
                 }
-
-                console.log(`[Scheduler] Weekly digest generated for tenant ${settings.tenantId}, post ${post.id}`);
             } catch (err: any) {
                 console.error(`[Scheduler] Error generating weekly digest for tenant ${settings.tenantId}:`, err.message);
+                digestsInProgress.delete(settings.tenantId as string);
             }
         }
     } catch (error) {
