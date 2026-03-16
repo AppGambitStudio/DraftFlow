@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PostPreview } from "@/components/PostPreview";
 import toast, { Toaster } from "react-hot-toast";
 
-import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash } from "lucide-react";
+import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette } from "lucide-react";
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -57,6 +57,26 @@ export default function CreatePostPage() {
     const [hashtagsLoading, setHashtagsLoading] = useState(false);
     const [editingPostId, setEditingPostId] = useState<string | null>(null);
     const [loadingPost, setLoadingPost] = useState(false);
+    const [showVisualBuilderModal, setShowVisualBuilderModal] = useState(false);
+    const [visualBuilderLoading, setVisualBuilderLoading] = useState(false);
+    const [visualBuilderResult, setVisualBuilderResult] = useState<{ imageUrl: string; html: string; name: string; type: string; size: number } | null>(null);
+    const [visualTemplate, setVisualTemplate] = useState('infographic');
+    const [visualSize, setVisualSize] = useState('landscape');
+
+    const VISUAL_TEMPLATES = [
+        { key: 'infographic', name: 'Infographic', description: 'Key points with icons and accent colors', icon: '📊' },
+        { key: 'comparison', name: 'Before vs After', description: 'Two-column comparison layout', icon: '⚡' },
+        { key: 'checklist', name: 'Checklist', description: 'Visual checklist with markers', icon: '✅' },
+        { key: 'quote-card', name: 'Quote Card', description: 'Large quote, minimal design', icon: '💬' },
+        { key: 'stats', name: 'Stats & Numbers', description: 'Big numbers with context', icon: '📈' },
+        { key: 'steps', name: 'Step-by-Step', description: 'Numbered steps with flow', icon: '🔢' },
+    ];
+
+    const VISUAL_SIZES = [
+        { key: 'landscape', label: 'Landscape', desc: '1200×628' },
+        { key: 'square', label: 'Square', desc: '1080×1080' },
+        { key: 'portrait', label: 'Portrait', desc: '1080×1350' },
+    ];
 
     const DIRECTION_PRESETS = [
         "Shorten",
@@ -428,6 +448,42 @@ Create an engaging post that shares your perspective or key takeaway from this a
         }
     };
 
+    const handleVisualBuilder = async (templateKey?: string) => {
+        if (!content) return;
+        const tmpl = templateKey || visualTemplate;
+        setVisualTemplate(tmpl);
+        setVisualBuilderLoading(true);
+        setVisualBuilderResult(null);
+        setShowVisualBuilderModal(true);
+        try {
+            const res = await api.post('/ai/visual-builder', {
+                content,
+                template: tmpl,
+                size: visualSize,
+            });
+            setVisualBuilderResult(res.data);
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to generate visual');
+            if (!visualBuilderResult) setShowVisualBuilderModal(false);
+        } finally {
+            setVisualBuilderLoading(false);
+        }
+    };
+
+    const handleUseVisual = () => {
+        if (!visualBuilderResult) return;
+        const attachment: Attachment = {
+            url: visualBuilderResult.imageUrl,
+            name: visualBuilderResult.name,
+            type: visualBuilderResult.type,
+            size: visualBuilderResult.size,
+        };
+        setAttachments(prev => [...prev, attachment]);
+        setShowVisualBuilderModal(false);
+        setVisualBuilderResult(null);
+        toast.success('Visual added to attachments');
+    };
+
     const handleSubmit = async (e: React.FormEvent, status: string = 'SCHEDULED') => {
         e.preventDefault();
         if (!content) {
@@ -649,6 +705,16 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                                     <Hash className="mr-2 h-4 w-4 text-green-500" />
                                                 )}
                                                 Hashtags
+                                            </button>
+                                            <div className="border-t border-input my-1" />
+                                            <button
+                                                type="button"
+                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={() => { setShowAIToolsDropdown(false); setShowVisualBuilderModal(true); setVisualBuilderResult(null); }}
+                                                disabled={!content || visualBuilderLoading}
+                                            >
+                                                <Palette className="mr-2 h-4 w-4 text-purple-500" />
+                                                Visual Builder
                                             </button>
                                         </div>
                                     )}
@@ -989,6 +1055,120 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                         </p>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {showVisualBuilderModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-3xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground flex items-center">
+                                <Palette className="mr-2 h-5 w-5 text-purple-500" />
+                                Visual Builder
+                            </h3>
+                            <button
+                                onClick={() => { setShowVisualBuilderModal(false); setVisualBuilderResult(null); }}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {visualBuilderLoading ? (
+                            <div className="flex flex-col items-center justify-center py-16">
+                                <Loader2 className="h-10 w-10 animate-spin text-purple-500 mb-4" />
+                                <p className="text-muted-foreground">Generating visual...</p>
+                                <p className="text-xs text-muted-foreground mt-1">This may take 10-20 seconds</p>
+                            </div>
+                        ) : visualBuilderResult ? (
+                            <div className="space-y-4">
+                                <div className="rounded-lg border border-border overflow-hidden bg-slate-950">
+                                    <img
+                                        src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002'}${visualBuilderResult.imageUrl}`}
+                                        alt="Generated visual"
+                                        className="w-full h-auto"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="px-2 py-1 rounded bg-purple-100 text-purple-700 font-medium">
+                                        {VISUAL_TEMPLATES.find(t => t.key === visualTemplate)?.name}
+                                    </span>
+                                    <span className="px-2 py-1 rounded bg-slate-100 text-slate-700 font-medium">
+                                        {VISUAL_SIZES.find(s => s.key === visualSize)?.desc}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between pt-2 border-t border-border">
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => { setVisualBuilderResult(null); }}
+                                        >
+                                            Change Template
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleVisualBuilder()}
+                                            disabled={visualBuilderLoading}
+                                        >
+                                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                                            Regenerate
+                                        </Button>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        onClick={handleUseVisual}
+                                        className="bg-purple-600 hover:bg-purple-700"
+                                    >
+                                        Use This
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-5">
+                                <div>
+                                    <p className="text-sm text-muted-foreground mb-3">Choose a template to convert your post into a visual:</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {VISUAL_TEMPLATES.map((tmpl) => (
+                                            <button
+                                                key={tmpl.key}
+                                                type="button"
+                                                onClick={() => handleVisualBuilder(tmpl.key)}
+                                                disabled={visualBuilderLoading}
+                                                className={`text-left p-4 rounded-lg border-2 transition-all hover:border-purple-400 hover:bg-purple-50 ${
+                                                    visualTemplate === tmpl.key ? 'border-purple-500 bg-purple-50' : 'border-border'
+                                                }`}
+                                            >
+                                                <div className="text-2xl mb-2">{tmpl.icon}</div>
+                                                <div className="text-sm font-semibold text-foreground">{tmpl.name}</div>
+                                                <div className="text-xs text-muted-foreground mt-0.5">{tmpl.description}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">Image Size</p>
+                                    <div className="flex gap-2">
+                                        {VISUAL_SIZES.map((s) => (
+                                            <button
+                                                key={s.key}
+                                                type="button"
+                                                onClick={() => setVisualSize(s.key)}
+                                                className={`px-3 py-1.5 text-xs rounded-md border transition-all ${
+                                                    visualSize === s.key
+                                                        ? 'border-purple-500 bg-purple-50 text-purple-700 font-medium'
+                                                        : 'border-border text-muted-foreground hover:border-purple-300'
+                                                }`}
+                                            >
+                                                {s.label} <span className="opacity-60">{s.desc}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>

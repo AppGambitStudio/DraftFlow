@@ -1,5 +1,6 @@
 import express, { Response } from 'express';
 import { AIService } from '../services/ai';
+import { VisualBuilderService, TEMPLATES } from '../services/visualBuilder';
 import { Settings, SavedTrend, WeeklyDigest, Post } from '../db';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { Op } from 'sequelize';
@@ -409,6 +410,40 @@ router.post('/generate-from-context', authMiddleware, async (req: AuthRequest, r
 
         res.json({ content: result.content });
     } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Visual Builder — get available templates
+router.get('/visual-builder/templates', authMiddleware, async (_req: AuthRequest, res: Response) => {
+    const templates = Object.values(TEMPLATES).map(t => ({
+        key: t.key,
+        name: t.name,
+        description: t.description,
+        icon: t.icon,
+    }));
+    res.json({ templates });
+});
+
+// Visual Builder — generate visual from post content
+router.post('/visual-builder', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { content, template, size } = req.body;
+
+        if (!content) {
+            return res.status(400).json({ error: 'Post content is required' });
+        }
+
+        console.log(`[visual-builder] Generating template="${template || 'infographic'}" size="${size || 'landscape'}" content=${content.length} chars`);
+
+        const result = await VisualBuilderService.generate(tenantId, content, template, size);
+
+        console.log(`[visual-builder] Generated ${result.name} (${result.size} bytes)`);
+
+        res.json(result);
+    } catch (error: any) {
+        console.error('[visual-builder] Error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

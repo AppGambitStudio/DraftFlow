@@ -80,6 +80,14 @@ export class AIService {
     }
 
     /**
+     * Public entry point for Visual Builder — calls AI without web plugin or MCP tools.
+     */
+    static async callForVisualBuilder(tenantId: string, systemPrompt: string, userContent: string): Promise<string> {
+        const config = await this.getUnifiedConfig(tenantId);
+        return this.callOpenRouter(config, systemPrompt, userContent, false);
+    }
+
+    /**
      * Get MCP server configs for a tenant.
      */
     private static async getMCPServers(tenantId: string): Promise<MCPServerConfig[]> {
