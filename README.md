@@ -24,6 +24,8 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 Generate eye-catching infographic images from your post content. Choose from 6 templates — Infographic, Before vs After, Checklist, Quote Card, Stats, and Step-by-Step — and the AI converts your text into a styled visual, ready to attach to your post.
 
 ![Visual Builder sample](docs/screenshots/visual-builder-sample1.png)
+![Visual Builder sample](docs/screenshots/visual-builder-sample2.png)
+![Visual Builder sample](docs/screenshots/visual-builder-sample3.png)
 
 ## Architecture
 

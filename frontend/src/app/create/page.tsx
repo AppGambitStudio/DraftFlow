@@ -76,6 +76,7 @@ export default function CreatePostPage() {
         { key: 'landscape', label: 'Landscape', desc: '1200×628' },
         { key: 'square', label: 'Square', desc: '1080×1080' },
         { key: 'portrait', label: 'Portrait', desc: '1080×1350' },
+        { key: 'auto', label: 'Auto-fit', desc: 'fits content' },
     ];
 
     const DIRECTION_PRESETS = [
