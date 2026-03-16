@@ -8,6 +8,7 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 - **Idea Board** — Capture ideas and convert them into polished posts with AI
 - **AI Writing Assistant** — Generate, improve, and iterate on content using Claude/OpenRouter
 - **Trending Topics** — Discover what's trending in your industry with web search (Tavily)
+- **Visual Builder** — Turn any post into a styled infographic image with AI-generated templates
 - **RSS Feeds** — Subscribe to RSS feeds, browse articles, and turn them into posts or ideas
 - **Weekly Digest** — Auto-curate the biggest stories of the week into a short-form post
 - **Calendar View** — Visualize your content schedule at a glance
@@ -17,6 +18,12 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 - **MCP Integration** — Extend AI capabilities with Model Context Protocol servers
 
 ![alt text](docs/screenshots/1.png)
+
+### Visual Builder
+
+Generate eye-catching infographic images from your post content. Choose from 6 templates — Infographic, Before vs After, Checklist, Quote Card, Stats, and Step-by-Step — and the AI converts your text into a styled visual, ready to attach to your post.
+
+![Visual Builder sample](docs/screenshots/visual-builder-sample1.png)
 
 ## Architecture
 

@@ -43,3 +43,4 @@ kill-all.sh
 
 # Claude Code
 .claude/
+extra/
