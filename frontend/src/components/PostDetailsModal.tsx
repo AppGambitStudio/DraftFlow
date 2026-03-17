@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2, Undo2, ChevronDown } from 'lucide-react';
+import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2, Undo2, ChevronDown, GitBranch, Zap, Hash, Palette, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -51,6 +51,36 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const [customDirection, setCustomDirection] = useState<string>('');
     const [showDirectionDropdown, setShowDirectionDropdown] = useState(false);
     const directionDropdownRef = useRef<HTMLDivElement>(null);
+    const [showAIToolsDropdown, setShowAIToolsDropdown] = useState(false);
+    const aiToolsDropdownRef = useRef<HTMLDivElement>(null);
+    const [showVariationsModal, setShowVariationsModal] = useState(false);
+    const [variations, setVariations] = useState<Array<{ content: string; format: string }>>([]);
+    const [variationsLoading, setVariationsLoading] = useState(false);
+    const [showHooksModal, setShowHooksModal] = useState(false);
+    const [hooks, setHooks] = useState<Array<{ hook: string; style: string }>>([]);
+    const [hooksLoading, setHooksLoading] = useState(false);
+    const [hashtagsLoading, setHashtagsLoading] = useState(false);
+    const [showVisualBuilderModal, setShowVisualBuilderModal] = useState(false);
+    const [visualBuilderLoading, setVisualBuilderLoading] = useState(false);
+    const [visualBuilderResult, setVisualBuilderResult] = useState<{ imageUrl: string; html: string; name: string; type: string; size: number } | null>(null);
+    const [visualTemplate, setVisualTemplate] = useState('infographic');
+    const [visualSize, setVisualSize] = useState('landscape');
+
+    const VISUAL_TEMPLATES = [
+        { key: 'infographic', name: 'Infographic', description: 'Key points with icons and accent colors', icon: '📊' },
+        { key: 'comparison', name: 'Before vs After', description: 'Two-column comparison layout', icon: '⚡' },
+        { key: 'checklist', name: 'Checklist', description: 'Visual checklist with markers', icon: '✅' },
+        { key: 'quote-card', name: 'Quote Card', description: 'Large quote, minimal design', icon: '💬' },
+        { key: 'stats', name: 'Stats & Numbers', description: 'Big numbers with context', icon: '📈' },
+        { key: 'steps', name: 'Step-by-Step', description: 'Numbered steps with flow', icon: '🔢' },
+    ];
+
+    const VISUAL_SIZES = [
+        { key: 'landscape', label: 'Landscape', desc: '1200×628' },
+        { key: 'square', label: 'Square', desc: '1080×1080' },
+        { key: 'portrait', label: 'Portrait', desc: '1080×1350' },
+        { key: 'auto', label: 'Auto-fit', desc: 'fits content' },
+    ];
 
     const DIRECTION_PRESETS = [
         "Shorten",
@@ -114,6 +144,9 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
             if (directionDropdownRef.current && !directionDropdownRef.current.contains(event.target as Node)) {
                 setShowDirectionDropdown(false);
             }
+            if (aiToolsDropdownRef.current && !aiToolsDropdownRef.current.contains(event.target as Node)) {
+                setShowAIToolsDropdown(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -123,6 +156,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
 
     const isPublished = post.status === 'PUBLISHED';
     const isGenerating = post.status === 'GENERATING';
+    const postPlatforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
 
     const handleUndo = () => {
         if (contentHistory.length === 0) return;
@@ -145,7 +179,6 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         setAiLoading(true);
         try {
             setContentHistory([...contentHistory, content]);
-            const postPlatforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
             const res = await api.post("/ai/improvise", {
                 content,
                 targetAudience: selectedAudience || undefined,
@@ -160,6 +193,122 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
         } finally {
             setAiLoading(false);
         }
+    };
+
+    const handleGenerateVariations = async () => {
+        if (!content) return;
+        setVariationsLoading(true);
+        setShowVariationsModal(true);
+        try {
+            const res = await api.post('/ai/variations', {
+                content,
+                authorUrn: selectedAuthorUrn,
+                targetAudience: selectedAudience,
+                platform: postPlatforms[0] || 'LINKEDIN'
+            });
+            setVariations(res.data.variations);
+        } catch (error) {
+            toast.error('Failed to generate variations');
+            setShowVariationsModal(false);
+        } finally {
+            setVariationsLoading(false);
+        }
+    };
+
+    const handleSelectVariation = (variation: { content: string; format: string }) => {
+        setContentHistory(prev => [...prev, content]);
+        setContent(variation.content);
+        setShowVariationsModal(false);
+        toast.success(`Switched to ${variation.format} format`);
+    };
+
+    const handleGenerateHooks = async () => {
+        if (!content) return;
+        setHooksLoading(true);
+        setShowHooksModal(true);
+        try {
+            const res = await api.post('/ai/hooks', {
+                content,
+                count: 5,
+                authorUrn: selectedAuthorUrn,
+                platform: postPlatforms[0] || 'LINKEDIN'
+            });
+            setHooks(res.data.hooks);
+        } catch (error) {
+            toast.error('Failed to generate hooks');
+            setShowHooksModal(false);
+        } finally {
+            setHooksLoading(false);
+        }
+    };
+
+    const handleSelectHook = (hook: { hook: string; style: string }) => {
+        setContentHistory(prev => [...prev, content]);
+        const lines = content.split('\n');
+        const restOfContent = lines.slice(1).join('\n').trimStart();
+        const newContent = restOfContent ? `${hook.hook}\n\n${restOfContent}` : hook.hook;
+        setContent(newContent);
+        setShowHooksModal(false);
+        toast.success(`Applied ${hook.style} hook`);
+    };
+
+    const handleGenerateHashtags = async () => {
+        if (!content) return;
+        setHashtagsLoading(true);
+        try {
+            const res = await api.post('/ai/hashtags', {
+                content,
+                count: 5,
+                platform: postPlatforms[0] || 'LINKEDIN'
+            });
+            const hashtags = res.data.hashtags;
+            if (hashtags && hashtags.length > 0) {
+                setContentHistory(prev => [...prev, content]);
+                const hashtagString = hashtags.map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`).join(' ');
+                setContent(prev => prev.trim() + '\n\n' + hashtagString);
+                toast.success('Hashtags added!');
+            }
+        } catch (error) {
+            toast.error('Failed to generate hashtags');
+        } finally {
+            setHashtagsLoading(false);
+        }
+    };
+
+    const handleVisualBuilder = async (templateKey?: string) => {
+        if (!content) return;
+        const tmpl = templateKey || visualTemplate;
+        setVisualTemplate(tmpl);
+        setVisualBuilderLoading(true);
+        setVisualBuilderResult(null);
+        setShowVisualBuilderModal(true);
+        try {
+            const res = await api.post('/ai/visual-builder', {
+                content,
+                template: tmpl,
+                size: visualSize,
+            });
+            setVisualBuilderResult(res.data);
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to generate visual');
+            if (!visualBuilderResult) setShowVisualBuilderModal(false);
+        } finally {
+            setVisualBuilderLoading(false);
+        }
+    };
+
+    const handleUseVisual = () => {
+        if (!visualBuilderResult) return;
+        const attachment = {
+            url: visualBuilderResult.imageUrl,
+            name: visualBuilderResult.name,
+            type: visualBuilderResult.type,
+            size: visualBuilderResult.size,
+        };
+        setAttachments(prev => [...prev, attachment]);
+        setShowVisualBuilderModal(false);
+        setVisualBuilderResult(null);
+        toast.success('Visual added to attachments');
     };
 
     const removeAttachment = (index: number) => {
@@ -347,7 +496,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                         }`}>
                                         {post.status === 'GENERATING' ? 'Generating...' : post.status}
                                     </span>
-                                    {post.platforms && JSON.parse(post.platforms).map((platform: string) => (
+                                    {postPlatforms.map((platform: string) => (
                                         <span key={platform} className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border bg-slate-100 text-slate-700 border-slate-200">
                                             {platform === 'LINKEDIN' ? 'LinkedIn' : 'Twitter'}
                                         </span>
@@ -469,17 +618,73 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                                 </div>
                                             )}
                                         </div>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleAIImprovise}
-                                            disabled={aiLoading || !content || isLoading}
-                                            className="text-primary hover:text-primary hover:bg-primary/10"
-                                        >
-                                            <Sparkles className="mr-2 h-4 w-4" />
-                                            {aiLoading ? "Improvising..." : "AImprovise"}
-                                        </Button>
+                                        <div className="relative" ref={aiToolsDropdownRef}>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setShowAIToolsDropdown(!showAIToolsDropdown)}
+                                                className="text-primary border-primary/20 hover:bg-primary/5"
+                                            >
+                                                <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
+                                                AI Tools
+                                                <ChevronDown className="ml-2 h-4 w-4" />
+                                            </Button>
+                                            {showAIToolsDropdown && (
+                                                <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-md border border-input bg-background shadow-lg py-1">
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => { setShowAIToolsDropdown(false); handleAIImprovise(); }}
+                                                        disabled={aiLoading || variationsLoading || !content}
+                                                    >
+                                                        <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
+                                                        {aiLoading ? "Improvising..." : "AImprovise"}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => { setShowAIToolsDropdown(false); handleGenerateVariations(); }}
+                                                        disabled={!content || aiLoading || variationsLoading}
+                                                    >
+                                                        <GitBranch className="mr-2 h-4 w-4 text-blue-500" />
+                                                        Variations
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => { setShowAIToolsDropdown(false); handleGenerateHooks(); }}
+                                                        disabled={!content || aiLoading || hooksLoading}
+                                                    >
+                                                        <Zap className="mr-2 h-4 w-4 text-orange-500" />
+                                                        Hooks
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => { setShowAIToolsDropdown(false); handleGenerateHashtags(); }}
+                                                        disabled={!content || hashtagsLoading}
+                                                    >
+                                                        {hashtagsLoading ? (
+                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-500" />
+                                                        ) : (
+                                                            <Hash className="mr-2 h-4 w-4 text-green-500" />
+                                                        )}
+                                                        Hashtags
+                                                    </button>
+                                                    <div className="border-t border-input my-1" />
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => { setShowAIToolsDropdown(false); setShowVisualBuilderModal(true); setVisualBuilderResult(null); }}
+                                                        disabled={!content || visualBuilderLoading}
+                                                    >
+                                                        <Palette className="mr-2 h-4 w-4 text-purple-500" />
+                                                        Visual Builder
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -491,16 +696,10 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                 className="min-h-[200px]"
                             />
                             <div className="flex justify-end">
-                                <span className={`text-xs ${(() => {
-                                    const platforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
-                                    const limit = platforms.includes('TWITTER') ? 280 : 3000;
-                                    return content.length > limit ? 'text-red-500 font-medium' : 'text-muted-foreground';
-                                })()
+                                <span className={`text-xs ${content.length > (postPlatforms.includes('TWITTER') ? 280 : 3000)
+                                    ? 'text-red-500 font-medium' : 'text-muted-foreground'
                                     }`}>
-                                    {content.length} / {(() => {
-                                        const platforms = post.platforms ? JSON.parse(post.platforms) : ['LINKEDIN'];
-                                        return platforms.includes('TWITTER') ? 280 : 3000;
-                                    })()} characters
+                                    {content.length} / {postPlatforms.includes('TWITTER') ? 280 : 3000} characters
                                 </span>
                             </div>
                         </div>
@@ -647,6 +846,183 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                     </div>
                 </div>
             </div>
+
+            {showVariationsModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-4xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground">Format Variations</h3>
+                            <button
+                                onClick={() => setShowVariationsModal(false)}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        {variationsLoading ? (
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                                <p className="text-muted-foreground">Generating 3 variations...</p>
+                            </div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto space-y-4">
+                                {variations.map((variation, index) => (
+                                    <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="inline-block px-3 py-1 text-xs font-medium uppercase rounded-full bg-indigo-100 text-indigo-700">
+                                                {variation.format}
+                                            </span>
+                                            <Button size="sm" onClick={() => handleSelectVariation(variation)}>
+                                                Use This
+                                            </Button>
+                                        </div>
+                                        <p className="text-sm text-foreground whitespace-pre-wrap">{variation.content}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {showHooksModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-4xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground">Hook Suggestions</h3>
+                            <button
+                                onClick={() => setShowHooksModal(false)}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        {hooksLoading ? (
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                                <p className="text-muted-foreground">Generating hook suggestions...</p>
+                            </div>
+                        ) : (
+                            <div className="max-h-[60vh] overflow-y-auto space-y-4">
+                                {hooks.map((hook, index) => (
+                                    <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="inline-block px-3 py-1 text-xs font-medium uppercase rounded-full bg-amber-100 text-amber-700">
+                                                {hook.style}
+                                            </span>
+                                            <Button size="sm" onClick={() => handleSelectHook(hook)}>
+                                                Use This
+                                            </Button>
+                                        </div>
+                                        <p className="text-sm text-foreground whitespace-pre-wrap">{hook.hook}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {showVisualBuilderModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-3xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-foreground flex items-center">
+                                <Palette className="mr-2 h-5 w-5 text-purple-500" />
+                                Visual Builder
+                            </h3>
+                            <button
+                                onClick={() => { setShowVisualBuilderModal(false); setVisualBuilderResult(null); }}
+                                className="text-muted-foreground hover:text-foreground transition-colors p-2 rounded-full hover:bg-slate-100"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {visualBuilderLoading ? (
+                            <div className="flex flex-col items-center justify-center py-16">
+                                <Loader2 className="h-10 w-10 animate-spin text-purple-500 mb-4" />
+                                <p className="text-muted-foreground">Generating visual...</p>
+                                <p className="text-xs text-muted-foreground mt-1">This may take 10-20 seconds</p>
+                            </div>
+                        ) : visualBuilderResult ? (
+                            <div className="space-y-4">
+                                <div className="rounded-lg border border-border overflow-hidden bg-slate-950">
+                                    <img
+                                        src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002'}${visualBuilderResult.imageUrl}`}
+                                        alt="Generated visual"
+                                        className="w-full h-auto"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="px-2 py-1 rounded bg-purple-100 text-purple-700 font-medium">
+                                        {VISUAL_TEMPLATES.find(t => t.key === visualTemplate)?.name}
+                                    </span>
+                                    <span className="px-2 py-1 rounded bg-slate-100 text-slate-700 font-medium">
+                                        {VISUAL_SIZES.find(s => s.key === visualSize)?.desc}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between pt-2 border-t border-border">
+                                    <div className="flex gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => { setVisualBuilderResult(null); }}>
+                                            Change Template
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => handleVisualBuilder()} disabled={visualBuilderLoading}>
+                                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                                            Regenerate
+                                        </Button>
+                                    </div>
+                                    <Button size="sm" onClick={handleUseVisual} className="bg-purple-600 hover:bg-purple-700">
+                                        Use This
+                                    </Button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-5">
+                                <div>
+                                    <p className="text-sm text-muted-foreground mb-3">Choose a template to convert your post into a visual:</p>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {VISUAL_TEMPLATES.map((tmpl) => (
+                                            <button
+                                                key={tmpl.key}
+                                                type="button"
+                                                onClick={() => handleVisualBuilder(tmpl.key)}
+                                                disabled={visualBuilderLoading}
+                                                className={`text-left p-4 rounded-lg border-2 transition-all hover:border-purple-400 hover:bg-purple-50 ${
+                                                    visualTemplate === tmpl.key ? 'border-purple-500 bg-purple-50' : 'border-border'
+                                                }`}
+                                            >
+                                                <div className="text-2xl mb-2">{tmpl.icon}</div>
+                                                <div className="text-sm font-semibold text-foreground">{tmpl.name}</div>
+                                                <div className="text-xs text-muted-foreground mt-0.5">{tmpl.description}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">Image Size</p>
+                                    <div className="flex gap-2">
+                                        {VISUAL_SIZES.map((s) => (
+                                            <button
+                                                key={s.key}
+                                                type="button"
+                                                onClick={() => setVisualSize(s.key)}
+                                                className={`px-3 py-1.5 text-xs rounded-md border transition-all ${
+                                                    visualSize === s.key
+                                                        ? 'border-purple-500 bg-purple-50 text-purple-700 font-medium'
+                                                        : 'border-border text-muted-foreground hover:border-purple-300'
+                                                }`}
+                                            >
+                                                {s.label} <span className="opacity-60">{s.desc}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <ConfirmationModal
                 isOpen={showDeleteConfirm}
