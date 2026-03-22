@@ -52,7 +52,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const {
         openRouterApiKey, openRouterModelId, targetAudiences, maxHistoryItems,
-        globalTone, accountTones, aiPersona,
+        globalTone, accountTones, aiPersona, voiceSamples,
         companyName, companyDescription, industry, expertiseAreas, contentPillars,
         tavilyApiKey, mcpServers
     } = req.body;
@@ -71,6 +71,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
                 globalTone,
                 accountTones: accountTones ? JSON.stringify(accountTones) : '{}',
                 aiPersona,
+                voiceSamples: voiceSamples || null,
                 companyName: companyName || null,
                 companyDescription: companyDescription || null,
                 industry: industry || null,
@@ -89,6 +90,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
             globalTone,
             accountTones: accountTones ? JSON.stringify(accountTones) : setting.accountTones,
             aiPersona: aiPersona !== undefined ? aiPersona : setting.aiPersona,
+            voiceSamples: voiceSamples !== undefined ? (voiceSamples || null) : setting.voiceSamples,
             companyName: companyName !== undefined ? companyName : setting.companyName,
             companyDescription: companyDescription !== undefined ? companyDescription : setting.companyDescription,
             industry: industry !== undefined ? industry : setting.industry,

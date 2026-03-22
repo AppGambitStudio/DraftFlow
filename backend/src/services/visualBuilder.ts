@@ -269,11 +269,13 @@ Use flex-shrink, flex-grow, and overflow:hidden on child sections so content com
 - Subtle background patterns: Use radial-gradient or repeating elements for depth
 
 ### Quality Rules (CRITICAL)
-${isAutoHeight ? `- AUTO-HEIGHT: Include all content — the image height will adjust. Still maintain clean design, spacing, and visual hierarchy. Do not set fixed heights.` : `- **NO OVERFLOW — THIS IS THE #1 RULE**: ALL content MUST fit within ${dimensions.width}x${dimensions.height}px. If you have too many items, REMOVE items until it fits. 3 well-designed items are better than 5 clipped ones. Test mentally: add up your padding, headline height, item heights, gaps, and footer — if the total exceeds ${dimensions.height}px, you MUST cut content.
-- For landscape (1200x628): max 3-4 content items with comfortable spacing
-- For square (1080x1080): max 5-6 content items
-- For portrait (1080x1350): max 6-8 content items
-- USE FLEX SHRINK: Set flex-shrink:1 and overflow:hidden on the content zone so it compresses gracefully if needed`}
+${isAutoHeight ? `- AUTO-HEIGHT: Include all content — the image height will adjust. Still maintain clean design, spacing, and visual hierarchy. Do not set fixed heights.` : `- **NO OVERFLOW — THIS IS THE #1 RULE**: ALL content MUST fit within ${dimensions.width}x${dimensions.height}px. If you have too many items, REMOVE items until it fits. 3 well-designed items are better than 5 clipped ones.
+- PIXEL BUDGET: Header ~120px + Footer ~80px + padding 80px = ~280px used. That leaves only ~${dimensions.height - 280}px for content items. Each card/item is typically 80-100px tall with gaps. Do the math — for ${dimensions.height}px height, you can fit AT MOST ${Math.floor((dimensions.height - 280) / 100)} content items.
+- For landscape (1200x628): HARD LIMIT of 3 content items. No exceptions. 628px is very short.
+- For square (1080x1080): max 5 content items
+- For portrait (1080x1350): max 6-7 content items
+- USE FLEX SHRINK: Set flex-shrink:1, min-height:0, and overflow:hidden on the content zone so it compresses gracefully
+- If content has more points than the limit, pick only the most impactful ones. NEVER exceed the item limit.`}
 - HIERARCHY: The headline must be the dominant visual element. Use size, weight, and color to create clear visual hierarchy.
 - BREATHING ROOM: When in doubt, use fewer words and more whitespace. Dense text walls are a failure.
 - CONTRAST: Ensure WCAG AA contrast ratios. Light text on dark backgrounds must be clearly readable.
@@ -350,7 +352,67 @@ DIMENSIONS: ${dimensions.width}px wide × ${dimensions.height}px tall`;
         let html = response.trim();
         html = html.replace(/^```html?\s*/i, '').replace(/\s*```$/i, '').trim();
 
+        // Inject safety CSS to prevent overlapping content
+        if (!isAutoHeight) {
+            html = this.injectOverflowSafety(html, dimensions);
+        }
+
         return html;
+    }
+
+    /**
+     * Inject CSS safety rules to prevent content from overlapping or escaping the frame.
+     * This acts as a hard guardrail regardless of what the AI generates.
+     */
+    private static injectOverflowSafety(
+        html: string,
+        dimensions: { width: number; height: number }
+    ): string {
+        const safetyCss = `
+/* === VISUAL BUILDER SAFETY OVERRIDES === */
+body {
+    width: ${dimensions.width}px !important;
+    height: ${dimensions.height}px !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+body > * {
+    max-height: ${dimensions.height}px !important;
+    overflow: hidden !important;
+}
+/* Force flex children to shrink rather than overflow */
+.container, .wrap, [class*="container"], [class*="wrap"], body > div:first-child {
+    max-height: ${dimensions.height}px !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+/* Middle content zones should shrink to fit */
+.container > *:not(:first-child):not(:last-child),
+.wrap > *:not(:first-child):not(:last-child),
+body > div:first-child > *:not(:first-child):not(:last-child) {
+    flex-shrink: 1 !important;
+    overflow: hidden !important;
+    min-height: 0 !important;
+}
+/* Prevent any element from exceeding the frame */
+* {
+    max-width: ${dimensions.width}px !important;
+}
+/* === END SAFETY OVERRIDES === */`;
+
+        // Inject before the closing </style> tag
+        if (html.includes('</style>')) {
+            return html.replace('</style>', safetyCss + '\n</style>');
+        }
+
+        // If no style tag found, inject in head
+        if (html.includes('</head>')) {
+            return html.replace('</head>', `<style>${safetyCss}</style>\n</head>`);
+        }
+
+        // Fallback: prepend style
+        return `<style>${safetyCss}</style>\n${html}`;
     }
 
     private static async renderToImage(

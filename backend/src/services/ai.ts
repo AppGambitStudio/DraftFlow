@@ -88,6 +88,57 @@ export class AIService {
     }
 
     /**
+     * Fetch voice samples from Settings for a tenant.
+     */
+    private static async getVoiceSamples(tenantId: string): Promise<string | null> {
+        try {
+            const settings = await Settings.findOne({ where: { tenantId } });
+            return settings?.voiceSamples || null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Self-review and revise: takes a generated draft and runs it through
+     * a critique-and-rewrite pass to improve quality, voice, and originality.
+     */
+    private static async selfReviewAndRevise(
+        config: AIContext,
+        generatedPost: string,
+        voiceSamples: string | null
+    ): Promise<string> {
+        const reviewPrompt = `You are a ruthless content editor. Your ONLY job is to take a draft post and make it genuinely compelling — something a real human would stop scrolling to read.
+
+CRITIQUE the draft for these weaknesses, then REWRITE it:
+
+1. **Generic hook** — Does the opening sound like every other LinkedIn post? "Your X is broken" or "Stop doing Y" or "Hot take:" are played out. Rewrite it with a specific detail, a surprising fact, a story opening, or a counterintuitive observation.
+2. **Template structure** — If it follows the exact pattern "bold claim → context → bullets → question → hashtags", break the mold. Try a narrative arc, a single flowing argument, a dialogue format, or a cold open that drops you mid-story.
+3. **Missing personality** — Does it sound like a specific person or like generic thought leadership? Add voice — a strong opinion, a self-deprecating aside, a vivid analogy, or a moment of honesty.
+4. **Information without insight** — Restating what happened isn't valuable. What's the NON-OBVIOUS takeaway? What would surprise even someone who already knows the topic?
+5. **Formulaic CTA** — "What's your experience with X?" is the LinkedIn equivalent of elevator music. End with something that makes people think, laugh, or feel called out.
+6. **Over-formatting** — Not every post needs bold text, bullets, and numbered lists. Sometimes a clean, well-paced paragraph hits harder than a formatted listicle.
+${voiceSamples ? `
+**THE AUTHOR'S ACTUAL VOICE — study and match this:**
+${voiceSamples}
+
+Match THIS specific voice — the rhythm, the personality, the way they construct arguments. Don't match a generic "professional LinkedIn" voice.
+` : ''}
+${config.toneInstructions ? `**TONE GUIDELINES:** ${config.toneInstructions}\n` : ''}
+REWRITE RULES:
+- Preserve the core facts, argument, source URLs, and hashtags
+- Don't invent new information or statistics
+- Don't make it longer — if anything, tighten it
+- You may completely restructure the post if the current structure is boring
+- The result should feel like it was written by a human with strong opinions, not polished by a committee
+
+Return ONLY the revised post, ready to publish. No explanations, no meta-commentary, no "Here's the revised version:".`;
+
+        console.log('[AIService] Running self-review pass on generated post');
+        return this.callOpenRouter(config, reviewPrompt, `Draft to revise:\n\n${generatedPost}`, false);
+    }
+
+    /**
      * Get MCP server configs for a tenant.
      */
     private static async getMCPServers(tenantId: string): Promise<MCPServerConfig[]> {
@@ -213,7 +264,7 @@ export class AIService {
             return scored
                 .filter(p => p.score > 0)
                 .slice(0, limit)
-                .map(p => p.content.substring(0, 300));
+                .map(p => p.content);
         } catch (e: any) {
             console.error('[AIService] Failed to fetch top posts:', e.message);
             return [];
@@ -247,6 +298,14 @@ Study the WRITING STYLE only (tone, structure, hooks) - DO NOT copy their topics
             topPosts.forEach((post, i) => {
                 SYSTEM_PROMPT += `[Style Example ${i + 1}]: ${post}\n`;
             });
+        }
+
+        // Voice samples — author's actual writing for style matching
+        const voiceSamples = await this.getVoiceSamples(tenantId);
+        if (voiceSamples) {
+            SYSTEM_PROMPT += `\n**VOICE SAMPLES — THE AUTHOR'S ACTUAL WRITING:**
+Match this voice — the rhythm, personality, and directness. This overrides generic style guidelines.
+${voiceSamples}\n`;
         }
 
         if (targetAudience) {
@@ -354,6 +413,14 @@ Your post must be about the PROMPT TOPIC, not about what these examples discuss.
             topPosts.forEach((post, i) => {
                 SYSTEM_PROMPT += `[Style Example ${i + 1}]: ${post}\n`;
             });
+        }
+
+        // Voice samples — the author's actual writing for style matching
+        const voiceSamples = await this.getVoiceSamples(tenantId);
+        if (voiceSamples) {
+            SYSTEM_PROMPT += `\n**VOICE SAMPLES — THE AUTHOR'S ACTUAL WRITING (HIGHEST PRIORITY FOR STYLE):**
+These are real posts written by the author. Your generated post MUST match this voice — the rhythm, personality, argument style, hook patterns, and level of directness. This is MORE important than any generic style guideline below.
+${voiceSamples}\n`;
         }
 
         SYSTEM_PROMPT += `\n### CONTENT STRATEGY ###\n`;
@@ -469,6 +536,14 @@ ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCa
 - End with a question or a thought-provoking statement that invites comments (before the hashtags).
 - Focus on *value* for the reader—why should they care?
 
+**ANTI-PATTERNS — AVOID THESE TIRED LINKEDIN CLICHÉS:**
+- Do NOT open with "Your X is broken/wrong/a trap/a lie/a ticking time bomb" — this is the most overused LinkedIn hook. Find a genuinely surprising, specific, or story-driven opener instead.
+- Do NOT end with a generic question CTA like "What's your X?" or "How do you handle Y?" — either ask something specific and unexpected, make a bold closing statement, or drop a one-liner that lingers.
+- Do NOT follow this exact skeleton every time: bold provocative statement → context paragraph → bullet list → rhetorical question → hashtags. Vary the structure.
+- Do NOT use filler openings: "Here's the thing:", "Let me explain:", "The truth is:", "Hot take:", "Unpopular opinion:" — just START with the insight.
+- Not every post needs bullet points or numbered lists. Use narratives, analogies, dialogues, cold opens, mini case studies, or single-paragraph punches.
+- Sound like a specific human with real experience and opinions — not a "thought leadership content bot."
+
 **Response Format:**
 Return a JSON object with the following structure:
 {
@@ -498,8 +573,20 @@ Return a JSON object with the following structure:
 
         try {
             const parsed = this.extractAndParseJson(response);
+            let finalContent = parsed.postContent || parsed.content || response;
+
+            // Self-review pass: AI critiques and rewrites its own output for quality
+            try {
+                const voiceSamples = await this.getVoiceSamples(tenantId);
+                finalContent = await this.selfReviewAndRevise(config, finalContent, voiceSamples);
+                console.log("[AIService] Self-review pass completed, revised length:", finalContent.length);
+            } catch (reviewError: any) {
+                console.warn("[AIService] Self-review failed, using original draft:", reviewError.message);
+                // Fall through with original content if review fails
+            }
+
             return {
-                content: this.sanitizePostContent(parsed.postContent || parsed.content || response, prompt),
+                content: this.sanitizePostContent(finalContent, prompt),
                 summary: parsed.summary || "Summary generation failed or returned empty"
             };
         } catch (e: any) {

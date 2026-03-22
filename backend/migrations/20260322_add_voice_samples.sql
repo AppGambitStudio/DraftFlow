@@ -1,0 +1,1 @@
+ALTER TABLE Settings ADD COLUMN voiceSamples TEXT DEFAULT NULL;

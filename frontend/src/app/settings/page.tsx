@@ -86,6 +86,7 @@ function SettingsPage() {
         globalTone: "",
         accountTones: {} as Record<string, string>,
         aiPersona: "",
+        voiceSamples: "",
         webhookSecret: "",
         companyName: "",
         industry: "",
@@ -140,6 +141,7 @@ function SettingsPage() {
                 globalTone: res.data.globalTone || "",
                 accountTones: res.data.accountTones ? JSON.parse(res.data.accountTones) : {},
                 aiPersona: res.data.aiPersona || "",
+                voiceSamples: res.data.voiceSamples || "",
                 webhookSecret: res.data.webhookSecret || "",
                 companyName: res.data.companyName || "",
                 industry: res.data.industry || "",
@@ -868,6 +870,17 @@ function SettingsPage() {
                                 <p className="text-xs text-muted-foreground">
                                     This defines the AI's background and expertise during post generation.
                                 </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-sm font-semibold">Voice Samples</Label>
+                                <p className="text-xs text-muted-foreground">Paste 3-5 of your best-performing posts below (separated by blank lines). The AI will study your actual writing style — hooks, pacing, personality — and match it in every generated post.</p>
+                                <textarea
+                                    value={formData.voiceSamples}
+                                    onChange={(e) => setFormData({ ...formData, voiceSamples: e.target.value })}
+                                    className="flex min-h-[200px] w-full rounded-xl border border-input bg-slate-50/30 px-4 py-3 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+                                    placeholder={"Paste your best posts here, separated by blank lines. Example:\n\nYour first great post goes here...\n\n---\n\nYour second great post goes here..."}
+                                />
                             </div>
 
                             {authors.length > 0 && (

@@ -187,6 +187,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare globalTone: string | null;
     declare accountTones: string | null; // JSON string mapping urn -> instructions
     declare aiPersona: string | null; // Added
+    declare voiceSamples: string | null;
     declare webhookSecret: CreationOptional<string | null>; // Added
     declare companyName: string | null;
     declare industry: string | null;
@@ -250,6 +251,10 @@ Settings.init({
         defaultValue: '{}',
     },
     aiPersona: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    voiceSamples: {
         type: DataTypes.TEXT,
         allowNull: true,
     },
