@@ -3,6 +3,7 @@ import { Post, Idea, Settings, WeeklyDigest } from '../db';
 import { linkedinService } from './linkedin';
 import { twitterService } from './twitter';
 import { Op } from 'sequelize';
+import { sequelize } from '../db';
 import { markdownToUnicode } from '../utils/markdownToUnicode';
 import { AIService } from './ai';
 import { analyticsSyncService } from './analyticsSync';
@@ -276,9 +277,6 @@ const checkRecurringIdeas = async () => {
     }
 };
 
-// Track in-progress digest generation to prevent race conditions
-const digestsInProgress = new Set<string>();
-
 const checkScheduledDigests = async () => {
     try {
         // Find all settings with digestConfig that has scheduleEnabled
@@ -308,9 +306,6 @@ const checkScheduledDigests = async () => {
                 const timeHasPassed = (currentHour > targetHour) || (currentHour === targetHour && currentMinute >= targetMinute);
                 if (!timeHasPassed) continue;
 
-                // Skip if already generating for this tenant
-                if (digestsInProgress.has(tenantId)) continue;
-
                 // Check if we already generated one today
                 const todayStart = new Date();
                 todayStart.setHours(0, 0, 0, 0);
@@ -324,10 +319,47 @@ const checkScheduledDigests = async () => {
 
                 if (existingToday) continue;
 
-                // Mark as in-progress to prevent duplicate runs
-                digestsInProgress.add(tenantId);
+                // Atomic DB-level lock: create a placeholder row with status GENERATING.
+                // If another instance already created one, findOrCreate returns created=false.
+                // Using a transaction to ensure atomicity across processes.
+                let placeholderDigest: WeeklyDigest;
+                let wasCreated: boolean;
+                try {
+                    const result = await sequelize.transaction(async (t) => {
+                        // Double-check inside transaction
+                        const existing = await WeeklyDigest.findOne({
+                            where: {
+                                tenantId,
+                                createdAt: { [Op.gte]: todayStart }
+                            },
+                            transaction: t,
+                            lock: t.LOCK.UPDATE,
+                        });
+                        if (existing) return { digest: existing, created: false };
 
-                console.log(`[Scheduler] Auto-generating weekly digest for tenant ${tenantId}`);
+                        const digest = await WeeklyDigest.create({
+                            tenantId,
+                            content: '',
+                            topics: JSON.stringify(config.topics || []),
+                            stories: '[]',
+                            platform: config.platform || 'linkedin',
+                            storyCount: config.storyCount || 5,
+                            status: 'GENERATING',
+                            error: null,
+                            postId: null,
+                        }, { transaction: t });
+                        return { digest, created: true };
+                    });
+                    placeholderDigest = result.digest;
+                    wasCreated = result.created;
+                } catch (txErr: any) {
+                    console.error(`[Scheduler] Failed to acquire digest lock for tenant ${tenantId}:`, txErr.message);
+                    continue;
+                }
+
+                if (!wasCreated) continue;
+
+                console.log(`[Scheduler] Auto-generating weekly digest for tenant ${tenantId} (placeholder id: ${placeholderDigest.id})`);
 
                 try {
                     const result = await AIService.generateWeeklyDigest(tenantId, {
@@ -350,19 +382,24 @@ const checkScheduledDigests = async () => {
                         mediaUrls: '[]',
                     });
 
-                    // Link the digest to the post
-                    const digest = await WeeklyDigest.findByPk(result.digestId);
-                    if (digest) {
-                        await digest.update({ postId: post.id });
+                    // Link the generated digest to the post and clean up placeholder
+                    const generatedDigest = await WeeklyDigest.findByPk(result.digestId);
+                    if (generatedDigest) {
+                        await generatedDigest.update({ postId: post.id });
+                    }
+                    // Remove the placeholder if generateWeeklyDigest created its own row
+                    if (result.digestId !== placeholderDigest.id) {
+                        await placeholderDigest.destroy();
                     }
 
                     console.log(`[Scheduler] Weekly digest generated for tenant ${tenantId}, post ${post.id}`);
-                } finally {
-                    digestsInProgress.delete(tenantId);
+                } catch (genErr: any) {
+                    // Mark placeholder as failed so it still blocks retries today
+                    await placeholderDigest.update({ status: 'FAILED', error: genErr.message?.substring(0, 500) });
+                    console.error(`[Scheduler] Error generating weekly digest for tenant ${tenantId}:`, genErr.message);
                 }
             } catch (err: any) {
-                console.error(`[Scheduler] Error generating weekly digest for tenant ${settings.tenantId}:`, err.message);
-                digestsInProgress.delete(settings.tenantId as string);
+                console.error(`[Scheduler] Error processing digest for tenant ${settings.tenantId}:`, err.message);
             }
         }
     } catch (error) {
