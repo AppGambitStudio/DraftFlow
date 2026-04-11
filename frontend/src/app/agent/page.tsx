@@ -56,6 +56,8 @@ export default function AgentPage() {
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [generating, setGenerating] = useState(false);
+    const [progressStage, setProgressStage] = useState("");
+    const [progressDetail, setProgressDetail] = useState("");
     const [count, setCount] = useState(3);
     const [platform, setPlatform] = useState<"LINKEDIN" | "TWITTER">("LINKEDIN");
     const [focus, setFocus] = useState("auto");
@@ -126,28 +128,88 @@ export default function AgentPage() {
 
     const handleGenerate = async () => {
         setGenerating(true);
+        setProgressStage("starting");
+        setProgressDetail("Initializing...");
+
         try {
-            const res = await api.post("/agent/generate", {
+            const token = localStorage.getItem("token");
+            const tenantId = localStorage.getItem("tenantId");
+            const baseURL = `http://${window.location.hostname}:5002/api`;
+
+            const body = JSON.stringify({
                 count,
                 platform,
                 focus: focus || "auto",
                 context: context.trim() || undefined,
             });
-            if (res.data.drafts && res.data.drafts.length > 0) {
-                // Refresh the pending tab to show new drafts
+
+            const response = await fetch(`${baseURL}/agent/generate?stream=true`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    ...(tenantId ? { "x-tenant-id": tenantId } : {}),
+                },
+                body,
+            });
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let finalResult: any = null;
+
+            if (reader) {
+                let buffer = "";
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
+
+                    for (const line of lines) {
+                        if (line.startsWith("data: ")) {
+                            try {
+                                const event = JSON.parse(line.slice(6));
+                                if (event.stage === "done") {
+                                    finalResult = event.result;
+                                    setProgressStage("done");
+                                    setProgressDetail("Complete!");
+                                } else if (event.stage === "error") {
+                                    toast.error(event.detail || "Generation failed");
+                                } else if (event.stage === "delegating") {
+                                    setProgressStage("delegating");
+                                    setProgressDetail(event.detail || "Working...");
+                                } else if (event.stage === "tool") {
+                                    setProgressDetail(`Using ${event.detail}`);
+                                } else if (event.stage === "completed") {
+                                    setProgressDetail(`${event.agentId} done`);
+                                } else if (event.stage === "finalizing") {
+                                    setProgressStage("finalizing");
+                                    setProgressDetail("Preparing results...");
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+            }
+
+            if (finalResult?.drafts && finalResult.drafts.length > 0) {
                 if (activeTab === "pending") {
                     fetchDrafts("pending", 1);
                 } else {
                     setActiveTab("pending");
                 }
-                toast.success(`Generated ${res.data.drafts.length} new drafts`);
-            } else {
+                toast.success(`Generated ${finalResult.drafts.length} new drafts`);
+            } else if (finalResult) {
                 toast.error("No drafts generated. Try adjusting your focus.");
             }
         } catch (error: any) {
-            toast.error(error.response?.data?.error || "Failed to generate drafts");
+            toast.error(error.message || "Failed to generate drafts");
         } finally {
             setGenerating(false);
+            setProgressStage("");
+            setProgressDetail("");
         }
     };
 
@@ -602,6 +664,7 @@ export default function AgentPage() {
                                     className="flex h-10 w-full rounded-md border border-input bg-slate-50/30 px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
                                     <option value="auto">Auto (Mix of sources)</option>
+                                    <option value="none">None (Clean generation)</option>
                                     <option value="trends">Saved Trends</option>
                                     <option value="ideas">Idea Board</option>
                                     <option value="case-studies">Case Studies</option>
@@ -622,24 +685,32 @@ export default function AgentPage() {
                                 Give the agent a starting point to guide topic selection and content angle.
                             </p>
                         </div>
-                        <div className="flex justify-end pt-2">
-                            <Button
-                                onClick={handleGenerate}
-                                disabled={generating}
-                                className="bg-violet-600 hover:bg-violet-700 px-6"
-                            >
-                                {generating ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="mr-2 h-4 w-4" />
-                                        Generate Drafts
-                                    </>
-                                )}
-                            </Button>
+                        <div className="flex flex-col gap-2 pt-2">
+                            {generating && progressDetail && (
+                                <div className="flex items-center gap-2 text-sm text-zinc-400 bg-zinc-800/50 rounded-lg px-3 py-2">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400 shrink-0" />
+                                    <span className="truncate">{progressDetail}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-end">
+                                <Button
+                                    onClick={handleGenerate}
+                                    disabled={generating}
+                                    className="bg-violet-600 hover:bg-violet-700 px-6"
+                                >
+                                    {generating ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Generating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="mr-2 h-4 w-4" />
+                                            Generate Drafts
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
                         </div>
                     </CardContent>
                 )}

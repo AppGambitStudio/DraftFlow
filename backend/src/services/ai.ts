@@ -573,17 +573,7 @@ Return a JSON object with the following structure:
 
         try {
             const parsed = this.extractAndParseJson(response);
-            let finalContent = parsed.postContent || parsed.content || response;
-
-            // Self-review pass: AI critiques and rewrites its own output for quality
-            try {
-                const voiceSamples = await this.getVoiceSamples(tenantId);
-                finalContent = await this.selfReviewAndRevise(config, finalContent, voiceSamples);
-                console.log("[AIService] Self-review pass completed, revised length:", finalContent.length);
-            } catch (reviewError: any) {
-                console.warn("[AIService] Self-review failed, using original draft:", reviewError.message);
-                // Fall through with original content if review fails
-            }
+            const finalContent = parsed.postContent || parsed.content || response;
 
             return {
                 content: this.sanitizePostContent(finalContent, prompt),

@@ -49,7 +49,10 @@ router.post('/generate', authMiddleware, async (req: AuthRequest, res: Response)
         // Build STRONG focus instruction
         let focusInstruction = '';
         let sourcePreference = '';
-        if (focus === 'trends') {
+        if (focus === 'none') {
+            focusInstruction = `Do NOT look at saved trends, ideas, or case studies. Generate the post purely from the user's context, content pillars, and your own knowledge. Keep it clean and original.`;
+            sourcePreference = 'NONE';
+        } else if (focus === 'trends') {
             focusInstruction = `⚠️ MANDATORY: You MUST base your post on a SAVED TREND. Do NOT use ideas or general topics.`;
             sourcePreference = 'TREND';
         } else if (focus === 'ideas') {
@@ -63,128 +66,44 @@ router.post('/generate', authMiddleware, async (req: AuthRequest, res: Response)
             sourcePreference = 'ANY';
         }
 
-        // Generate a random seed to encourage variety
-        const randomSeed = Math.floor(Math.random() * 1000);
-
-        // Build completely different tasks based on whether user provided context
+        // Build a clean prompt — let the supervisor handle orchestration
         let agentTask: string;
 
         if (context && context.trim()) {
-            // TYPE 1: User provided specific topic
-            agentTask = `TYPE 1: DIRECT TOPIC POST
-
-═══════════════════════════════════════════════════════════════════════════════
-TOPIC: "${context.trim()}"
-TENANT: ${tenantId}
-PLATFORM: ${platform}
-═══════════════════════════════════════════════════════════════════════════════
-
-Create a ${platform} post about "${context.trim()}" that sounds like a real professional wrote it.
-
-**Your goal:** Create a post that:
-- Is specifically about "${context.trim()}" (don't change the topic)
-- Quality score ≥ 7
-- Authenticity score ≥ 7 (doesn't sound like AI)
-- Sounds like the professional wrote it themselves
-
-**Context you'll need:**
-- Call get-user-context to understand who you're ghostwriting for
-- Call get-recent-posts to see what angles to AVOID (don't repeat)
-
-**Your judgment calls:**
-- Would fresh stats/data strengthen this? → use web-search
-- Is this a complex topic that needs planning? → use create-plan
-- Does the first draft score < 7? → use improvise-post and re-evaluate
-- Does it sound too AI-like? → use self-critique to fix it
-
-**Don't use:** get-saved-trends, get-saved-ideas, get-case-studies (topic is already given)
-
-**Output JSON:**
-{
-  "posts": [{
-    "content": "final post ready to publish",
-    "explanation": "why this angle works",
-    "hooks": ["hook1", "hook2", "hook3"],
-    "hashtags": ["#tag1", "#tag2"],
-    "qualityScore": 8,
-    "authenticityScore": 8,
-    "basedOn": "${context.trim()}",
-    "toolsUsedAndWhy": ["tool: reason"]
-  }]
-}`;
+            agentTask = `Create a ${platform} post about "${context.trim()}".
+Tenant: ${tenantId}
+Topic provided — skip trend/idea research, just gather user context and recent posts to avoid repetition.`;
         } else {
-            // TYPE 2: No user context, agent selects from sources
-            agentTask = `TYPE 2: SELECT TOPIC & CREATE POST
-
-═══════════════════════════════════════════════════════════════════════════════
-TENANT: ${tenantId}
-PLATFORM: ${platform}
-COUNT: ${count} post(s)
-SOURCE PREFERENCE: ${sourcePreference}
-SESSION: ${randomSeed}
-═══════════════════════════════════════════════════════════════════════════════
-
-Create ${count} ${platform} post(s) that sound like a real professional wrote them.
-
-**Your goal:** Create post(s) that:
-- Quality score ≥ 7
-- Authenticity score ≥ 7 (doesn't sound like AI)
-- Are DIFFERENT from recent posts (variety is key)
-- Sound like the professional wrote them
-
-**Source guidance:**
+            agentTask = `Create ${count} ${platform} post(s).
+Tenant: ${tenantId}
+Source preference: ${sourcePreference}
 ${focusInstruction}
-
-**Recent content to AVOID repeating:**
-${recentTopics ? `- ${recentTopics}` : '(No recent posts - you have freedom to choose)'}
-
-**Finding a topic:**
-- Use get-saved-trends, get-saved-ideas, get-case-studies to explore options
-- Each tool returns RANDOMIZED results with a selectionHint - consider following it
-- Use get-recent-posts to see what to AVOID (don't repeat similar topics)
-- Pick something FRESH and DIFFERENT
-
-**Your judgment calls:**
-- Complex topic? → use create-plan to think through the angle
-- Need current data? → use web-search
-- First draft scores < 7? → use improvise-post based on feedback
-- Too similar to recent posts? → change the angle, not just words
-- Sounds too AI-like? → use self-critique to humanize it
-
-**Quality gates before returning:**
-- Verify uniqueness with check-similarity
-- Quality score must be ≥ 7
-- Post should sound human, not like AI generated it
-
-**Output JSON:**
-{
-  "posts": [
-    {
-      "content": "final post ready to publish",
-      "explanation": "why you chose this topic and angle",
-      "hooks": ["hook1", "hook2", "hook3"],
-      "hashtags": ["#tag1", "#tag2"],
-      "qualityScore": 8,
-      "authenticityScore": 8,
-      "basedOn": "the trend/idea/case study you used",
-      "toolsUsedAndWhy": ["tool: reason"]
-    }
-  ]
-}`;
+${recentTopics ? `Recent topics to AVOID: ${recentTopics}` : ''}`;
         }
 
         // Call the Mastra agent
-        console.log('[Agent Route] ═══════════════════════════════════════════════════');
-        console.log('[Agent Route] Starting Mastra agent for tenant:', tenantId);
-        console.log('[Agent Route] Platform:', platform, '| Count:', count, '| Focus:', focus);
-        console.log('[Agent Route] USER CONTEXT:', context || '(none provided)');
-        console.log('[Agent Route] ═══════════════════════════════════════════════════');
-        console.log('[Agent Route] Full Task:\n', agentTask);
+        console.log('[Agent Route] Starting Mastra agent for tenant:', tenantId, '| Focus:', focus);
+
+        // SSE streaming for progress
+        const isStream = req.query.stream === 'true';
+        if (isStream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.flushHeaders();
+        }
+
+        const sendProgress = (event: { stage: string; detail?: string; agentId?: string; duration?: number }) => {
+            if (isStream) {
+                res.write(`data: ${JSON.stringify(event)}\n\n`);
+            }
+        };
 
         const agentService = getMastraAgentService();
         const result = await agentService.chat({
             tenantId,
-            userMessage: agentTask
+            userMessage: agentTask,
+            onProgress: sendProgress,
         });
 
         console.log('[Agent Route] Agent completed. Tools used:', result.toolsUsed);
@@ -270,24 +189,37 @@ ${recentTopics ? `- ${recentTopics}` : '(No recent posts - you have freedom to c
             });
         }
 
-        // If still no drafts, return the raw response for debugging
+        // Build final response payload
+        let responsePayload: any;
         if (createdDrafts.length === 0) {
-            return res.status(200).json({
+            responsePayload = {
                 drafts: [],
                 agentResponse: result.response,
                 toolsUsed: result.toolsUsed,
                 message: 'Agent completed but no structured posts were extracted. See agentResponse for details.'
-            });
+            };
+        } else {
+            responsePayload = {
+                drafts: createdDrafts,
+                toolsUsed: result.toolsUsed
+            };
         }
 
-        res.json({
-            drafts: createdDrafts,
-            toolsUsed: result.toolsUsed
-        });
+        if (isStream) {
+            res.write(`data: ${JSON.stringify({ stage: 'done', result: responsePayload })}\n\n`);
+            res.end();
+        } else {
+            res.json(responsePayload);
+        }
 
     } catch (error: any) {
         console.error('Agent generate error:', error);
-        res.status(500).json({ error: error.message || 'Failed to generate content' });
+        if (req.query.stream === 'true') {
+            res.write(`data: ${JSON.stringify({ stage: 'error', detail: error.message || 'Failed to generate content' })}\n\n`);
+            res.end();
+        } else {
+            res.status(500).json({ error: error.message || 'Failed to generate content' });
+        }
     }
 });
 

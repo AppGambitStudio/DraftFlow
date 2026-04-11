@@ -898,14 +898,14 @@ export const checkSimilarityTool = createTool({
         }
 
         // Simple similarity check using word overlap (Jaccard similarity)
-        const draftWords = new Set(draftContent.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+        const draftWords: Set<string> = new Set((draftContent as string).toLowerCase().split(/\s+/).filter((w: string) => w.length > 3));
         let maxSimilarity = 0;
         let mostSimilar = '';
 
         for (const post of recentPosts) {
-            const postWords = new Set(post.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-            const intersection = new Set([...draftWords].filter(w => postWords.has(w)));
-            const union = new Set([...draftWords, ...postWords]);
+            const postWords: Set<string> = new Set(post.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+            const intersection = new Set(Array.from(draftWords).filter(w => postWords.has(w)));
+            const union: Set<string> = new Set([...draftWords, ...postWords]);
             const similarity = intersection.size / union.size;
 
             if (similarity > maxSimilarity) {
@@ -1497,31 +1497,22 @@ export const researcherTools = {
     'read-webpage-content': readWebpageContentTool
 };
 
-export const strategistTools = {
-    'create-plan': createPlanTool,
-    'generate-hooks': generateHooksTool,
-    'generate-ideas': generateIdeasTool,
-    'suggest-pillars': suggestPillarsTool
-};
-
 export const writerTools = {
     'generate-post': generatePostTool,
     'generate-from-idea': generateFromIdeaTool,
-    'generate-from-case-study': generateFromCaseStudyTool
+    'generate-from-case-study': generateFromCaseStudyTool,
+    'generate-hooks': generateHooksTool,
 };
 
 export const editorTools = {
-    'evaluate-post': evaluatePostTool,
     'check-similarity': checkSimilarityTool,
-    'align-with-brand': alignWithBrandTool,
-    'self-critique': selfCritiqueTool,
     'improvise-post': improvisePostTool,
     'suggest-hashtags': suggestHashtagsTool,
     'save-user-preference': saveUserPreferenceTool
 };
 
 // ============================================================================
-// Specialized Agents (Phase 4)
+// Specialized Sub-Agents
 // ============================================================================
 
 export function createResearcherAgent(
@@ -1538,6 +1529,7 @@ export function createResearcherAgent(
     return new Agent({
         id: 'researcher-agent',
         name: 'Research Agent',
+        description: 'Gathers factual information, user context, preferences, past posts, trends, ideas, case studies, and web research. Returns a detailed markdown summary of all findings.',
         instructions: `You are the Lead Researcher for a Ghostwriting agency. Your job is to gather and synthesize context.
 
 ## YOUR GOAL
@@ -1560,31 +1552,6 @@ Return a detailed markdown summary of all your findings so the next agent can us
     });
 }
 
-export function createStrategistAgent(
-    apiKey: string,
-    modelId: string = 'anthropic/claude-sonnet-4'
-) {
-    const openrouter = createOpenRouterForTenant(apiKey);
-    return new Agent({
-        id: 'strategist-agent',
-        name: 'Strategist Agent',
-        instructions: `You are the Content Strategist for a Ghostwriting agency. Your job is to formulate a plan.
-
-## YOUR GOAL
-Given the context from the Researcher, determine the best angle, create an outline, and generate alternative hooks.
-
-## AVAILABLE TOOLS
-- \`create-plan\` - Think through your angle before writing
-- \`generate-hooks\` - Alternative opening lines
-- \`generate-ideas\` - Brainstorm new post concepts
-- \`suggest-pillars\` - Ensure content fits strategy
-
-Return a structured strategy in markdown.`,
-        model: openrouter(modelId),
-        tools: strategistTools
-    });
-}
-
 export function createWriterAgent(
     apiKey: string,
     modelId: string = 'anthropic/claude-sonnet-4',
@@ -1596,10 +1563,11 @@ export function createWriterAgent(
     return new Agent({
         id: 'writer-agent',
         name: 'Writer Agent',
+        description: 'Ghostwriter that creates social media posts in the user\'s authentic voice. Generates posts from topics, ideas, or case studies. Returns raw post text ready for editing.',
         instructions: `You are a GHOSTWRITER for busy professionals. You write in THEIR voice, as if THEY wrote it.${voiceExamples}
 
 ## YOUR GOAL
-Execute the Strategist's plan using the Researcher's context. 
+Execute the Strategist's plan using the Researcher's context.
 Write a first draft that embodies the human voice constraints:
 - "I was wrong about X for years."
 - Contractions (I'm, don't, can't)
@@ -1610,8 +1578,9 @@ Avoid AI jargon ("In today's fast-paced world...", "Leverage").
 - \`generate-post\` - Create the standard post
 - \`generate-from-idea\` - Generate from a saved idea
 - \`generate-from-case-study\` - Generate from a case study
+- \`generate-hooks\` - Generate alternative opening lines
 
-Return the raw generated post text. Do not wrap in JSON.`,
+Return the raw generated post text along with 3 hook alternatives. Do not wrap in JSON.`,
         model: openrouter(modelId),
         tools: writerTools
     });
@@ -1625,28 +1594,32 @@ export function createEditorAgent(
     return new Agent({
         id: 'editor-agent',
         name: 'Editor Agent',
-        instructions: `You are the Chief Editor of a Ghostwriting agency.
+        description: 'Chief Editor that evaluates quality, detects AI patterns, refines drafts, and suggests hashtags. Returns the final polished post in JSON format with quality scores.',
+        instructions: `You are the Chief Editor of a Ghostwriting agency. You ARE the quality gate — evaluate and critique DIRECTLY using your own judgment. Do NOT delegate evaluation to tools.
 
 ## YOUR GOAL
-Review the Writer's draft to ensure it meets our quality bar.
+Review the Writer's draft and ensure it's high quality, authentic, and ready to publish.
 
-## AVAILABLE TOOLS
-- \`evaluate-post\` - Score quality (aim for ≥ 7)
-- \`check-similarity\` - Is it too similar to recent posts?
-- \`align-with-brand\` - Does it match their voice?
-- \`self-critique\` - Detect AI phrases, jargon, authenticity issues
-- \`improvise-post\` - Refine/improve the draft based on feedback
-- \`suggest-hashtags\` - Relevant hashtags
-- \`save-user-preference\` - Save stylistic rules if the user complained
+## EVALUATE DIRECTLY (no tools needed)
+Score the draft yourself on:
+- **Quality (1-10)**: Hook strength, value delivery, structure, readability
+- **Authenticity (1-10)**: Does it sound like a real human? Check for AI clichés like "In today's fast-paced...", "Let's dive in", "Here's the thing", "Game-changer", "Leverage", "Delve into", "I'm excited to share"
+- **Brand alignment**: Does it match the user's tone and voice?
 
-## INSTRUCTIONS
-1. Run \`evaluate-post\` to check quality.
-2. Run \`self-critique\` to find AI jargon or authenticity issues.
-3. Call \`improvise-post\` to fix ANY spotted issues.
-4. Call \`suggest-hashtags\` to finalize.
+## TOOLS (use only when needed)
+- \`check-similarity\` - Verify uniqueness against recent posts
+- \`improvise-post\` - ONLY if quality < 7 or major authenticity issues found
+- \`suggest-hashtags\` - Add relevant hashtags
+- \`save-user-preference\` - Save rules if user complained about style
+
+## WORKFLOW
+1. Read the draft and evaluate quality + authenticity yourself
+2. If quality ≥ 7 and sounds human → call \`suggest-hashtags\` and return
+3. If quality < 7 or sounds too AI → call \`improvise-post\` with specific feedback, then return
+4. Do NOT call multiple evaluation tools — YOU are the evaluator
 
 ## OUTPUT FORMAT
-Return JSON EXACTLY matching this structure alongside any conversational response:
+Return JSON EXACTLY matching this structure:
 {
   "posts": [
     {
@@ -1667,14 +1640,71 @@ Return JSON EXACTLY matching this structure alongside any conversational respons
 }
 
 // ============================================================================
+// Supervisor Agent
+// ============================================================================
+
+export function createSupervisorAgent(
+    apiKey: string,
+    modelId: string = 'anthropic/claude-sonnet-4',
+    subAgents: {
+        researcherAgent: Agent;
+        writerAgent: Agent;
+        editorAgent: Agent;
+    }
+) {
+    const openrouter = createOpenRouterForTenant(apiKey);
+
+    return new Agent({
+        id: 'content-supervisor',
+        name: 'Content Supervisor',
+        description: 'Supervises the content creation pipeline by coordinating Researcher, Writer, and Editor agents. Handles strategy directly.',
+        instructions: `You are the Content Director of a Ghostwriting agency. You coordinate 3 specialized agents and handle content strategy yourself.
+
+## YOUR TEAM
+- **researcherAgent**: Gathers data — user profile, preferences, past posts, trends, ideas, case studies, web search. Delegate here FIRST.
+- **writerAgent**: Ghostwrites the post in the user's voice. Delegate here with your strategy brief.
+- **editorAgent**: Quality gate — evaluates, polishes, adds hashtags. Delegate here LAST.
+
+## YOUR ROLE AS STRATEGIST
+After research returns, YOU formulate the strategy. Decide:
+- Which content pillar to align with
+- The unique angle (not generic advice)
+- Post format (story, hot take, breakdown, checklist, etc.)
+- What emotion to target (curiosity, surprise, urgency)
+- Key proof points to include
+
+Include this strategy brief when delegating to the writer.
+
+## WORKFLOW
+1. **Research** → Delegate to researcherAgent
+2. **Strategy** → YOU analyze research and formulate the angle (no delegation needed)
+3. **Write** → Delegate to writerAgent with research context + your strategy brief
+4. **Edit** → Delegate to editorAgent with the draft
+
+## EFFICIENCY RULES
+- If user provided a specific topic, tell researcherAgent to ONLY fetch user context + recent posts (skip trends/ideas)
+- Do NOT delegate back-and-forth more than once — if editor says quality is low, include the feedback and delegate to writer ONE more time, then to editor again
+- Maximum 5 total delegations per request
+
+## OUTPUT
+Your FINAL response must be the editorAgent's JSON output with the posts array. Pass it through exactly.`,
+        model: openrouter(modelId),
+        agents: subAgents,
+    });
+}
+
+// ============================================================================
 // Agent Draft Model Types
 // ============================================================================
+
+export type ProgressCallback = (event: { stage: string; detail?: string; agentId?: string; duration?: number }) => void;
 
 export interface AgentDraftInput {
     tenantId: string;
     userMessage: string;
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
     authorUrn?: string;
+    onProgress?: ProgressCallback;
 }
 
 export interface AgentDraftOutput {
@@ -1693,10 +1723,11 @@ export interface AgentDraftOutput {
 export class MastraAgentService {
 
     /**
-     * Process a user message through the sequential multi-agent workflow
+     * Process a user message through the supervisor-orchestrated multi-agent workflow
      */
     async chat(input: AgentDraftInput): Promise<AgentDraftOutput> {
-        const { tenantId, userMessage, conversationHistory = [], authorUrn } = input;
+        const { tenantId, userMessage, conversationHistory = [], authorUrn, onProgress } = input;
+        const progress = onProgress || (() => {});
 
         // 1. Setup Models and Top Posts Context
         const settings = await Settings.findOne({ where: { tenantId } });
@@ -1729,55 +1760,104 @@ export class MastraAgentService {
             console.error(`[MastraAgent] MCP server selection failed:`, error.message);
         }
 
+        // 3. Create sub-agents
+        const researcherAgent = createResearcherAgent(apiKey, modelId, mcpTools);
+        const writerAgent = createWriterAgent(apiKey, modelId, topPostsContext);
+        const editorAgent = createEditorAgent(apiKey, modelId);
+
+        // 4. Create supervisor (handles strategy directly)
+        const supervisor = createSupervisorAgent(apiKey, modelId, {
+            researcherAgent,
+            writerAgent,
+            editorAgent,
+        });
+
+        // 5. Build the prompt
         const contextMessage = `[Context: tenantId=${tenantId}${authorUrn ? `, authorUrn=${authorUrn}` : ''}]`;
         const historyText = conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n\n');
 
+        const supervisorPrompt = `${historyText ? historyText + '\n\n' : ''}${contextMessage}\n\n${userMessage}\n\nIMPORTANT: When delegating to any agent, always include the tenantId (${tenantId}) in the context so tools can access the correct data.${authorUrn ? ` AuthorURN: ${authorUrn}` : ''}`;
+
+        console.log('[MastraAgent] ═══════════════════════════════════════════════════');
+        console.log('[MastraAgent] Starting Supervisor pipeline for tenant:', tenantId);
+        console.log('[MastraAgent] ═══════════════════════════════════════════════════');
+        progress({ stage: 'starting', detail: 'Initializing content pipeline' });
+
+        // 6. Run supervisor
         const allToolCalls: any[] = [];
         const allToolResults: any[] = [];
-
         const onStepFinish = (step: any) => {
-            if (step.toolCalls?.length) allToolCalls.push(...step.toolCalls);
+            if (step.toolCalls?.length) {
+                allToolCalls.push(...step.toolCalls);
+                for (const tc of step.toolCalls) {
+                    const toolName = (tc as { toolName?: string }).toolName;
+                    if (toolName) {
+                        progress({ stage: 'tool', detail: toolName });
+                    }
+                }
+            }
             if (step.toolResults?.length) allToolResults.push(...step.toolResults);
         };
 
-        // --- STAGE 1: RESEARCH ---
-        console.log('[MastraAgent] Stage 1: Researcher');
-        const researcher = createResearcherAgent(apiKey, modelId, mcpTools);
-        const researchPrompt = `${historyText}\n\nuser: ${contextMessage}\n${userMessage}\n\nGather all necessary context for this request.`;
-        const resResearch = await researcher.generate(researchPrompt, { maxSteps: 5, onStepFinish });
-        const researchContext = resResearch.text;
+        const result = await supervisor.generate(supervisorPrompt, {
+            maxSteps: 15,
+            onStepFinish,
+            delegation: {
+                onDelegationStart: async (context) => {
+                    console.log(`[Supervisor] Delegating to ${context.primitiveId} (iteration ${context.iteration})`);
+                    const agentLabels: Record<string, string> = {
+                        'researcher-agent': 'Researching context and data',
+                        'writer-agent': 'Writing the post draft',
+                        'editor-agent': 'Editing and quality check',
+                    };
+                    progress({
+                        stage: 'delegating',
+                        detail: agentLabels[context.primitiveId] || `Running ${context.primitiveId}`,
+                        agentId: context.primitiveId,
+                    });
 
-        // --- STAGE 2: STRATEGY ---
-        console.log('[MastraAgent] Stage 2: Strategist');
-        const strategist = createStrategistAgent(apiKey, modelId);
-        const strategyPrompt = `${contextMessage}\n\nBased on the user request:\n${userMessage}\n\nAnd this research context:\n${researchContext}\n\nCreate a content strategy. Call create-plan using the tenantId exactly as provided in the context.`;
-        const resStrategy = await strategist.generate(strategyPrompt, { maxSteps: 5, onStepFinish });
-        const strategyContext = resStrategy.text;
+                    if (context.iteration > 12) {
+                        return {
+                            proceed: false,
+                            rejectionReason: 'Maximum iterations reached. Return the best content you have so far in the required JSON format.',
+                        };
+                    }
+                    return { proceed: true };
+                },
+                onDelegationComplete: async (context) => {
+                    if (context.error) {
+                        console.error(`[Supervisor] Delegation to ${context.primitiveId} failed:`, context.error);
+                        progress({ stage: 'error', detail: `${context.primitiveId} failed`, agentId: context.primitiveId });
+                        return {
+                            feedback: `Agent ${context.primitiveId} encountered an error: ${context.error}. Try a different approach or skip this step.`,
+                        };
+                    }
+                    console.log(`[Supervisor] ${context.primitiveId} completed successfully (${context.duration}ms)`);
+                    progress({
+                        stage: 'completed',
+                        detail: `${context.primitiveId} done`,
+                        agentId: context.primitiveId,
+                        duration: context.duration,
+                    });
+                },
+            },
+        });
 
-        // --- STAGE 3: WRITING ---
-        console.log('[MastraAgent] Stage 3: Writer');
-        const writer = createWriterAgent(apiKey, modelId, topPostsContext);
-        const writePrompt = `${contextMessage}\n\nRequest:\n${userMessage}\n\nResearch:\n${researchContext}\n\nStrategy:\n${strategyContext}\n\nWrite the post draft. If you call tools, use the exact tenantId provided in the context.`;
-        const resWriter = await writer.generate(writePrompt, { maxSteps: 5, onStepFinish });
-        const draftContext = resWriter.text;
+        const finalText = result.text;
+        console.log('[MastraAgent] Supervisor completed. Response length:', finalText.length);
+        progress({ stage: 'finalizing', detail: 'Preparing results' });
 
-        // --- STAGE 4: EDITING ---
-        console.log('[MastraAgent] Stage 4: Editor');
-        const editor = createEditorAgent(apiKey, modelId);
-        const editPrompt = `${contextMessage}\n\nRequest:\n${userMessage}\n\nDraft:\n${draftContext}\n\nEvaluate and edit the draft ensuring Quality Score >= 7. Use the exact tenantId in tool calls.\n\nCRITICAL: YOUR FINAL RESPONSE MUST BE ONLY THE FINAL JSON OBJECT MATCHING THE OUTPUT FORMAT. NO CONVERSATIONAL TEXT.`;
-        const resEditor = await editor.generate(editPrompt, { maxSteps: 5, onStepFinish });
-        const finalJsonText = resEditor.text;
-
-        // Collect Tools
+        // 7. Collect tools used
         const toolsUsed = [...new Set(allToolCalls.map(tc => (tc as { toolName?: string }).toolName).filter(Boolean))] as string[];
+        console.log('[MastraAgent] Tools used:', toolsUsed);
 
-        // Extract generated content from tools if possible
+        // 8. Extract generated content
         let generatedContent = this.extractGeneratedContent(allToolResults);
 
-        // Fallback: Look for JSON in the Editor's response text
+        // Fallback: Look for JSON in the supervisor's response text
         if (!generatedContent || generatedContent.type !== 'post') {
             try {
-                const jsonMatch = finalJsonText.match(/\{[\s\S]*\}/);
+                const jsonMatch = finalText.match(/\{[\s\S]*"posts"[\s\S]*\}/);
                 if (jsonMatch) {
                     const parsed = JSON.parse(jsonMatch[0]);
                     if (parsed.posts && parsed.posts.length > 0) {
@@ -1785,16 +1865,16 @@ export class MastraAgentService {
                     }
                 }
             } catch (e) {
-                console.warn('[MastraAgent] Failed to parse Editor raw JSON', e);
+                console.warn('[MastraAgent] Failed to parse supervisor JSON', e);
             }
         }
 
-        // Clean the Editor's text to remove the big JSON block if it exists so the UI bubble is clean
-        let cleanResponse = finalJsonText;
+        // Clean the response text for UI display
+        let cleanResponse = finalText;
         const jsonMatchForCleaning = cleanResponse.match(/\{\s*"posts"[\s\S]*\}/);
         if (jsonMatchForCleaning && generatedContent) {
             cleanResponse = cleanResponse.replace(jsonMatchForCleaning[0], '').replace(/```json/g, '').replace(/```/g, '').trim();
-            if (!cleanResponse) cleanResponse = "I've drafted the content for you through the multi-agent pipeline! Check it out below.";
+            if (!cleanResponse) cleanResponse = "Content created through the supervisor pipeline. Check out the draft below.";
         }
 
         return {
