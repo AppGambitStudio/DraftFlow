@@ -15,6 +15,7 @@ import uploadRoutes from './routes/uploads';
 import agentRoutes from './routes/agent';
 import caseStudyRoutes from './routes/caseStudies';
 import feedRoutes from './routes/feeds';
+import wikiRoutes from './routes/wiki';
 import { startScheduler } from './services/scheduler';
 import path from 'path';
 import { initDB } from './db';
@@ -42,6 +43,7 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/case-studies', caseStudyRoutes);
 app.use('/api/feeds', feedRoutes);
+app.use('/api/wiki', wikiRoutes);
 
 // Serve uploads directory
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

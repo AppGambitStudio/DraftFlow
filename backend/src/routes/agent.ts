@@ -61,6 +61,9 @@ router.post('/generate', authMiddleware, async (req: AuthRequest, res: Response)
         } else if (focus === 'case-studies') {
             focusInstruction = `⚠️ MANDATORY: You MUST base your post on a CASE STUDY. Use generate-from-case-study tool.`;
             sourcePreference = 'CASE_STUDY';
+        } else if (focus === 'wiki') {
+            focusInstruction = `⚠️ MANDATORY: You MUST base your post on knowledge from the LLM Wiki. Use search-wiki tool to find relevant content. Do NOT use web search.`;
+            sourcePreference = 'WIKI';
         } else {
             focusInstruction = `You may choose from trends, ideas, case studies, or content pillars - but MUST pick something DIFFERENT from recent posts.`;
             sourcePreference = 'ANY';

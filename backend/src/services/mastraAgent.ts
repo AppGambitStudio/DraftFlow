@@ -1482,6 +1482,33 @@ export const readWebpageContentTool = createTool({
     }
 });
 
+/**
+ * Tool: Search LLM Wiki knowledge base
+ */
+export const searchWikiTool = createTool({
+    id: 'search-wiki',
+    description: 'Search the LLM Wiki knowledge base for accumulated insights from previously ingested sources (articles, RSS feeds, case studies). The wiki contains processed, organized knowledge. Check this BEFORE web search for topics the user has researched before.',
+    inputSchema: z.object({
+        tenantId: z.string().describe('The tenant ID'),
+        query: z.string().describe('Search query — keywords or topic to find in wiki')
+    }),
+    outputSchema: z.object({
+        results: z.array(z.object({
+            slug: z.string(),
+            title: z.string(),
+            excerpt: z.string(),
+            relevanceScore: z.number()
+        })),
+        totalPages: z.number()
+    }),
+    execute: async (inputData) => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { WikiService } = require('./wiki');
+        const { tenantId, query } = inputData;
+        return WikiService.queryWiki(tenantId!, query!);
+    }
+});
+
 // ============================================================================
 // All tools collection
 // ============================================================================
@@ -1493,6 +1520,7 @@ export const researcherTools = {
     'get-saved-trends': getSavedTrendsTool,
     'get-saved-ideas': getSavedIdeasTool,
     'get-case-studies': getCaseStudiesTool,
+    'search-wiki': searchWikiTool,
     'web-search': webSearchTool,
     'read-webpage-content': readWebpageContentTool
 };
@@ -1543,6 +1571,7 @@ Always call get-user-context and get-user-preferences first to understand who yo
 - \`get-saved-trends\` - Current trends to potentially write about.
 - \`get-saved-ideas\` - Pre-saved content ideas.
 - \`get-case-studies\` - Client success stories to showcase.
+- \`search-wiki\` - Search the LLM Wiki for accumulated knowledge. Check this BEFORE web search.
 - \`web-search\` - Find current stats, facts, or fresh angles.
 - \`read-webpage-content\` - Extract article content from a specific URL.
 

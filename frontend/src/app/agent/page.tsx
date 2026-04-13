@@ -668,6 +668,7 @@ export default function AgentPage() {
                                     <option value="trends">Saved Trends</option>
                                     <option value="ideas">Idea Board</option>
                                     <option value="case-studies">Case Studies</option>
+                                    <option value="wiki">LLM Wiki</option>
                                 </select>
                             </div>
                         </div>

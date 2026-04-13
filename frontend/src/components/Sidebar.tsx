@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, PenSquare, Settings, Lightbulb, Calendar, LogOut, User as UserIcon, TrendingUp, Bot, BookOpen, Newspaper, Rss } from "lucide-react";
+import { LayoutDashboard, PenSquare, Settings, Lightbulb, Calendar, LogOut, User as UserIcon, TrendingUp, Bot, BookOpen, Newspaper, Rss, Library } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -16,6 +16,7 @@ const navItems = [
     { href: "/digest", label: "Weekly Digest", icon: Newspaper },
     { href: "/agent", label: "AI Agent", icon: Bot },
     { href: "/case-studies", label: "Case Studies", icon: BookOpen },
+    { href: "/wiki", label: "LLM Wiki", icon: Library },
     { href: "/calendar", label: "Calendar", icon: Calendar },
     { href: "/create", label: "Create Post", icon: PenSquare },
     { href: "/users", label: "Users", icon: UserIcon },

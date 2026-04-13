@@ -88,6 +88,14 @@ export class AIService {
     }
 
     /**
+     * Public entry point for LLM Wiki — calls AI without web plugin or MCP tools.
+     */
+    static async callForWiki(tenantId: string, systemPrompt: string, userContent: string): Promise<string> {
+        const config = await this.getUnifiedConfig(tenantId);
+        return this.callOpenRouter(config, systemPrompt, userContent, false);
+    }
+
+    /**
      * Fetch voice samples from Settings for a tenant.
      */
     private static async getVoiceSamples(tenantId: string): Promise<string | null> {

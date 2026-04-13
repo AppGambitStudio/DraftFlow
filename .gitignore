@@ -44,3 +44,7 @@ kill-all.sh
 # Claude Code
 .claude/
 extra/
+
+# LLM Wiki
+
+/backend/wiki/

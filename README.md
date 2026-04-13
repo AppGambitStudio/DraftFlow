@@ -15,9 +15,41 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 - **Recurring Posts** — Set up ideas that auto-generate on a daily, weekly, or monthly schedule
 - **Multi-Tenant** — Support for multiple workspaces and team collaboration
 - **Markdown Support** — Write in `**bold**` and `*italic*`, auto-converted to Unicode for LinkedIn
+- **LLM Wiki** — Persistent, compounding knowledge base inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+- **AI Agent Pipeline** — Mastra supervisor agent orchestrates researcher, writer, and editor agents
 - **MCP Integration** — Extend AI capabilities with Model Context Protocol servers
 
 ![alt text](docs/screenshots/1.png)
+
+### LLM Wiki — Persistent Knowledge Base
+
+Inspired by [Andrej Karpathy's LLM Wiki concept](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), DraftFlow maintains a **compounding knowledge base** per workspace that grows smarter with every ingested source.
+
+**The problem with typical AI content tools:** They start from scratch every time — re-discovering context by searching databases and the web, producing shallow, inconsistent output.
+
+**The LLM Wiki approach:** Instead of ephemeral retrieval (RAG), DraftFlow maintains structured markdown wiki pages that the AI reads, writes, and updates over time. Feed it a URL, article, or RSS item and the AI extracts knowledge into focused wiki pages, cross-references with existing pages, and maintains an auto-generated index.
+
+```
+wiki/{tenantId}/
+  index.md        ← Auto-maintained page catalog
+  log.md          ← Chronological activity log
+  serverless.md   ← Knowledge: serverless architecture patterns
+  ai-agents.md    ← Knowledge: AI agent frameworks
+  ...
+```
+
+**Three operations:**
+- **Ingest** — Feed a URL or text. AI extracts knowledge into 1-5 wiki pages.
+- **Query** — Keyword search across all pages. The AI agent checks the wiki before web search.
+- **Browse/Edit** — Full CRUD UI to read, edit, and manage wiki pages.
+
+**How it helps content generation:**
+- The researcher agent queries the wiki first, using accumulated domain knowledge instead of starting from scratch
+- "LLM Wiki" is a content source option alongside trends, ideas, and case studies
+- RSS articles can be ingested into the wiki, turning news streams into reusable knowledge
+- Existing content (published posts, trends, ideas) can be bulk-hydrated via `npx ts-node scripts/hydrate-wiki.ts`
+
+As Karpathy puts it: *"The tedious part of maintaining a knowledge base is not the reading or the thinking — it's the bookkeeping."* The LLM handles the bookkeeping.
 
 ### Visual Builder
 
@@ -34,9 +66,12 @@ frontend/          Next.js (React 19) dashboard
 backend/           Express + TypeScript API server
   ├── src/
   │   ├── routes/       API endpoints
-  │   ├── services/     Business logic (AI, LinkedIn, Twitter, Scheduler)
+  │   ├── services/     Business logic (AI, Wiki, LinkedIn, Twitter, Scheduler)
   │   ├── middleware/   Auth middleware
   │   └── db.ts         Sequelize models (SQLite)
+  ├── wiki/             LLM Wiki markdown files (per tenant)
+  ├── uploads/          File uploads (images, visuals)
+  ├── scripts/          Utility scripts (wiki hydration, etc.)
   └── migrations/       SQL migration files
 ```
 
