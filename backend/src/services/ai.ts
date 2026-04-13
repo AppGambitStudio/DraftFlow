@@ -108,31 +108,28 @@ export class AIService {
         generatedPost: string,
         voiceSamples: string | null
     ): Promise<string> {
-        const reviewPrompt = `You are a ruthless content editor. Your ONLY job is to take a draft post and make it genuinely compelling — something a real human would stop scrolling to read.
+        const reviewPrompt = `You are an editor. Read this draft and ask: "Would a real engineer/founder actually post this, or does it sound like AI content?"
 
-CRITIQUE the draft for these weaknesses, then REWRITE it:
-
-1. **Generic hook** — Does the opening sound like every other LinkedIn post? "Your X is broken" or "Stop doing Y" or "Hot take:" are played out. Rewrite it with a specific detail, a surprising fact, a story opening, or a counterintuitive observation.
-2. **Template structure** — If it follows the exact pattern "bold claim → context → bullets → question → hashtags", break the mold. Try a narrative arc, a single flowing argument, a dialogue format, or a cold open that drops you mid-story.
-3. **Missing personality** — Does it sound like a specific person or like generic thought leadership? Add voice — a strong opinion, a self-deprecating aside, a vivid analogy, or a moment of honesty.
-4. **Information without insight** — Restating what happened isn't valuable. What's the NON-OBVIOUS takeaway? What would surprise even someone who already knows the topic?
-5. **Formulaic CTA** — "What's your experience with X?" is the LinkedIn equivalent of elevator music. End with something that makes people think, laugh, or feel called out.
-6. **Over-formatting** — Not every post needs bold text, bullets, and numbered lists. Sometimes a clean, well-paced paragraph hits harder than a formatted listicle.
+FIX these if present:
+- Opens with "Your X is broken/wrong" or "Most teams do X wrong" → rewrite the opener with something specific and concrete
+- Follows the template: provocative claim → bullet list → "the real issue" → CTA question → hashtags → BREAK this structure
+- Too long (over 200 words) without a compelling story → CUT aggressively
+- Fabricated anecdotes ("I watched a team...") → remove or replace with the user's actual context
+- Generic advice anyone could give → sharpen to something only someone with real experience would say
+- Over-formatted (bold + bullets + arrows everywhere) → simplify, use plain paragraphs
+- Dramatic framing ("silent killer", "ticking time bomb") → tone it down to normal human language
+- Generic CTA ("What's your experience?") → either cut or replace with something specific
 ${voiceSamples ? `
-**THE AUTHOR'S ACTUAL VOICE — study and match this:**
+**THE AUTHOR'S ACTUAL VOICE — match this:**
 ${voiceSamples}
-
-Match THIS specific voice — the rhythm, the personality, the way they construct arguments. Don't match a generic "professional LinkedIn" voice.
 ` : ''}
-${config.toneInstructions ? `**TONE GUIDELINES:** ${config.toneInstructions}\n` : ''}
-REWRITE RULES:
-- Preserve the core facts, argument, source URLs, and hashtags
-- Don't invent new information or statistics
-- Don't make it longer — if anything, tighten it
-- You may completely restructure the post if the current structure is boring
-- The result should feel like it was written by a human with strong opinions, not polished by a committee
+${config.toneInstructions ? `**TONE:** ${config.toneInstructions}\n` : ''}
+RULES:
+- Preserve core facts, URLs, and hashtags
+- Make it SHORTER, not longer
+- The bar: would you scroll past this or actually read it?
 
-Return ONLY the revised post, ready to publish. No explanations, no meta-commentary, no "Here's the revised version:".`;
+Return ONLY the revised post. No explanations.`;
 
         console.log('[AIService] Running self-review pass on generated post');
         return this.callOpenRouter(config, reviewPrompt, `Draft to revise:\n\n${generatedPost}`, false);
@@ -318,39 +315,26 @@ ${voiceSamples}\n`;
         }
 
         SYSTEM_PROMPT += `
-**Your refinement should:**
-1. **Strengthen the hook** - Make the first 2 lines more compelling (use questions, bold statements, or relatable pain points)
-2. **Enhance clarity** - Simplify complex ideas without losing technical credibility
-3. **Improve flow** - Ensure logical progression from hook → context → insight → takeaway → CTA
-4. **Optimize formatting** - Add strategic line breaks, emojis (sparingly), and structure for readability
-5. **Sharpen the CTA** - Make the call-to-action specific and engaging
-6. **Maintain authenticity** - Keep the author's personality and perspective intact
+**Refinement goals:**
+- Make it sound more human and less like AI content
+- Cut unnecessary words — shorter is better
+- If it follows the "provocative claim → bullet list → CTA question" template, restructure it
+- Remove dramatic framing ("silent killer", "ticking time bomb") — use normal language
+- Remove fabricated anecdotes unless they came from the user's actual input
+- Keep the core message, specific examples, and metrics
 
-**Keep these elements:**
-- The original core message and key points
-- The author's unique perspective or story
-- Any specific examples, metrics, or anecdotes mentioned
-
-**Enhance these elements:**
-- Word choice for impact and professionalism
-- Balance between technical depth and accessibility
-- Engagement potential (without making it clickbait-y)
-- Business value emphasis over pure technical features
-
-**Tone Guidelines:**
-${effectiveTone ? `**PRIMARY STYLE (STRICTLY FOLLOW):**\n${effectiveTone}` : `- Professional yet conversational\n- Trusted advisor, not corporate spokesperson\n- Focus on outcomes and ROI\n- Inject personality while maintaining authority\n- Keep the language simple and easy to understand even for non-technical audience`}
+${effectiveTone ? `**TONE (STRICTLY FOLLOW):**\n${effectiveTone}` : `Write like a smart colleague sharing something interesting — not a thought leader broadcasting wisdom.`}
 
 ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCase().includes('collective reference') || effectiveTone?.toLowerCase().includes('instead of "i"'))
-                ? '**CRITICAL PERSPECTIVE RULE:** You MUST use "We" (collective reference) instead of "I" (individual reference) throughout the post. This is a hard constraint.'
+                ? '**CRITICAL:** Use "We" instead of "I" throughout.'
                 : ''}
 
 **Do NOT:**
-- Change the fundamental message or argument
-- Add information that wasn't in the original
-- Make it overly promotional or sales-y
-- Remove the author's unique voice
+- Change the fundamental message
+- Add information not in the original
+- Make it longer
 
-Return ONLY the refined LinkedIn post, formatted and ready to publish. No explanations or meta-commentary.
+Return ONLY the refined post. No explanations.
 `;
 
         console.log(`[AIService] Improving LinkedIn post:\n\n${content}`);
@@ -491,72 +475,71 @@ You are PROHIBITED from using these same arguments or focal points.
 `;
         }
 
+        // Randomly select a structure to force variety across generations
+        const structures = [
+            { name: 'cold-open-story', instruction: 'Start mid-scene — drop the reader into a specific moment. "The deploy went out at 2am. By 2:07, three dashboards were red." Build the narrative from there. No introduction, no setup — just the moment.' },
+            { name: 'single-thesis', instruction: 'One clear argument in flowing prose. No bullets, no lists, no bold. Just well-paced paragraphs making a single compelling point. Think op-ed, not listicle.' },
+            { name: 'observation', instruction: 'Start with something you literally noticed or experienced. "I reviewed 40 PRs last month and noticed something weird." Be specific and concrete — no hypotheticals or generic claims.' },
+            { name: 'contrarian-take', instruction: 'State a belief most people in the industry hold, then explain why you think differently. Be specific about WHY, not just that you disagree.' },
+            { name: 'short-lesson', instruction: 'Under 100 words. One sharp insight, no fluff. Think fortune cookie meets engineering wisdom. Every word must earn its place.' },
+            { name: 'before-after', instruction: 'Describe a specific real-world before state and after state. Not generic "before: chaos, after: peace" — concrete, measurable differences someone actually experienced.' },
+            { name: 'question-answer', instruction: 'Open with a genuine question someone actually asks. Answer it directly and concisely. No rhetorical tricks — just a useful answer.' },
+            { name: 'list-of-specifics', instruction: 'A short list (3-5 items) where each item is hyper-specific and opinionated, not generic advice. "Use caching" is bad. "Cache your auth token refresh — it saved us 340ms per request" is good.' },
+        ];
+        const chosenStructure = structures[Math.floor(Math.random() * structures.length)]!;
+
         SYSTEM_PROMPT += `
-**Post Structure Guidelines:**
-Unless the "Post Shape" instruction above dictates otherwise, follow this high-level flow:
-1. **Hook** - Grab attention immediately (0-2 seconds to read).
-2. **Value/Body** - Deliver the core insight, story, or lesson clearly.
-3. **Takeaway** - Summarize the "So what?" (Why does this matter?).
-4. **CTA** - Encouraging engagement or reflection.
+**MANDATORY POST STRUCTURE — "${chosenStructure.name}":**
+${chosenStructure.instruction}
 
 **Topics & Focus:**
-- STRICTLY focus on the topics provided in the "Idea Title", "Creative Brief / Description", and "Topic Tags".
-- **Primary Anchor:** If "SPECIFIC USER INSTRUCTIONS" were provided above, they are your primary source of truth for the post's angle and content. The "Creative Brief / Description" is your secondary anchor — it contains specific angles, examples, and framing to follow.
-- Do NOT force unrelated topics unless they are part of the input.
-- If the input is broad or lists multiple angles, pick ONE specific angle and go deep on it rather than covering everything superficially.
+- Focus on the topics provided in the "Idea Title", "Creative Brief / Description", and "Topic Tags".
+- If "SPECIFIC USER INSTRUCTIONS" were provided above, they are your primary source of truth.
+- Pick ONE specific angle and go deep rather than covering everything superficially.
 
 **Tone & Style**:
-${effectiveTone ? `**IMPORTANT: You MUST strictly follow these specific style guidelines:**\n${effectiveTone}` : `- Professional yet conversational (like a smart colleague, not a textbook).
-- Authentic and human (avoid corporate jargon like "synergy" or "paradigm shift").
-- Confident but humble (share expertise without arrogance).`}
+${effectiveTone ? `**IMPORTANT: You MUST strictly follow these specific style guidelines:**\n${effectiveTone}` : `- Write like you're texting a smart friend about something interesting — not presenting at a conference.
+- Use your natural vocabulary. If you wouldn't say "leverage" or "paradigm shift" at lunch, don't write it.
+- Have a point of view. Bland, agreeable posts get scrolled past.`}
 
 ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCase().includes('collective reference') || effectiveTone?.toLowerCase().includes('instead of "i"'))
                 ? '**CRITICAL PERSPECTIVE RULE:** You MUST use "We" (collective reference) instead of "I" (individual reference) throughout the post. This is a hard constraint.'
                 : ''}
 
-**Formatting Best Practices:**
-- Use short paragraphs (1-3 lines max) for readability.
-- Use bullet points or numbered lists to break down dense information.
-- Use bold text **sparingly** to highlight key phrases (not entire sentences).
-- Use clear visual breaks (white space).
+**Formatting:**
+- Short paragraphs (1-3 lines). Use whitespace to let the post breathe.
+- Bold text, bullets, and numbered lists are OPTIONAL — use them only when they genuinely help. Many great posts use none of these.
+- Do NOT over-format. A clean paragraph is often better than a bulleted list.
 
 **URLs & Links (HARD CONSTRAINT):**
-- DO NOT fabricate, hallucinate, or invent URLs. This is a critical trust violation.
-- You may ONLY include URLs that were explicitly provided in the "Reference Material", "Source Links", or user prompt.
-- If no source URLs were provided, do NOT include any links in the post.
-- If a source URL was provided, you may reference it naturally (e.g., as a parenthetical citation).
+- DO NOT fabricate URLs. Only include URLs explicitly provided in the input.
 
 **Hashtags (REQUIRED):**
-- End the post with 3-6 relevant hashtags.
-- Hashtags should reflect the post's core topics (e.g., #AWS, #Serverless, #CloudArchitecture).
-- Do NOT use generic hashtags like #Innovation or #Technology — be specific to the content.
+- End with 3-6 specific hashtags (e.g., #Kubernetes, #DevOps). No generic tags like #Innovation.
 
-**Engagement Optimization:**
-- The first line must be a "scroll stopper".
-- End with a question or a thought-provoking statement that invites comments (before the hashtags).
-- Focus on *value* for the reader—why should they care?
+**BANNED PATTERNS — your post will be REJECTED if it contains any of these:**
+- Opening with "Your [X] is [negative adjective]" (e.g., "Your API is a ticking time bomb")
+- Opening with "Most [teams/CTOs/engineers] [do X wrong]"
+- The skeleton: provocative claim → "here's what's wrong" → bullet list → "the real issue" → CTA question
+- Filler openings: "Here's the thing:", "Let me explain:", "The truth is:", "Hot take:", "Unpopular opinion:"
+- Generic CTAs: "What's your experience with X?", "How do you handle Y?", "Agree or disagree?"
+- Dramatic framing: "silent killer", "ticking time bomb", "gaslighting you", "holding it hostage"
+- Fabricated anecdotes: "I watched a team...", "A company I know...", "Six months ago, I watched..."
+- Starting with "Stop [doing X]" or "Nobody talks about [X]"
+- Arrow bullet points (→) in every post — use them rarely if at all
 
-**ANTI-PATTERNS — AVOID THESE TIRED LINKEDIN CLICHÉS:**
-- Do NOT open with "Your X is broken/wrong/a trap/a lie/a ticking time bomb" — this is the most overused LinkedIn hook. Find a genuinely surprising, specific, or story-driven opener instead.
-- Do NOT end with a generic question CTA like "What's your X?" or "How do you handle Y?" — either ask something specific and unexpected, make a bold closing statement, or drop a one-liner that lingers.
-- Do NOT follow this exact skeleton every time: bold provocative statement → context paragraph → bullet list → rhetorical question → hashtags. Vary the structure.
-- Do NOT use filler openings: "Here's the thing:", "Let me explain:", "The truth is:", "Hot take:", "Unpopular opinion:" — just START with the insight.
-- Not every post needs bullet points or numbered lists. Use narratives, analogies, dialogues, cold opens, mini case studies, or single-paragraph punches.
-- Sound like a specific human with real experience and opinions — not a "thought leadership content bot."
+**LENGTH:**
+- Default target: 80-200 words. Quality over quantity.
+- Shorter is almost always better. Only go longer if the story genuinely needs it.
 
 **Response Format:**
-Return a JSON object with the following structure:
+Return a JSON object:
 {
-    "themeAnalysis": "A 1-sentence reflection: What core themes did I identify in previous posts, and what UNUSUAL angle will I take to avoid them?",
-    "postContent": "The complete LinkedIn post content...",
-    "summary": "A 2-line summary focusing ONLY on the specific technical/business unique angle used this time."
+    "themeAnalysis": "1 sentence: what angle am I taking and why it's different from typical content on this topic",
+    "postContent": "The complete post content...",
+    "summary": "2-line summary of the unique angle used"
 }
-**CRITICAL:** 
-1. RETURN ONLY THE VALID JSON. 
-2. NO MARKDOWN BLOCKS (e.g., no \`\`\`json). 
-3. NO CONVERSATIONAL FILLER. 
-4. DO NOT include any text before or after the JSON.
-5. If you include newlines in the postContent, you MUST escape them as "\\n" so the JSON remains valid.
+**CRITICAL:** RETURN ONLY VALID JSON. No markdown blocks, no filler text. Escape newlines as "\\n" in postContent.
 `;
 
 
