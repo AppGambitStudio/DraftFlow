@@ -1727,11 +1727,15 @@ The #1 complaint is that posts feel monotonous and detached. When briefing the w
 - The reader should feel like they're hearing from a peer, not being talked down to
 - Shorter posts (under 150 words) with one sharp insight beat longer posts with many points
 
-## WORKFLOW
-1. **Research** → Delegate to researcherAgent
-2. **Strategy** → YOU formulate the angle (no delegation)
-3. **Write** → Delegate to writerAgent with research + strategy brief
-4. **Edit** → Delegate to editorAgent with the draft
+## WORKFLOW — YOU MUST COMPLETE ALL 4 STEPS
+⚠️ CRITICAL: Do NOT stop after research. You MUST delegate to ALL three agents in sequence.
+
+1. **Research** → Delegate to researcherAgent → get back context data
+2. **Strategy** → YOU formulate the angle based on research (no delegation needed)
+3. **Write** → Delegate to writerAgent with research context + your strategy brief
+4. **Edit** → Delegate to editorAgent with the writer's draft
+
+You are NOT done until the editorAgent returns the final JSON with the posts array. If you only have research data, you have NOT completed your job — keep going.
 
 ## EFFICIENCY RULES
 - If user provided a specific topic, tell researcherAgent to ONLY fetch user context + recent posts
@@ -1739,7 +1743,7 @@ The #1 complaint is that posts feel monotonous and detached. When briefing the w
 - If editor rejects, give writer ONE more try with specific feedback
 
 ## OUTPUT
-Your FINAL response must be the editorAgent's JSON output with the posts array. Pass it through exactly.`,
+Your FINAL response MUST be the editorAgent's JSON output with the posts array. Pass it through exactly. Do NOT return research summaries or strategy notes as your final output.`,
         model: openrouter(modelId),
         agents: subAgents,
     });
@@ -1838,21 +1842,28 @@ export class MastraAgentService {
         // 6. Run supervisor
         const allToolCalls: any[] = [];
         const allToolResults: any[] = [];
+        let stepCount = 0;
         const onStepFinish = (step: any) => {
+            stepCount++;
+            console.log(`[Supervisor] Step ${stepCount}: toolCalls=${step.toolCalls?.length || 0}, text=${step.text?.substring(0, 200) || '(none)'}`);
             if (step.toolCalls?.length) {
                 allToolCalls.push(...step.toolCalls);
                 for (const tc of step.toolCalls) {
                     const toolName = (tc as { toolName?: string }).toolName;
                     if (toolName) {
+                        console.log(`[Supervisor] Tool call: ${toolName}`);
                         progress({ stage: 'tool', detail: toolName });
                     }
                 }
             }
             if (step.toolResults?.length) allToolResults.push(...step.toolResults);
+            if (step.finishReason) {
+                console.log(`[Supervisor] Step ${stepCount} finishReason: ${step.finishReason}`);
+            }
         };
 
         const result = await supervisor.generate(supervisorPrompt, {
-            maxSteps: 15,
+            maxSteps: 25,
             onStepFinish,
             delegation: {
                 onDelegationStart: async (context) => {

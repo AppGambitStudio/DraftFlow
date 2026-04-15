@@ -198,6 +198,7 @@ export class Settings extends Model<InferAttributes<Settings>, InferCreationAttr
     declare mcpServers: string | null;
     declare userPreferences: string | null; // Added for episodic memory
     declare digestConfig: string | null; // JSON: { topics, platform, storyCount, additionalContext, scheduleEnabled, scheduleDayOfWeek, scheduleTime, authorUrn }
+    declare carouselBranding: string | null; // JSON: { name, handle, tagline, cta }
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -302,6 +303,10 @@ Settings.init({
         type: DataTypes.TEXT,
         allowNull: true,
     },
+    carouselBranding: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
 }, {
@@ -333,6 +338,7 @@ export class Post extends Model<InferAttributes<Post>, InferCreationAttributes<P
     declare repostsCount: CreationOptional<number>;
     declare impressionsCount: CreationOptional<number>;
     declare lastStatsSyncedAt: CreationOptional<Date | null>;
+    declare isFavorited: CreationOptional<boolean>;
     declare readonly createdAt: CreationOptional<Date>;
     declare readonly updatedAt: CreationOptional<Date>;
 }
@@ -395,6 +401,10 @@ Post.init({
     lastStatsSyncedAt: {
         type: DataTypes.DATE,
         allowNull: true,
+    },
+    isFavorited: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
     },
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,
@@ -1057,6 +1067,71 @@ RssFeed.hasMany(RssFeedItem, { foreignKey: 'feedId', as: 'items' });
 RssFeedItem.belongsTo(RssFeed, { foreignKey: 'feedId', as: 'feed' });
 Tenant.hasMany(RssFeedItem, { foreignKey: 'tenantId' });
 RssFeedItem.belongsTo(Tenant, { foreignKey: 'tenantId' });
+
+// Saved Carousel Model
+export class SavedCarousel extends Model<InferAttributes<SavedCarousel>, InferCreationAttributes<SavedCarousel>> {
+    declare id: CreationOptional<number>;
+    declare tenantId: ForeignKey<Tenant['id']> | null;
+    declare title: string;
+    declare content: string; // original input content
+    declare template: string;
+    declare slideCount: number;
+    declare pdfUrl: string;
+    declare fileName: string;
+    declare fileSize: number;
+    declare readonly createdAt: CreationOptional<Date>;
+    declare readonly updatedAt: CreationOptional<Date>;
+}
+
+SavedCarousel.init({
+    id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+    },
+    tenantId: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    title: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    content: {
+        type: DataTypes.TEXT,
+        allowNull: false,
+    },
+    template: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    slideCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    pdfUrl: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    fileName: {
+        type: DataTypes.STRING,
+        allowNull: false,
+    },
+    fileSize: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
+    createdAt: DataTypes.DATE,
+    updatedAt: DataTypes.DATE,
+}, {
+    sequelize,
+    modelName: 'SavedCarousel',
+    tableName: 'saved_carousels',
+    indexes: [
+        { fields: ['tenantId'] },
+        { fields: ['createdAt'] },
+    ]
+});
 
 // Sync database
 export const initDB = async () => {

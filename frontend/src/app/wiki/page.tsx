@@ -24,6 +24,7 @@ import {
     Loader2,
     Globe,
     Type,
+    Sparkles,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -99,6 +100,9 @@ export default function WikiPage() {
     const [ingestTitle, setIngestTitle] = useState("");
     const [ingesting, setIngesting] = useState(false);
     const [ingestResult, setIngestResult] = useState<Array<{ slug: string; title: string; action: string }> | null>(null);
+
+    // New page AI generation
+    const [generatingPage, setGeneratingPage] = useState(false);
 
     // Search
     const [searchQuery, setSearchQuery] = useState("");
@@ -185,6 +189,24 @@ export default function WikiPage() {
             fetchStats();
         } catch (error) {
             toast.error("Failed to delete page");
+        }
+    };
+
+    const generatePageContent = async () => {
+        if (!newPageTitle.trim()) {
+            toast.error("Enter a title/topic first");
+            return;
+        }
+        setGeneratingPage(true);
+        try {
+            const res = await api.post("/wiki/generate", { title: newPageTitle });
+            setNewPageContent(res.data.content || "");
+            setNewPageCategory(res.data.category || "");
+            toast.success("Content generated — review and save");
+        } catch (error: any) {
+            toast.error(error.response?.data?.error || "Failed to generate content");
+        } finally {
+            setGeneratingPage(false);
         }
     };
 
@@ -571,19 +593,40 @@ export default function WikiPage() {
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
-                                <Label>Title</Label>
-                                <Input
-                                    value={newPageTitle}
-                                    onChange={(e) => setNewPageTitle(e.target.value)}
-                                    placeholder="e.g., Kubernetes Scaling Strategies"
-                                />
+                                <Label>Title / Topic</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={newPageTitle}
+                                        onChange={(e) => setNewPageTitle(e.target.value)}
+                                        placeholder="e.g., Kubernetes Scaling Strategies"
+                                        className="flex-1"
+                                        onKeyDown={(e) => e.key === "Enter" && !generatingPage && generatePageContent()}
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        onClick={generatePageContent}
+                                        disabled={generatingPage || !newPageTitle.trim()}
+                                    >
+                                        {generatingPage ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <Sparkles className="h-4 w-4 mr-1" />
+                                                Generate
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                    Enter a topic and click Generate, or write content manually below
+                                </p>
                             </div>
                             <div>
                                 <Label>Category</Label>
                                 <Input
                                     value={newPageCategory}
                                     onChange={(e) => setNewPageCategory(e.target.value)}
-                                    placeholder="e.g., infrastructure, ai-ml, devops"
+                                    placeholder="Auto-filled by AI, or type manually"
                                 />
                             </div>
                             <div>
@@ -591,8 +634,9 @@ export default function WikiPage() {
                                 <Textarea
                                     value={newPageContent}
                                     onChange={(e) => setNewPageContent(e.target.value)}
-                                    placeholder="# Page Title&#10;&#10;Write your content here..."
-                                    className="min-h-[200px] font-mono text-sm"
+                                    placeholder={generatingPage ? "Generating content..." : "# Page Title\n\nWrite content here, or use Generate above..."}
+                                    className="min-h-[250px] font-mono text-sm"
+                                    disabled={generatingPage}
                                 />
                             </div>
                         </div>
@@ -600,7 +644,9 @@ export default function WikiPage() {
                             <Button variant="outline" onClick={() => setShowNewPageModal(false)}>
                                 Cancel
                             </Button>
-                            <Button onClick={createPage}>Create Page</Button>
+                            <Button onClick={createPage} disabled={!newPageTitle.trim() || !newPageContent.trim()}>
+                                Create Page
+                            </Button>
                         </div>
                     </div>
                 </div>

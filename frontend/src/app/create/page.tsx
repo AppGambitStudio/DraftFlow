@@ -90,7 +90,8 @@ export default function CreatePostPage() {
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
-        if (searchParams.get('source') === 'idea' || searchParams.get('source') === 'repost') {
+        const source = searchParams.get('source');
+        if (source === 'idea' || source === 'repost' || source === 'carousel' || source === 'inspiration') {
             const draftContent = localStorage.getItem('draftPostContent');
             if (draftContent) {
                 setContent(draftContent);
@@ -106,7 +107,7 @@ export default function CreatePostPage() {
             }
 
             // Load idea context for regeneration
-            if (searchParams.get('source') === 'idea') {
+            if (source === 'idea') {
                 const storedIdeaId = localStorage.getItem('draftIdeaId');
                 const storedIdeaTitle = localStorage.getItem('draftIdeaTitle');
                 if (storedIdeaId) setIdeaId(storedIdeaId);

@@ -1,4 +1,5 @@
 import nodeHtmlToImage from 'node-html-to-image';
+import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -144,6 +145,72 @@ CONTENT STRATEGY:
 - Step titles: 3-5 words max
 - Step descriptions: 1 line, 10-15 words max
 - If content isn't naturally sequential, organize by priority or logical flow`,
+    },
+};
+
+// --- Carousel Templates ---
+
+export const CAROUSEL_TEMPLATES: Record<string, VisualTemplate> = {
+    'step-guide': {
+        key: 'step-guide',
+        name: 'Step-by-Step Guide',
+        description: 'Numbered steps walking through a process',
+        icon: '📋',
+        promptHint: `Each content slide should show ONE step:
+- Large step number (72-96px, gradient circle background) in the top-left
+- Step title (32-40px, bold white) below or beside the number
+- 2-3 lines of explanation (20-24px, #e2e8f0)
+- A subtle accent element: progress bar at bottom showing position in sequence, or a small icon
+- Use a different accent color per step cycling through: blue, green, amber, purple, pink`,
+    },
+    'listicle': {
+        key: 'listicle',
+        name: 'Listicle',
+        description: 'One key point per slide with bold headline',
+        icon: '📝',
+        promptHint: `Each content slide should feature ONE key point:
+- A large emoji or Unicode icon (64-80px) at the top as a visual anchor
+- Bold headline (36-44px, white) — the key point in 4-8 words
+- Supporting text (20-24px, #e2e8f0) — 2-4 lines of context or explanation
+- A colored accent bar (4px) at the top of the slide matching the slide's theme color
+- Each slide should use a subtly different accent color`,
+    },
+    'tips': {
+        key: 'tips',
+        name: 'Tips & Advice',
+        description: 'Practical tips with icons and examples',
+        icon: '💡',
+        promptHint: `Each content slide should present ONE practical tip:
+- "TIP #N" badge (uppercase, 12px, accent gradient background, rounded) at the top
+- Tip title (32-40px, bold white)
+- A card (#1e293b background, 16px radius) containing the explanation with:
+  - Main advice (20-24px)
+  - Optional "Example:" or "Try this:" callout in accent color
+- Light bulb or relevant Unicode icon as decorative element`,
+    },
+    'checklist': {
+        key: 'checklist',
+        name: 'Checklist',
+        description: 'Action items with checkbox styling',
+        icon: '✅',
+        promptHint: `Each content slide should show 2-3 related checklist items:
+- Slide subtitle/category (16px, uppercase, accent color) at the top
+- Each item: large checkbox circle (✓ in green gradient circle, 36px) + item text (24-28px, white)
+- Items spaced generously (32px gap)
+- A subtle progress indicator showing which group of items this is
+- Use card backgrounds (#1e293b) for each item row`,
+    },
+    'stats-deck': {
+        key: 'stats-deck',
+        name: 'Stats Deck',
+        description: 'One big number per slide with context',
+        icon: '📊',
+        promptHint: `Each content slide should spotlight ONE key statistic:
+- The number/metric HUGE (80-120px, font-weight 900) in a gradient accent color
+- Unit or label below (18px, uppercase, muted)
+- Context paragraph (20-24px, #e2e8f0) explaining why this number matters — 2-3 lines
+- A subtle chart-like decorative element (CSS-only bar chart, circle progress, or trend line)
+- Each slide uses a different accent gradient for the number`,
     },
 };
 
@@ -470,6 +537,161 @@ body > div:first-child > *:not(:first-child):not(:last-child) {
             imageUrl: `/uploads/${filename}`,
             name: filename,
             type: 'image/png',
+            size: stat.size,
+        };
+    }
+
+    // =========================================================================
+    // Carousel (multi-slide PDF) generation
+    // =========================================================================
+
+    static async generateCarousel(
+        tenantId: string,
+        content: string,
+        templateKey: string = 'step-guide',
+        slideCount: number = 5,
+        additionalComments?: string,
+        branding?: { name?: string; handle?: string; tagline?: string; cta?: string }
+    ): Promise<{ pdfUrl: string; html: string; name: string; type: string; size: number; slideCount: number }> {
+        slideCount = Math.max(3, Math.min(10, slideCount));
+        const template = (CAROUSEL_TEMPLATES[templateKey] ?? CAROUSEL_TEMPLATES['step-guide'])!;
+
+        const systemPrompt = this.buildCarouselSystemPrompt(template, slideCount, branding);
+        let userMessage = `Create a ${slideCount}-slide LinkedIn carousel from this content:\n\n${content}`;
+        if (additionalComments) {
+            userMessage += `\n\n## ADDITIONAL INSTRUCTIONS FROM USER:\n${additionalComments}`;
+        }
+
+        const response = await AIService.callForVisualBuilder(tenantId, systemPrompt, userMessage);
+
+        let html = response.trim();
+        html = html.replace(/^```html?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+        const result = await this.renderCarouselToPDF(html);
+
+        return { ...result, html, slideCount };
+    }
+
+    private static buildCarouselSystemPrompt(
+        template: VisualTemplate,
+        slideCount: number,
+        branding?: { name?: string; handle?: string; tagline?: string; cta?: string }
+    ): string {
+        const brandingBlock = branding && (branding.name || branding.handle || branding.tagline || branding.cta)
+            ? `\n## PERSONALIZATION / BRANDING
+Add these personal details to the carousel slides:
+${branding.name ? `- **Author name**: "${branding.name}" — show on the title slide and/or last slide` : ''}
+${branding.handle ? `- **Handle/URL**: "${branding.handle}" — show in small muted text at the bottom of every slide as a subtle watermark` : ''}
+${branding.tagline ? `- **Tagline**: "${branding.tagline}" — show on the title slide below the author name` : ''}
+${branding.cta ? `- **CTA**: "${branding.cta}" — use this as the call-to-action text on the LAST slide instead of generic CTAs` : ''}
+Place branding elements consistently but subtly — they should not compete with the main content.`
+            : '';
+
+        return `You are a world-class carousel designer for LinkedIn. You create multi-slide PDF carousels that get saved and shared.
+
+TASK: Generate a self-contained HTML document with exactly ${slideCount} slides. Each slide will become one page of a PDF carousel.
+
+## STRICT TECHNICAL REQUIREMENTS
+1. Output ONLY raw HTML — no explanation, no markdown fences, no commentary
+2. Complete HTML document: <!DOCTYPE html>, <html>, <head> with <style>, <body>
+3. ALL CSS must be in a <style> tag — no external stylesheets except Google Fonts
+4. Add <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"> in <head>
+5. NO external images, JavaScript, or other external resources
+6. ALL visual elements must be CSS-only
+
+## SLIDE STRUCTURE (CRITICAL)
+- Each slide is a <section class="slide"> element
+- Each slide MUST be exactly 1080px × 1080px
+- Use CSS: .slide { width: 1080px; height: 1080px; page-break-after: always; overflow: hidden; }
+- The LAST slide should NOT have page-break-after
+- Generate EXACTLY ${slideCount} <section class="slide"> elements
+
+## MANDATORY CSS
+\`\`\`
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { margin: 0; padding: 0; width: 1080px; font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #f1f5f9; }
+.slide { width: 1080px; height: 1080px; padding: 64px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; position: relative; background: #0f172a; page-break-after: always; }
+.slide:last-child { page-break-after: auto; }
+\`\`\`
+
+## SLIDE FLOW (${slideCount} slides)
+1. **Slide 1 — Title Slide**: Eye-catching headline (48-64px, weight 900), subtitle (24px, muted), and a decorative accent element. This is the hook — make it compelling enough to swipe.
+2. **Slides 2 to ${slideCount - 1} — Content Slides**: One idea per slide. ${template.promptHint}
+3. **Slide ${slideCount} — CTA/Summary Slide**: Recap the key message in one bold sentence (36-44px). Add a call-to-action: "Follow for more", "Save this for later", or "Share with your team". Include a subtle decorative element.
+
+## DESIGN SYSTEM
+### Colors
+- Background: #0f172a (slides), #1e293b (cards), #334155 (borders)
+- Text: #ffffff (headlines), #f1f5f9 (body), #94a3b8 (muted)
+- Accents: #3b82f6 (blue), #10b981 (green), #f59e0b (amber), #ef4444 (red), #8b5cf6 (purple), #ec4899 (pink)
+
+### Typography
+- Hero: 48-64px, weight 900, letter-spacing: -0.03em
+- Slide headline: 32-44px, weight 700-800
+- Body: 20-26px, weight 400-500, line-height 1.5
+- Labels: 12-14px, weight 700, uppercase, letter-spacing 1.5px
+
+### Visual Quality
+- Each slide should feel like a premium design, not a PowerPoint
+- Use generous whitespace — content should breathe
+- Add subtle decorative elements: gradient accents, rounded cards, colored borders
+- Maintain visual consistency across slides (same color scheme, spacing rhythm)
+- Each slide must stand alone visually but flow as part of a narrative
+- Use slide numbers or progress indicators (e.g., "3/${slideCount}" in small muted text)
+
+## CONTENT STRATEGY
+- Extract the most valuable, specific content — no filler
+- Each slide should deliver ONE clear idea or point
+- Use short, punchy text — this is a carousel, not an article
+- The title slide must hook: use a question, bold claim, or surprising stat
+- The final slide must close: recap + clear CTA
+
+## TEMPLATE: "${template.name}"
+${template.promptHint}
+${brandingBlock}`;
+    }
+
+    private static async renderCarouselToPDF(
+        html: string
+    ): Promise<{ pdfUrl: string; name: string; type: string; size: number }> {
+        const uploadsDir = path.join(process.cwd(), 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        const suffix = crypto.randomBytes(4).toString('hex');
+        const filename = `carousel-${Date.now()}-${suffix}.pdf`;
+        const outputPath = path.join(uploadsDir, filename);
+
+        const browser = await puppeteer.launch({
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+        });
+
+        try {
+            const page = await browser.newPage();
+            await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+            // Give fonts a moment to load, but don't block on them
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            await page.pdf({
+                path: outputPath,
+                width: '1080px',
+                height: '1080px',
+                printBackground: true,
+                margin: { top: '0', right: '0', bottom: '0', left: '0' },
+            });
+        } finally {
+            await browser.close();
+        }
+
+        const stat = fs.statSync(outputPath);
+        console.log(`[CarouselBuilder] Rendered ${filename} (${stat.size} bytes)`);
+
+        return {
+            pdfUrl: `/uploads/${filename}`,
+            name: filename,
+            type: 'application/pdf',
             size: stat.size,
         };
     }

@@ -1,6 +1,6 @@
 import express, { Response } from 'express';
 import { AIService } from '../services/ai';
-import { VisualBuilderService, TEMPLATES } from '../services/visualBuilder';
+import { VisualBuilderService, TEMPLATES, CAROUSEL_TEMPLATES } from '../services/visualBuilder';
 import { Settings, SavedTrend, WeeklyDigest, Post } from '../db';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { Op } from 'sequelize';
@@ -444,6 +444,169 @@ router.post('/visual-builder', authMiddleware, async (req: AuthRequest, res: Res
         res.json(result);
     } catch (error: any) {
         console.error('[visual-builder] Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Carousel Builder — get/save branding
+router.get('/carousel-builder/branding', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const { Settings } = require('../db');
+        const settings = await Settings.findOne({ where: { tenantId: req.tenantId! } });
+        const branding = settings?.carouselBranding ? JSON.parse(settings.carouselBranding) : { name: '', handle: '', tagline: '', cta: '' };
+        res.json(branding);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.put('/carousel-builder/branding', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const { Settings } = require('../db');
+        const { name, handle, tagline, cta } = req.body;
+        const [settings] = await Settings.findOrCreate({ where: { tenantId: req.tenantId! }, defaults: { tenantId: req.tenantId! } });
+        settings.carouselBranding = JSON.stringify({ name: name || '', handle: handle || '', tagline: tagline || '', cta: cta || '' });
+        await settings.save();
+        res.json(JSON.parse(settings.carouselBranding));
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Carousel Builder — saved carousels CRUD
+router.get('/carousel-builder/saved', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const { SavedCarousel } = require('../db');
+        const carousels = await SavedCarousel.findAll({
+            where: { tenantId: req.tenantId! },
+            order: [['createdAt', 'DESC']],
+        });
+        res.json(carousels);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/carousel-builder/save', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const { SavedCarousel } = require('../db');
+        const { title, content, template, slideCount, pdfUrl, fileName, fileSize } = req.body;
+        if (!title || !pdfUrl) {
+            return res.status(400).json({ error: 'Title and pdfUrl are required' });
+        }
+        const carousel = await SavedCarousel.create({
+            tenantId: req.tenantId!,
+            title,
+            content: content || '',
+            template: template || 'step-guide',
+            slideCount: slideCount || 5,
+            pdfUrl,
+            fileName: fileName || '',
+            fileSize: fileSize || 0,
+        });
+        res.status(201).json(carousel);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.delete('/carousel-builder/saved/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const { SavedCarousel } = require('../db');
+        const carousel = await SavedCarousel.findOne({
+            where: { id: req.params.id, tenantId: req.tenantId! },
+        });
+        if (!carousel) {
+            return res.status(404).json({ error: 'Carousel not found' });
+        }
+        await carousel.destroy();
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Carousel Builder — get available templates
+router.get('/carousel-builder/templates', authMiddleware, async (_req: AuthRequest, res: Response) => {
+    const templates = Object.values(CAROUSEL_TEMPLATES).map(t => ({
+        key: t.key,
+        name: t.name,
+        description: t.description,
+        icon: t.icon,
+    }));
+    res.json({ templates });
+});
+
+// Carousel Builder — generate multi-slide PDF carousel
+router.post('/carousel-builder', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { content, template, slideCount, additionalComments, branding } = req.body;
+
+        if (!content) {
+            return res.status(400).json({ error: 'Content is required' });
+        }
+
+        const count = Math.max(3, Math.min(10, parseInt(slideCount) || 5));
+
+        console.log(`[carousel-builder] Generating template="${template || 'step-guide'}" slides=${count} content=${content.length} chars${additionalComments ? ` comments="${additionalComments}"` : ''}${branding?.name ? ` brand="${branding.name}"` : ''}`);
+
+        const result = await VisualBuilderService.generateCarousel(tenantId, content, template, count, additionalComments, branding);
+
+        console.log(`[carousel-builder] Generated ${result.name} (${result.size} bytes, ${result.slideCount} slides)`);
+
+        res.json(result);
+    } catch (error: any) {
+        console.error('[carousel-builder] Error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Carousel Builder — research topic via Tavily then generate carousel
+router.post('/carousel-builder/research', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { content, template, slideCount, additionalComments, branding } = req.body;
+
+        if (!content) {
+            return res.status(400).json({ error: 'Topic is required' });
+        }
+
+        const count = Math.max(3, Math.min(10, parseInt(slideCount) || 5));
+
+        // Step 1: Research via Tavily
+        const { Settings } = require('../db');
+        const settings = await Settings.findOne({ where: { tenantId } });
+        const tavilyApiKey = settings?.tavilyApiKey;
+
+        let researchContext = '';
+        if (tavilyApiKey) {
+            console.log(`[carousel-builder] Researching topic via Tavily: "${content}"`);
+            const results = await AIService.searchWithTavily(tavilyApiKey, content, {
+                topic: 'general',
+                timeRange: 'month',
+                maxResults: 5,
+            });
+            if (results.length > 0) {
+                researchContext = '\n\n## RESEARCH RESULTS (use these facts and insights):\n' +
+                    results.map((r, i) => `${i + 1}. **${r.title}** (${r.url})\n${r.content}`).join('\n\n');
+            }
+        } else {
+            console.log('[carousel-builder] No Tavily key, falling back to AI knowledge only');
+        }
+
+        // Step 2: Generate carousel with research context
+        const enrichedContent = content + researchContext;
+
+        console.log(`[carousel-builder] Research+Generate template="${template || 'step-guide'}" slides=${count} content=${enrichedContent.length} chars`);
+
+        const result = await VisualBuilderService.generateCarousel(tenantId, enrichedContent, template, count, additionalComments, branding);
+
+        console.log(`[carousel-builder] Generated ${result.name} (${result.size} bytes, ${result.slideCount} slides)`);
+
+        res.json(result);
+    } catch (error: any) {
+        console.error('[carousel-builder] Research error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

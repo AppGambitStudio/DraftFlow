@@ -45,6 +45,7 @@ export class AIService {
         try {
             const body: any = {
                 model: config.modelId || 'anthropic/claude-sonnet-4.5',
+                max_tokens: 16000,
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userContent }

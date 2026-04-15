@@ -5,7 +5,7 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Mail, CheckCircle } from "lucide-react";
+import { Plus, Pencil, Mail, CheckCircle, Star } from "lucide-react";
 import { format, isToday, isAfter, startOfToday, endOfToday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PostDetailsModal } from "@/components/PostDetailsModal";
@@ -20,6 +20,7 @@ interface Post {
     status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED' | 'GENERATING';
     mediaUrls?: string;
     platforms?: string;
+    isFavorited?: boolean;
 }
 
 export default function DashboardPage() {
@@ -91,6 +92,20 @@ export default function DashboardPage() {
         } catch (error) {
             toast.error("Failed to delete post");
             throw error;
+        }
+    };
+
+    const handleToggleFavorite = async (e: React.MouseEvent, postId: number) => {
+        e.stopPropagation();
+        try {
+            await api.put(`/posts/${postId}/favorite`);
+            setPosts((prev) =>
+                prev.map((p) =>
+                    p.id === postId ? { ...p, isFavorited: !p.isFavorited } : p
+                )
+            );
+        } catch {
+            toast.error("Failed to toggle favorite");
         }
     };
 
@@ -311,16 +326,34 @@ export default function DashboardPage() {
                                                     {format(new Date(post.scheduledTime), "PPP p")}
                                                 </p>
                                             </div>
-                                            <span
-                                                className={cn(
-                                                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium shrink-0",
-                                                    post.status === "PUBLISHED"
-                                                        ? "bg-green-100 text-green-800"
-                                                        : "bg-red-100 text-red-800"
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {post.status === "PUBLISHED" && (
+                                                    <button
+                                                        onClick={(e) => handleToggleFavorite(e, post.id)}
+                                                        className="p-1 rounded hover:bg-amber-50 transition-colors"
+                                                        title={post.isFavorited ? "Remove from Inspiration" : "Add to Inspiration"}
+                                                    >
+                                                        <Star
+                                                            className={cn(
+                                                                "h-4 w-4",
+                                                                post.isFavorited
+                                                                    ? "fill-amber-400 text-amber-400"
+                                                                    : "text-slate-300 hover:text-amber-400"
+                                                            )}
+                                                        />
+                                                    </button>
                                                 )}
-                                            >
-                                                {post.status}
-                                            </span>
+                                                <span
+                                                    className={cn(
+                                                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                                                        post.status === "PUBLISHED"
+                                                            ? "bg-green-100 text-green-800"
+                                                            : "bg-red-100 text-red-800"
+                                                    )}
+                                                >
+                                                    {post.status}
+                                                </span>
+                                            </div>
                                         </div>
                                     ))
                                 )}

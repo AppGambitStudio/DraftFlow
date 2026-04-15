@@ -8,6 +8,8 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 - **Idea Board** — Capture ideas and convert them into polished posts with AI
 - **AI Writing Assistant** — Generate, improve, and iterate on content using Claude/OpenRouter
 - **Trending Topics** — Discover what's trending in your industry with web search (Tavily)
+- **Carousel Builder** — Create multi-slide PDF carousels for LinkedIn with AI-generated content and templates
+- **Inspiration Feed** — Curated swipe file aggregating bookmarked articles, top posts, and wiki knowledge
 - **Visual Builder** — Turn any post into a styled infographic image with AI-generated templates
 - **RSS Feeds** — Subscribe to RSS feeds, browse articles, and turn them into posts or ideas
 - **Weekly Digest** — Auto-curate the biggest stories of the week into a short-form post
@@ -58,6 +60,27 @@ Generate eye-catching infographic images from your post content. Choose from 6 t
 ![Visual Builder sample](docs/screenshots/visual-builder-sample1.png)
 ![Visual Builder sample](docs/screenshots/visual-builder-sample2.png)
 ![Visual Builder sample](docs/screenshots/visual-builder-sample3.png)
+
+### Carousel Builder
+
+Create LinkedIn carousel posts (multi-slide PDFs) from a standalone builder page. Enter a topic or paste content, pick a template, and let AI generate a slide deck rendered as a 1080x1080 PDF.
+
+- **5 templates**: Step Guide, Listicle, Tips, Checklist, Stats Deck
+- **Two generation modes**: "Generate" (content only) and "Research & Generate" (Tavily web search + content)
+- **Branding**: Add your name, handle, tagline, and CTA — persisted in settings
+- **Save & reuse**: Save generated carousels for later use
+- **Post integration**: "Create Post" attaches the PDF and navigates to the post editor
+- **Slide count**: Choose 3, 5, 7, or 10 slides per carousel
+
+### Inspiration Feed
+
+A curated swipe file that aggregates your best content sources into one browsable page:
+
+- **Bookmarked RSS articles** — Articles you've bookmarked from the Feeds page
+- **Favorited posts** — Your published posts marked with a star from the dashboard
+- **Wiki pages** — Knowledge pages from your LLM Wiki
+
+Filter by source tab, search across all content, and quickly turn any inspiration into a new post.
 
 ## Architecture
 

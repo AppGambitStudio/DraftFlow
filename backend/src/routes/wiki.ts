@@ -1,6 +1,7 @@
 import express, { Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { WikiService } from '../services/wiki';
+import { AIService } from '../services/ai';
 
 const router = express.Router();
 
@@ -136,6 +137,49 @@ router.post('/ingest', authMiddleware, async (req: AuthRequest, res: Response) =
         res.json(result);
     } catch (error: any) {
         console.error('[Wiki] Error ingesting source:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================================================
+// AI-generate page content from a title/topic
+// ============================================================================
+router.post('/generate', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { title } = req.body;
+
+        if (!title) {
+            return res.status(400).json({ error: 'Title is required' });
+        }
+
+        // Get existing index for context
+        const pages = WikiService.listPages(tenantId);
+        const existingTopics = pages.map(p => p.title).join(', ');
+
+        const systemPrompt = `You are a wiki editor. Generate a comprehensive knowledge page for the given topic.
+
+${existingTopics ? `Existing wiki pages: ${existingTopics}\nAvoid duplicating content that already exists.` : ''}
+
+Return ONLY valid JSON:
+{
+  "category": "short-lowercase-category (e.g., infrastructure, ai-ml, devops, business, security)",
+  "content": "# Page Title\\n\\nFull markdown content with headers, paragraphs, bullet points. Be thorough — include key concepts, best practices, common patterns, tools, and trade-offs. Aim for 300-500 words of useful, specific knowledge."
+}`;
+
+        const response = await AIService.callForWiki(tenantId, systemPrompt, `Topic: ${title}`);
+        const jsonMatch = response.match(/\{[\s\S]*"content"[\s\S]*\}/);
+        if (!jsonMatch) {
+            return res.status(500).json({ error: 'Failed to generate content' });
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        res.json({
+            category: parsed.category || 'uncategorized',
+            content: parsed.content || '',
+        });
+    } catch (error: any) {
+        console.error('[Wiki] Error generating page:', error.message);
         res.status(500).json({ error: error.message });
     }
 });

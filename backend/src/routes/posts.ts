@@ -11,8 +11,15 @@ const router = express.Router();
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
+        const where: any = { tenantId };
+        if (req.query.favorited === 'true') {
+            where.isFavorited = true;
+        }
+        if (req.query.status) {
+            where.status = req.query.status;
+        }
         const allPosts = await Post.findAll({
-            where: { tenantId },
+            where,
             order: [['scheduledTime', 'ASC']]
         });
         res.json(allPosts);
@@ -128,6 +135,21 @@ router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) =>
         res.json({ message: 'Post deleted' });
     } catch (error) {
         res.status(500).json({ error: 'Failed to delete post' });
+    }
+});
+
+// Toggle favorite
+router.put('/:id/favorite', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const post = await Post.findOne({ where: { id: req.params.id, tenantId } });
+        if (!post) {
+            return res.status(404).json({ error: 'Post not found' });
+        }
+        await post.update({ isFavorited: !post.isFavorited });
+        res.json({ isFavorited: post.isFavorited });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to toggle favorite' });
     }
 });
 
