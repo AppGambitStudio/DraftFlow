@@ -109,15 +109,13 @@ class LinkedInService {
                         });
                     }
                 } else if (documents.length > 0 && images.length === 0) {
-                    // LinkedIn only supports ONE document per post via ugcPosts
-                    // Using the first document
+                    // Use new LinkedIn Documents API for PDF/document uploads
                     const attachment = documents[0];
                     mediaCategory = 'DOCUMENT';
-                    const assetUrn = await this.uploadMedia(accessToken, finalAuthorUrn as string, attachment);
+                    const documentUrn = await this.uploadDocument(accessToken, finalAuthorUrn as string, attachment);
                     media.push({
-                        status: 'READY',
-                        media: assetUrn,
-                        title: { text: attachment.name }
+                        id: documentUrn,
+                        title: attachment.name,
                     });
                 } else if (images.length > 0 && documents.length > 0) {
                     // Mixed media: Prioritize images in LinkedIn for now as it doesn't support mixed IMAGE + DOCUMENT in one go easily
@@ -138,6 +136,44 @@ class LinkedInService {
             }
         }
 
+        // Document posts use the new /rest/posts API
+        if (mediaCategory === 'DOCUMENT') {
+            const restBody: any = {
+                author: finalAuthorUrn,
+                commentary: content,
+                visibility: 'PUBLIC',
+                distribution: {
+                    feedDistribution: 'MAIN_FEED',
+                    targetEntities: [],
+                    thirdPartyDistributionChannels: [],
+                },
+                content: {
+                    media: {
+                        title: media[0].title || 'Document',
+                        id: media[0].id,
+                    },
+                },
+                lifecycleState: 'PUBLISHED',
+            };
+
+            try {
+                const response = await axios.post('https://api.linkedin.com/rest/posts', restBody, {
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'LinkedIn-Version': '202504',
+                        'X-Restli-Protocol-Version': '2.0.0',
+                        'Content-Type': 'application/json',
+                    },
+                });
+                // REST Posts API returns the post URN in the x-restli-id header
+                return response.headers['x-restli-id'] || response.data?.id || response.data;
+            } catch (error: any) {
+                console.error('LinkedIn REST Posts API Error:', error.response?.data || error.message);
+                throw error;
+            }
+        }
+
+        // Image and text posts use the legacy ugcPosts API
         const body: any = {
             author: finalAuthorUrn,
             lifecycleState: 'PUBLISHED',
@@ -165,7 +201,7 @@ class LinkedInService {
                     'X-Restli-Protocol-Version': '2.0.0',
                 },
             });
-            return response.data.id; // Return just the ID
+            return response.data.id;
         } catch (error: any) {
             console.error('LinkedIn API Error:', error.response?.data || error.message);
             throw error;
@@ -216,6 +252,48 @@ class LinkedInService {
         });
 
         return assetUrn;
+    }
+
+    /**
+     * Upload a document (PDF) using the new LinkedIn Documents API.
+     * Returns the document URN.
+     */
+    private async uploadDocument(accessToken: string, authorUrn: string, attachment: any): Promise<string> {
+        const restHeaders = {
+            'Authorization': `Bearer ${accessToken}`,
+            'LinkedIn-Version': '202504',
+            'X-Restli-Protocol-Version': '2.0.0',
+        };
+
+        // Step 1: Initialize upload
+        const initResponse = await axios.post(
+            'https://api.linkedin.com/rest/documents?action=initializeUpload',
+            {
+                initializeUploadRequest: {
+                    owner: authorUrn,
+                },
+            },
+            { headers: { ...restHeaders, 'Content-Type': 'application/json' } }
+        );
+
+        const { uploadUrl, document: documentUrn } = initResponse.data.value;
+
+        // Step 2: Upload the file binary
+        const filePath = attachment.url.startsWith('/')
+            ? `./${attachment.url.substring(1)}`
+            : attachment.url;
+
+        const fileData = fs.readFileSync(filePath);
+
+        await axios.put(uploadUrl, fileData, {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': attachment.type,
+            },
+        });
+
+        console.log(`[LinkedIn] Document uploaded: ${documentUrn}`);
+        return documentUrn;
     }
 
     async getPostStats(tenantId: string, postUrns: string[], authorUrn?: string) {
