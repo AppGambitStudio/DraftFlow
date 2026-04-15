@@ -6,7 +6,7 @@ A self-hosted, AI-powered social media scheduling platform. Create, refine, and 
 
 - **Multi-Platform Publishing** — Schedule and publish posts to LinkedIn and Twitter/X
 - **Idea Board** — Capture ideas and convert them into polished posts with AI
-- **AI Writing Assistant** — Generate, improve, and iterate on content using Claude/OpenRouter
+- **AI Writing Assistant** — Generate, improve, and iterate on content using your choice of models through OpenRouter (Anthropic / Gemini / DeepSeek / Kimi / Qwen, etc)
 - **Trending Topics** — Discover what's trending in your industry with web search (Tavily)
 - **Carousel Builder** — Create multi-slide PDF carousels for LinkedIn with AI-generated content and templates
 - **Inspiration Feed** — Curated swipe file aggregating bookmarked articles, top posts, and wiki knowledge

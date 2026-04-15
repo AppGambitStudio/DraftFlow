@@ -1,4 +1,5 @@
 import express, { Response } from 'express';
+import axios from 'axios';
 import { AIService } from '../services/ai';
 import { VisualBuilderService, TEMPLATES, CAROUSEL_TEMPLATES } from '../services/visualBuilder';
 import { Settings, SavedTrend, WeeklyDigest, Post } from '../db';
@@ -6,6 +7,61 @@ import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { Op } from 'sequelize';
 
 const router = express.Router();
+
+/**
+ * Detect URLs in content and extract their page text using Readability.
+ * If content is just a URL (or contains URLs), fetches and extracts readable text.
+ * Returns enriched content with extracted text appended.
+ */
+async function extractUrlContent(content: string): Promise<string> {
+    const urlRegex = /https?:\/\/[^\s]+/g;
+    const urls = content.match(urlRegex);
+    if (!urls || urls.length === 0) return content;
+
+    const extractions = await Promise.all(urls.map(async (url) => {
+        try {
+            const response = await axios.get(url, {
+                timeout: 10000,
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DraftFlow/1.0)' },
+            });
+            let text = response.data;
+            if (typeof text !== 'string') text = JSON.stringify(text);
+
+            try {
+                const { JSDOM } = await import('jsdom');
+                const { Readability } = await import('@mozilla/readability');
+                const dom = new JSDOM(text, { url });
+                const reader = new Readability(dom.window.document);
+                const article = reader.parse();
+                if (article && article.textContent) {
+                    const cleanText = article.textContent.replace(/\s+/g, ' ').trim();
+                    console.log(`[extractUrlContent] Extracted ${cleanText.length} chars from ${url}`);
+                    return `\n\n## SOURCE CONTENT (from ${url}):\n${cleanText.substring(0, 4000)}`;
+                }
+            } catch {
+                // Fall through to regex fallback
+            }
+
+            // Fallback: strip HTML tags
+            text = text.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gm, '');
+            text = text.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gm, '');
+            text = text.replace(/<[^>]+>/g, '\n');
+            text = text.replace(/\s+/g, ' ').trim();
+            return `\n\n## SOURCE CONTENT (from ${url}):\n${text.substring(0, 4000)}`;
+        } catch (err: any) {
+            console.error(`[extractUrlContent] Failed to fetch ${url}:`, err.message);
+            return '';
+        }
+    }));
+
+    // If content was ONLY a URL, use extracted text as the main content
+    const nonUrlContent = content.replace(urlRegex, '').trim();
+    if (!nonUrlContent) {
+        return extractions.join('\n') || content;
+    }
+
+    return content + extractions.join('\n');
+}
 
 router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
@@ -549,9 +605,12 @@ router.post('/carousel-builder', authMiddleware, async (req: AuthRequest, res: R
 
         const count = Math.max(3, Math.min(10, parseInt(slideCount) || 5));
 
-        console.log(`[carousel-builder] Generating template="${template || 'step-guide'}" slides=${count} content=${content.length} chars${additionalComments ? ` comments="${additionalComments}"` : ''}${branding?.name ? ` brand="${branding.name}"` : ''}`);
+        // Extract content from URLs if the input contains links
+        const enrichedContent = await extractUrlContent(content);
 
-        const result = await VisualBuilderService.generateCarousel(tenantId, content, template, count, additionalComments, branding);
+        console.log(`[carousel-builder] Generating template="${template || 'step-guide'}" slides=${count} content=${enrichedContent.length} chars${additionalComments ? ` comments="${additionalComments}"` : ''}${branding?.name ? ` brand="${branding.name}"` : ''}`);
+
+        const result = await VisualBuilderService.generateCarousel(tenantId, enrichedContent, template, count, additionalComments, branding);
 
         console.log(`[carousel-builder] Generated ${result.name} (${result.size} bytes, ${result.slideCount} slides)`);
 
@@ -579,10 +638,17 @@ router.post('/carousel-builder/research', authMiddleware, async (req: AuthReques
         const settings = await Settings.findOne({ where: { tenantId } });
         const tavilyApiKey = settings?.tavilyApiKey;
 
+        // Extract content from URLs if the input contains links
+        const extractedContent = await extractUrlContent(content);
+
         let researchContext = '';
         if (tavilyApiKey) {
-            console.log(`[carousel-builder] Researching topic via Tavily: "${content}"`);
-            const results = await AIService.searchWithTavily(tavilyApiKey, content, {
+            // Use extracted text (or original topic) as the search query
+            const searchQuery = extractedContent.length > 500
+                ? extractedContent.substring(0, 200) // Use beginning of extracted content as query
+                : content;
+            console.log(`[carousel-builder] Researching topic via Tavily: "${searchQuery.substring(0, 100)}..."`);
+            const results = await AIService.searchWithTavily(tavilyApiKey, searchQuery, {
                 topic: 'general',
                 timeRange: 'month',
                 maxResults: 5,
@@ -596,7 +662,7 @@ router.post('/carousel-builder/research', authMiddleware, async (req: AuthReques
         }
 
         // Step 2: Generate carousel with research context
-        const enrichedContent = content + researchContext;
+        const enrichedContent = extractedContent + researchContext;
 
         console.log(`[carousel-builder] Research+Generate template="${template || 'step-guide'}" slides=${count} content=${enrichedContent.length} chars`);
 
