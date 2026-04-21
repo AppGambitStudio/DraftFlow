@@ -2,6 +2,8 @@
 
 A self-hosted, AI-powered social media scheduling platform. Create, refine, and publish posts to LinkedIn and Twitter with AI assistance, trend tracking, and a weekly digest feature.
 
+> As of 21 Apr 2026, I've been using the recently released **Kimi K2.6** (`moonshotai/kimi-k2.6`) and it generates very decent output at low cost.
+
 ## Features
 
 - **Multi-Platform Publishing** — Schedule and publish posts to LinkedIn and Twitter/X
@@ -193,7 +195,7 @@ See [`backend/.env.example`](backend/.env.example) for all available variables.
 
 - **Frontend**: Next.js 16, React 19, Tailwind CSS, Recharts
 - **Backend**: Express 5, TypeScript, Sequelize, SQLite
-- **AI**: OpenRouter API (Claude, GPT, etc.), Tavily web search
+- **AI**: OpenRouter API (Claude, GPT, Kimi, etc.), Tavily web search  
 - **Agent Framework**: Mastra.io with MCP support
 
 ## License
