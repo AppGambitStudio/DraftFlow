@@ -195,7 +195,7 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
         (async () => {
             try {
                 console.log(`[Idea Generate] Background generation started for post ${post.id}`);
-                const { content } = await AIService.generateForIdea(
+                const { content, sources } = await AIService.generateForIdea(
                     tenantId,
                     idea,
                     platform,
@@ -203,11 +203,23 @@ router.post('/:id/generate', authMiddleware, async (req: AuthRequest, res: Respo
                     post.id
                 );
 
+                // Append sources to post body so readers can verify claims
+                let finalContent = content;
+                if (sources && sources.length > 0) {
+                    const sourceList = sources
+                        .filter(s => s && s !== 'public knowledge')
+                        .map(s => `→ ${s}`)
+                        .join('\n');
+                    if (sourceList) {
+                        finalContent += `\n\n📎 Sources:\n${sourceList}`;
+                    }
+                }
+
                 await post.update({
-                    content,
+                    content: finalContent,
                     status: 'DRAFT',
                 });
-                console.log(`[Idea Generate] Post ${post.id} generated successfully`);
+                console.log(`[Idea Generate] Post ${post.id} generated successfully${sources?.length ? ` (sources: ${sources.join(', ')})` : ''}`);
             } catch (error: any) {
                 console.error(`[Idea Generate] Background generation failed for post ${post.id}:`, error.message);
                 await post.update({

@@ -38,7 +38,7 @@ export class AIService {
         };
     }
 
-    private static async callOpenRouter(config: AIContext, systemPrompt: string, userContent: string, useWebPlugin: boolean = true): Promise<string> {
+    private static async callOpenRouter(config: AIContext, systemPrompt: string, userContent: string, useWebPlugin: boolean = true, maxTokens: number = 16000): Promise<string> {
         if (!config.apiKey) {
             throw new Error('OpenRouter API Key not found. Please configure it in Settings.');
         }
@@ -46,7 +46,7 @@ export class AIService {
         try {
             const body: any = {
                 model: config.modelId || 'anthropic/claude-sonnet-4.5',
-                max_tokens: 16000,
+                max_tokens: maxTokens,
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userContent }
@@ -365,7 +365,7 @@ Return ONLY the refined post. No explanations.
         antiGoals?: string,
         manualToneOverride?: string,
         platform?: string
-    ): Promise<{ content: string; summary: string }> {
+    ): Promise<{ content: string; summary: string; sources?: string[] }> {
         const config = await this.getUnifiedConfig(tenantId, authorUrn);
         let SYSTEM_PROMPT = config.aiPersona || `You are an expert LinkedIn content strategist specializing in software development, cloud technologies, and AI.`;
 
@@ -487,24 +487,51 @@ You are PROHIBITED from using these same arguments or focal points.
 
         // Randomly select a structure to force variety across generations
         const structures = [
-            { name: 'cold-open-story', instruction: 'Start mid-scene — drop the reader into a specific moment. "The deploy went out at 2am. By 2:07, three dashboards were red." Build the narrative from there. No introduction, no setup — just the moment.' },
             { name: 'single-thesis', instruction: 'One clear argument in flowing prose. No bullets, no lists, no bold. Just well-paced paragraphs making a single compelling point. Think op-ed, not listicle.' },
-            { name: 'observation', instruction: 'Start with something you literally noticed or experienced. "I reviewed 40 PRs last month and noticed something weird." Be specific and concrete — no hypotheticals or generic claims.' },
-            { name: 'contrarian-take', instruction: 'State a belief most people in the industry hold, then explain why you think differently. Be specific about WHY, not just that you disagree.' },
-            { name: 'short-lesson', instruction: 'Under 100 words. One sharp insight, no fluff. Think fortune cookie meets engineering wisdom. Every word must earn its place.' },
-            { name: 'before-after', instruction: 'Describe a specific real-world before state and after state. Not generic "before: chaos, after: peace" — concrete, measurable differences someone actually experienced.' },
-            { name: 'question-answer', instruction: 'Open with a genuine question someone actually asks. Answer it directly and concisely. No rhetorical tricks — just a useful answer.' },
-            { name: 'list-of-specifics', instruction: 'A short list (3-5 items) where each item is hyper-specific and opinionated, not generic advice. "Use caching" is bad. "Cache your auth token refresh — it saved us 340ms per request" is good.' },
+            { name: 'contrarian-take', instruction: 'State a widely-held belief in the industry, then explain — using reasoning, publicly known facts, or the provided source material — why you think differently. Be specific about WHY.' },
+            { name: 'short-lesson', instruction: 'Under 100 words. One sharp insight, no fluff. Every word must earn its place.' },
+            { name: 'question-answer', instruction: 'Open with a genuine question practitioners actually ask. Answer it directly using facts from the source material or well-known industry knowledge. No rhetorical tricks.' },
+            { name: 'practical-list', instruction: 'A short list (3-5 items) of actionable points grounded in the source material. Each item must be specific and justified — no generic advice.' },
+            { name: 'analysis', instruction: 'Analyze the topic using facts, data, or reasoning from the provided source material. Break down WHY something matters, not just THAT it matters. Think industry analyst, not motivational speaker.' },
+            { name: 'trend-commentary', instruction: 'Comment on a real, verifiable trend or development. Reference actual tools, companies, or events from the source material or enrichment context. Add your perspective on what it means.' },
+            { name: 'framework', instruction: 'Present a mental model or decision framework for thinking about the topic. Keep it grounded — the framework should help someone make a real decision, not just sound clever.' },
         ];
         const chosenStructure = structures[Math.floor(Math.random() * structures.length)]!;
 
         SYSTEM_PROMPT += `
+
+### ABSOLUTE RULE: ZERO FABRICATION — NO EXCEPTIONS ###
+You are writing on behalf of a real person with a real reputation. This is the most important rule.
+
+**NEVER fabricate ANY of the following:**
+- Stories, anecdotes, or scenarios presented as real events — even vaguely ("Last week...", "A team I know...", "We once...", "I recently saw...")
+- Numbers, metrics, percentages, benchmarks, or statistics — unless they appear VERBATIM in the provided source material
+- Quotes from anyone — named or unnamed
+- Company names, product experiences, or case studies not explicitly provided in the input
+- Examples or use cases not grounded in the provided Reference Material or Enrichment Context
+- Claimed personal experiences ("I built...", "We shipped...", "In my experience...")
+
+**Every claim, example, and use case in the post MUST trace back to one of these:**
+1. Facts explicitly stated in the provided Reference Material, Enrichment Context, or source URLs
+2. Well-known, publicly verifiable facts (e.g., "Kubernetes is open-source", "AWS Lambda launched in 2014")
+3. The author's own stated opinions and reasoning (clearly framed as opinion, not experience)
+
+**What you CAN do:**
+- State opinions and arguments ("I think...", "This matters because...", "The real question is...")
+- Analyze and draw conclusions from the provided source material
+- Reference well-known public facts, open-source projects, documented product features
+- Use clearly hypothetical framing ONLY when labeled as such ("What if...", "Suppose you...")
+
+**If the source material is thin, write a shorter post with fewer claims rather than padding with invented examples.**
+The reader is an experienced professional. One fabricated detail — one invented metric, one fake anecdote — destroys all credibility instantly.
+
 **MANDATORY POST STRUCTURE — "${chosenStructure.name}":**
 ${chosenStructure.instruction}
 
 **Topics & Focus:**
 - Focus on the topics provided in the "Idea Title", "Creative Brief / Description", and "Topic Tags".
 - If "SPECIFIC USER INSTRUCTIONS" were provided above, they are your primary source of truth.
+- If "Reference Material" or "Enrichment Context" is provided, USE IT — these are real facts. Ground your post in them.
 - Pick ONE specific angle and go deep rather than covering everything superficially.
 
 **Tone & Style**:
@@ -534,20 +561,28 @@ ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCa
 - Filler openings: "Here's the thing:", "Let me explain:", "The truth is:", "Hot take:", "Unpopular opinion:"
 - Generic CTAs: "What's your experience with X?", "How do you handle Y?", "Agree or disagree?"
 - Dramatic framing: "silent killer", "ticking time bomb", "gaslighting you", "holding it hostage"
-- Fabricated anecdotes: "I watched a team...", "A company I know...", "Six months ago, I watched..."
+- Fabricated anecdotes: "I watched a team...", "A company I know...", "Six months ago, I watched...", "Last week our team..."
+- Fabricated metrics: "reduced X by 40%", "saved us 340ms", "cut costs by 60%" — unless from source material
 - Starting with "Stop [doing X]" or "Nobody talks about [X]"
 - Arrow bullet points (→) in every post — use them rarely if at all
 
 **LENGTH:**
 - Default target: 80-200 words. Quality over quantity.
-- Shorter is almost always better. Only go longer if the story genuinely needs it.
+- Shorter is almost always better. Only go longer if the content genuinely needs it.
+
+**CITATION & SOURCING (MANDATORY):**
+- Every factual claim, statistic, or example in the post MUST be traceable to the provided source material.
+- If the post references a tool, company, metric, or event — it must come from the Reference Material, Enrichment Context, or be a publicly verifiable fact.
+- In the "sources" field of your response, list the specific sources you drew from (URLs, wiki page titles, case study names, or "public knowledge" for well-known facts).
+- If you cannot find enough source material to make substantive claims, write a shorter opinion-driven post instead.
 
 **Response Format:**
 Return a JSON object:
 {
     "themeAnalysis": "1 sentence: what angle am I taking and why it's different from typical content on this topic",
     "postContent": "The complete post content...",
-    "summary": "2-line summary of the unique angle used"
+    "summary": "2-line summary of the unique angle used",
+    "sources": ["URL or source name that backs the key claims in the post"]
 }
 **CRITICAL:** RETURN ONLY VALID JSON. No markdown blocks, no filler text. Escape newlines as "\\n" in postContent.
 `;
@@ -566,11 +601,13 @@ Return a JSON object:
 
         let finalContent: string;
         let summary: string;
+        let sources: string[] = [];
 
         try {
             const parsed = this.extractAndParseJson(response);
             finalContent = parsed.postContent || parsed.content || response;
             summary = parsed.summary || "Summary generation failed or returned empty";
+            sources = Array.isArray(parsed.sources) ? parsed.sources : [];
         } catch (e: any) {
             console.error("[AIService] Failed to parse AI response as JSON:", e.message, "Response preview:", response.substring(0, 300));
             // Fallback: reformat raw text into a proper post via a second AI call
@@ -585,9 +622,14 @@ Return a JSON object:
             finalContent = await this.reformatAsPost(config, finalContent, tenantId);
         }
 
+        if (sources.length > 0) {
+            console.log(`[AIService] Post sources: ${sources.join(', ')}`);
+        }
+
         return {
             content: this.sanitizePostContent(finalContent, prompt),
             summary,
+            sources,
         };
     }
 
@@ -1015,7 +1057,7 @@ Return a JSON object:
 
         console.log('[AIService] Generating variations for content');
 
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate 3 variations of this content:\n\n${content}`);
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate 3 variations of this content:\n\n${content}`, false, 4000);
 
         try {
             const parsed = this.extractAndParseJson(response);
@@ -1099,7 +1141,7 @@ Return a JSON object:
 
         console.log('[AIService] Generating hooks for content');
 
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate ${count} hook variations for this content:\n\n${content}`);
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Generate ${count} hook variations for this content:\n\n${content}`, false, 2000);
 
         try {
             const parsed = this.extractAndParseJson(response);
@@ -1168,7 +1210,8 @@ Return a JSON object:
 
         console.log('[AIService] Suggesting hashtags for content');
 
-        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Suggest ${count} hashtags for this content:\n\n${content}`);
+        // Lightweight call: no web plugin, low token budget for fast response
+        const response = await this.callOpenRouter(config, SYSTEM_PROMPT, `Suggest ${count} hashtags for this content:\n\n${content}`, false, 1000);
 
         try {
             const parsed = this.extractAndParseJson(response);
@@ -1700,7 +1743,7 @@ Curate the ${storyCount} biggest, most impactful stories from these results into
         platform: string = 'LinkedIn',
         additionalContext?: string,
         postId?: number
-    ): Promise<{ content: string; summary: string }> {
+    ): Promise<{ content: string; summary: string; sources?: string[] }> {
         // Build a structured, rich prompt from all idea metadata
         const tags = JSON.parse(idea.tags || '[]');
         const links = JSON.parse(idea.sourceLinks || '[]');
@@ -1750,7 +1793,7 @@ Curate the ${storyCount} biggest, most impactful stories from these results into
 
         const previousSummaries = existingEntries.map(e => e.summary);
 
-        const { content, summary } = await this.generate(
+        const { content, summary, sources } = await this.generate(
             tenantId,
             fullPrompt,
             idea.targetAudience || undefined,
@@ -1775,6 +1818,6 @@ Curate the ${storyCount} biggest, most impactful stories from these results into
             await idea.save();
         }
 
-        return { content, summary };
+        return { content, summary, sources };
     }
 }
