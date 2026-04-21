@@ -1,8 +1,9 @@
 import axios from 'axios';
-import { Settings, Idea, Post, WeeklyDigest } from '../db';
+import { Settings, Idea, Post, WeeklyDigest, CaseStudy, SavedTrend } from '../db';
 import fs from 'fs';
 import path from 'path';
 import { getMCPManager, MCPServerConfig } from './mcpManager';
+import { WikiService } from './wiki';
 
 export interface AIContext {
     apiKey: string | null;
@@ -563,22 +564,93 @@ Return a JSON object:
             throw new Error('AI returned empty response. Please try again.');
         }
 
+        let finalContent: string;
+        let summary: string;
+
         try {
             const parsed = this.extractAndParseJson(response);
-            const finalContent = parsed.postContent || parsed.content || response;
-
-            return {
-                content: this.sanitizePostContent(finalContent, prompt),
-                summary: parsed.summary || "Summary generation failed or returned empty"
-            };
+            finalContent = parsed.postContent || parsed.content || response;
+            summary = parsed.summary || "Summary generation failed or returned empty";
         } catch (e: any) {
             console.error("[AIService] Failed to parse AI response as JSON:", e.message, "Response preview:", response.substring(0, 300));
-            // Fallback - try to extract anything that looks like a post if parsing fails
-            return {
-                content: this.sanitizePostContent(response.length > 100 ? response : "Failed to generate valid post content.", prompt),
-                summary: "Summary parsing failed"
-            };
+            // Fallback: reformat raw text into a proper post via a second AI call
+            finalContent = await this.reformatAsPost(config, response, tenantId);
+            summary = "Reformatted from raw AI response";
         }
+
+        // Quality gate: detect wall-of-text or essay-style posts and reformat
+        const qualityIssue = this.detectQualityIssue(finalContent);
+        if (qualityIssue) {
+            console.warn(`[AIService] Quality issue detected: ${qualityIssue}. Reformatting...`);
+            finalContent = await this.reformatAsPost(config, finalContent, tenantId);
+        }
+
+        return {
+            content: this.sanitizePostContent(finalContent, prompt),
+            summary,
+        };
+    }
+
+    /**
+     * Detect common quality issues that make a post look unformatted or essay-like.
+     * Returns a description of the issue, or null if the post passes quality checks.
+     */
+    private static detectQualityIssue(content: string): string | null {
+        const lines = content.split('\n').filter(l => l.trim().length > 0);
+        const words = content.split(/\s+/).length;
+
+        // Single paragraph wall of text (>80 words with no line breaks)
+        if (lines.length <= 2 && words > 80) {
+            return 'wall-of-text: single paragraph with no formatting';
+        }
+
+        // Average line length too high (essay-style prose)
+        const avgLineLength = content.length / Math.max(lines.length, 1);
+        if (avgLineLength > 300 && words > 100) {
+            return 'essay-style: very long paragraphs without breaks';
+        }
+
+        // Starts with an academic/essay-style sentence pattern
+        const essayOpeners = /^(The narrative|The idea|The concept|It is|There is|In today's|In the current|This is a|One of the)/i;
+        if (essayOpeners.test(content.trim()) && lines.length <= 3) {
+            return 'academic-opener: reads like an essay, not a social post';
+        }
+
+        return null;
+    }
+
+    /**
+     * Take raw/unformatted AI text and reformat it as a proper LinkedIn post.
+     * Used as a fallback when the primary generation returns unparseable or low-quality output.
+     */
+    private static async reformatAsPost(config: any, rawText: string, tenantId: string): Promise<string> {
+        const reformatPrompt = `You are a LinkedIn post formatter. Take the raw content below and reformat it as a high-quality LinkedIn post.
+
+Rules:
+- Add a strong hook in the first 1-2 lines (something that makes people stop scrolling)
+- Break into short paragraphs (1-3 lines each) with whitespace between them
+- Use bold text sparingly for emphasis where it helps
+- Keep the core message intact but make it scannable and engaging
+- Add 3-5 relevant hashtags at the end
+- Do NOT add generic CTAs like "What do you think?"
+- Maximum 200 words
+- Return ONLY the post text, no JSON, no explanation
+
+Raw content to reformat:
+${rawText}`;
+
+        try {
+            const formatted = await this.callOpenRouter(config, 'You are a LinkedIn post formatting expert. Return only the formatted post text.', reformatPrompt);
+            if (formatted && formatted.trim().length > 50) {
+                console.log('[AIService] Successfully reformatted post');
+                return formatted.trim();
+            }
+        } catch (err: any) {
+            console.error('[AIService] Reformat failed:', err.message);
+        }
+
+        // If reformat also fails, return original with basic cleanup
+        return rawText;
     }
 
     /**
@@ -1520,6 +1592,108 @@ Curate the ${storyCount} biggest, most impactful stories from these results into
         return '\n\nAdditional Context from Attachments:\n' + attachmentContents.join('\n');
     }
 
+    /**
+     * Gather enrichment context from wiki, web search, case studies, and saved trends.
+     * Runs all queries in parallel. Failures are silently skipped.
+     */
+    private static async gatherSmartContext(
+        tenantId: string,
+        idea: Idea,
+        tags: string[]
+    ): Promise<string> {
+        try {
+            const searchQuery = [idea.title, ...tags].filter(Boolean).join(' ');
+            const settings = await Settings.findOne({ where: { tenantId } });
+            const tavilyApiKey = settings?.tavilyApiKey;
+
+            const [wikiResult, tavilyResult, caseStudyResult, trendResult] = await Promise.allSettled([
+                WikiService.queryWiki(tenantId, searchQuery),
+                tavilyApiKey
+                    ? this.searchWithTavily(tavilyApiKey, searchQuery, { topic: 'general', timeRange: 'week', maxResults: 3 })
+                    : Promise.resolve([]),
+                CaseStudy.findAll({ where: { tenantId } }),
+                SavedTrend.findAll({ where: { tenantId } }),
+            ]);
+
+            const queryTerms = searchQuery.toLowerCase().split(/\s+/).filter(t => t.length > 3);
+
+            // Wiki knowledge (top 3 results, 1500 char cap)
+            let wikiContext = '';
+            if (wikiResult.status === 'fulfilled' && wikiResult.value.results.length > 0) {
+                const topResults = wikiResult.value.results.slice(0, 3);
+                const excerpts = topResults.map(r =>
+                    `- **${r.title}**: ${r.excerpt.substring(0, 400)}`
+                );
+                wikiContext = `\n**Internal Knowledge Base:**\n${excerpts.join('\n')}\n`;
+                if (wikiContext.length > 1500) wikiContext = wikiContext.substring(0, 1500) + '...';
+            }
+
+            // Web search for fresh facts (top 3 results, 1000 char cap)
+            let tavilyContext = '';
+            if (tavilyResult.status === 'fulfilled' && tavilyResult.value.length > 0) {
+                const items = tavilyResult.value.slice(0, 3);
+                const snippets = items.map(r =>
+                    `- **${r.title}** (${r.url}): ${r.content.substring(0, 250)}`
+                );
+                tavilyContext = `\n**Recent Web Context (fresh facts — use to add timeliness):**\n${snippets.join('\n')}\n`;
+                if (tavilyContext.length > 1000) tavilyContext = tavilyContext.substring(0, 1000) + '...';
+            }
+
+            // Case studies (keyword-filtered, top 2, 1000 char cap)
+            let caseStudyContext = '';
+            if (caseStudyResult.status === 'fulfilled') {
+                const matched = caseStudyResult.value
+                    .filter(cs => {
+                        const searchable = [cs.title, cs.industry || '', cs.challenge, cs.tags || ''].join(' ').toLowerCase();
+                        return queryTerms.some(term => searchable.includes(term));
+                    })
+                    .slice(0, 2);
+                if (matched.length > 0) {
+                    const entries = matched.map(cs =>
+                        `- **${cs.title}** (${cs.clientName}): ${cs.challenge.substring(0, 150)} → ${cs.results.substring(0, 150)}`
+                    );
+                    caseStudyContext = `\n**Relevant Case Studies (use as proof points):**\n${entries.join('\n')}\n`;
+                    if (caseStudyContext.length > 1000) caseStudyContext = caseStudyContext.substring(0, 1000) + '...';
+                }
+            }
+
+            // Saved trends (keyword-filtered, top 2, 800 char cap)
+            let trendContext = '';
+            if (trendResult.status === 'fulfilled') {
+                const matched = trendResult.value
+                    .filter(tr => {
+                        const searchable = [tr.topic, tr.description, tr.industry || ''].join(' ').toLowerCase();
+                        return queryTerms.some(term => searchable.includes(term));
+                    })
+                    .slice(0, 2);
+                if (matched.length > 0) {
+                    const entries = matched.map(tr =>
+                        `- **${tr.topic}**: ${tr.description.substring(0, 200)}`
+                    );
+                    trendContext = `\n**Relevant Industry Trends:**\n${entries.join('\n')}\n`;
+                    if (trendContext.length > 800) trendContext = trendContext.substring(0, 800) + '...';
+                }
+            }
+
+            const smartContext = wikiContext + tavilyContext + caseStudyContext + trendContext;
+
+            if (smartContext.trim()) {
+                const sources = [
+                    wikiContext ? 'wiki' : null,
+                    tavilyContext ? 'web' : null,
+                    caseStudyContext ? 'cases' : null,
+                    trendContext ? 'trends' : null,
+                ].filter(Boolean).join('+');
+                console.log(`[AIService] Smart context for "${idea.title}": ${sources} (${smartContext.length} chars)`);
+            }
+
+            return smartContext;
+        } catch (err: any) {
+            console.error(`[AIService] Smart context enrichment failed (non-fatal):`, err.message);
+            return '';
+        }
+    }
+
     static async generateForIdea(
         tenantId: string,
         idea: Idea,
@@ -1552,6 +1726,12 @@ Curate the ${storyCount} biggest, most impactful stories from these results into
         }
         if (contextFromAttachments) {
             prompt += `\n**Attached Reference Material:**${contextFromAttachments}\n`;
+        }
+
+        // Smart context enrichment: wiki, web search, case studies, trends
+        const smartContext = await this.gatherSmartContext(tenantId, idea, tags);
+        if (smartContext) {
+            prompt += `\n**Enrichment Context (use selectively to add depth, freshness, and credibility — do NOT dump everything below into the post):**${smartContext}\n`;
         }
 
         const fullPrompt = prompt;

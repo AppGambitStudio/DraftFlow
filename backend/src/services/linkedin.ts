@@ -314,29 +314,68 @@ class LinkedInService {
                 'X-Restli-Protocol-Version': '2.0.0',
             };
 
-            const normalizedUrns = postUrns.map(urn => {
-                if (urn.includes('urn:li:share:') || urn.includes('urn:li:ugcPost:')) return urn;
-                return `urn:li:ugcPost:${urn}`;
-            });
-
-            const paramName = normalizedUrns[0]?.includes('urn:li:ugcPost:') ? 'ugcPosts' : 'shares';
-            const listParam = encodeURIComponent(`List(${normalizedUrns.join(',')})`);
-            const url = `https://api.linkedin.com/v2/shareStatistics?${paramName}=${listParam}`;
-
-            try {
-                const response = await axios.get(url, { headers: v2Headers });
-                const results = response.data.elements || [];
-                if (results.length > 0) {
-                    return results.map((item: any) => ({
-                        urn: item.ugcPost || item.share || '',
-                        likes: item.totalShareStatistics?.likeCount || 0,
-                        comments: item.totalShareStatistics?.commentCount || 0,
-                        reposts: item.totalShareStatistics?.shareCount || 0,
-                        impressions: item.totalShareStatistics?.impressionCount || 0,
-                    }));
+            // Separate URNs by type — shares and ugcPosts need different query params
+            const shareUrns: string[] = [];
+            const ugcPostUrns: string[] = [];
+            for (const urn of postUrns) {
+                if (urn.includes('urn:li:share:')) {
+                    shareUrns.push(urn);
+                } else if (urn.includes('urn:li:ugcPost:')) {
+                    ugcPostUrns.push(urn);
+                } else {
+                    // Raw ID — assume ugcPost for backward compat
+                    ugcPostUrns.push(`urn:li:ugcPost:${urn}`);
                 }
-            } catch (error: any) {
-                console.error(`[LinkedIn] v2 Stats Error:`, error.response?.status, error.response?.data?.message || error.message);
+            }
+
+            const allResults: any[] = [];
+
+            // Fetch stats for share URNs
+            if (shareUrns.length > 0) {
+                try {
+                    const listParam = encodeURIComponent(`List(${shareUrns.join(',')})`);
+                    const url = `https://api.linkedin.com/v2/shareStatistics?shares=${listParam}`;
+                    const response = await axios.get(url, { headers: v2Headers });
+                    const results = response.data.elements || [];
+                    for (const item of results) {
+                        allResults.push({
+                            urn: item.share || '',
+                            likes: item.totalShareStatistics?.likeCount || 0,
+                            comments: item.totalShareStatistics?.commentCount || 0,
+                            reposts: item.totalShareStatistics?.shareCount || 0,
+                            impressions: item.totalShareStatistics?.impressionCount || 0,
+                        });
+                    }
+                    console.log(`[LinkedIn] Share stats: ${results.length}/${shareUrns.length} returned`);
+                } catch (error: any) {
+                    console.error(`[LinkedIn] v2 Share Stats Error:`, error.response?.status, error.response?.data?.message || error.message);
+                }
+            }
+
+            // Fetch stats for ugcPost URNs
+            if (ugcPostUrns.length > 0) {
+                try {
+                    const listParam = encodeURIComponent(`List(${ugcPostUrns.join(',')})`);
+                    const url = `https://api.linkedin.com/v2/shareStatistics?ugcPosts=${listParam}`;
+                    const response = await axios.get(url, { headers: v2Headers });
+                    const results = response.data.elements || [];
+                    for (const item of results) {
+                        allResults.push({
+                            urn: item.ugcPost || '',
+                            likes: item.totalShareStatistics?.likeCount || 0,
+                            comments: item.totalShareStatistics?.commentCount || 0,
+                            reposts: item.totalShareStatistics?.shareCount || 0,
+                            impressions: item.totalShareStatistics?.impressionCount || 0,
+                        });
+                    }
+                    console.log(`[LinkedIn] UgcPost stats: ${results.length}/${ugcPostUrns.length} returned`);
+                } catch (error: any) {
+                    console.error(`[LinkedIn] v2 UgcPost Stats Error:`, error.response?.status, error.response?.data?.message || error.message);
+                }
+            }
+
+            if (allResults.length > 0) {
+                return allResults;
             }
         }
 
