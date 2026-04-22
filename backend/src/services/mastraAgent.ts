@@ -15,6 +15,67 @@ function createOpenRouterForTenant(apiKey: string) {
 }
 
 // ============================================================================
+// Tool-level quality guardrail
+// ============================================================================
+
+const FABRICATION_PATTERNS = [
+    /\bI watched a team\b/i,
+    /\bA company I (?:know|worked with)\b/i,
+    /\bSix months ago\b/i,
+    /\bLast (?:week|month|year),? (?:I|we|our)\b/i,
+    /\breduced (?:\w+ )?by \d+%/i,
+    /\bsaved (?:us |them )?\d+(?:ms|s|%|hours|days)\b/i,
+    /\bcut (?:\w+ )?(?:costs?|time|latency) (?:by |from )\d/i,
+    /\bI recently (?:saw|watched|noticed|helped)\b/i,
+    /\bA (?:senior |lead )?(?:engineer|developer|CTO|founder) (?:I know|told me)\b/i,
+];
+
+const AI_CLICHE_OPENERS = [
+    /^Your \w+ is (?:a |)(?:ticking|silent|hidden)/i,
+    /^Most (?:teams|CTOs|engineers|developers|companies) /i,
+    /^Here'?s the thing/i,
+    /^Let me explain/i,
+    /^The truth is/i,
+    /^Nobody talks about/i,
+    /^Stop (?:doing |using |building )/i,
+];
+
+function checkPostQuality(content: string): string[] {
+    const issues: string[] = [];
+    const lines = content.split('\n').filter(l => l.trim().length > 0);
+    const words = content.split(/\s+/).length;
+
+    // Wall of text: single paragraph, >80 words
+    if (lines.length <= 2 && words > 80) {
+        issues.push('wall-of-text (no line breaks)');
+    }
+
+    // Fabrication patterns
+    for (const pattern of FABRICATION_PATTERNS) {
+        if (pattern.test(content)) {
+            issues.push(`possible fabrication: "${content.match(pattern)?.[0]}"`);
+            break; // one is enough to flag
+        }
+    }
+
+    // AI cliché openers
+    const firstLine = lines[0] || '';
+    for (const pattern of AI_CLICHE_OPENERS) {
+        if (pattern.test(firstLine)) {
+            issues.push(`AI cliché opener: "${firstLine.substring(0, 60)}..."`);
+            break;
+        }
+    }
+
+    // Too long without reason
+    if (words > 300) {
+        issues.push(`too long (${words} words, target is 80-200)`);
+    }
+
+    return issues;
+}
+
+// ============================================================================
 // Tools wrapping existing AIService methods
 // ============================================================================
 
@@ -89,6 +150,17 @@ export const generatePostTool = createTool({
             undefined, // manualToneOverride
             platform
         );
+
+        // Tool-level quality guardrail: catch obvious issues before editor phase
+        const issues = checkPostQuality(result.content);
+        if (issues.length > 0) {
+            console.warn(`[generatePostTool] Quality guardrail flagged: ${issues.join(', ')}`);
+            return {
+                content: result.content,
+                summary: result.summary + ` [QUALITY WARNING: ${issues.join('; ')}]`
+            };
+        }
+
         return { content: result.content, summary: result.summary };
     }
 });
@@ -117,6 +189,18 @@ export const generateFromIdeaTool = createTool({
             throw new Error(`Idea with ID ${ideaId} not found`);
         }
         const result = await AIService.generateForIdea(tenantId!, idea, platform, additionalContext);
+
+        // Tool-level quality guardrail
+        const issues = checkPostQuality(result.content);
+        if (issues.length > 0) {
+            console.warn(`[generateFromIdeaTool] Quality guardrail flagged: ${issues.join(', ')}`);
+            return {
+                content: result.content,
+                summary: result.summary + ` [QUALITY WARNING: ${issues.join('; ')}]`,
+                ideaTitle: idea.title
+            };
+        }
+
         return { content: result.content, summary: result.summary, ideaTitle: idea.title };
     }
 });
@@ -1622,14 +1706,17 @@ Return the raw generated post text along with 3 hook alternatives. Do not wrap i
 
 export function createEditorAgent(
     apiKey: string,
-    modelId: string = 'anthropic/claude-sonnet-4'
+    modelId: string = 'anthropic/claude-sonnet-4',
+    topPostsContext: string = ''
 ) {
     const openrouter = createOpenRouterForTenant(apiKey);
+    const voiceReference = topPostsContext ? `\n\n## VOICE REFERENCE (THE AUTHOR'S ACTUAL POSTS)\n\nThese are the author's top-performing posts. When you call \`improvise-post\`, the rewrite MUST preserve this voice — the rhythm, sentence structure, directness level, and personality. If the draft sounds nothing like these examples, that's a red flag.\n\n${topPostsContext}\n` : '';
+
     return new Agent({
         id: 'editor-agent',
         name: 'Editor Agent',
         description: 'Chief Editor that evaluates quality, detects AI patterns, refines drafts, and suggests hashtags. Returns the final polished post in JSON format with quality scores.',
-        instructions: `You are the Chief Editor. Your job: make this post sound like a real person wrote it, not an AI content mill.
+        instructions: `You are the Chief Editor. Your job: make this post sound like a real person wrote it, not an AI content mill.${voiceReference}
 
 ## THE "COLLEAGUE TEST"
 Read the draft and ask: "If I saw this on LinkedIn from someone I know, would I think THEY wrote it — or would I immediately think 'AI generated'?"
@@ -1819,7 +1906,7 @@ export class MastraAgentService {
         // 3. Create sub-agents
         const researcherAgent = createResearcherAgent(apiKey, modelId, mcpTools);
         const writerAgent = createWriterAgent(apiKey, modelId, topPostsContext);
-        const editorAgent = createEditorAgent(apiKey, modelId);
+        const editorAgent = createEditorAgent(apiKey, modelId, topPostsContext);
 
         // 4. Create supervisor (handles strategy directly)
         const supervisor = createSupervisorAgent(apiKey, modelId, {

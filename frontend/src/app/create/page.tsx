@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PostPreview } from "@/components/PostPreview";
 import toast, { Toaster } from "react-hot-toast";
 
-import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette } from "lucide-react";
+import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette, AlertCircle } from "lucide-react";
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -450,25 +450,41 @@ Create an engaging post that shares your perspective or key takeaway from this a
         }
     };
 
+    const [visualBuilderTimedOut, setVisualBuilderTimedOut] = useState(false);
+
     const handleVisualBuilder = async (templateKey?: string) => {
         if (!content) return;
         const tmpl = templateKey || visualTemplate;
         setVisualTemplate(tmpl);
         setVisualBuilderLoading(true);
         setVisualBuilderResult(null);
+        setVisualBuilderTimedOut(false);
         setShowVisualBuilderModal(true);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+            controller.abort();
+            setVisualBuilderTimedOut(true);
+            setVisualBuilderLoading(false);
+        }, 120000); // 2 minute timeout
+
         try {
             const res = await api.post('/ai/visual-builder', {
                 content,
                 template: tmpl,
                 size: visualSize,
-            });
+            }, { signal: controller.signal });
             setVisualBuilderResult(res.data);
         } catch (error: any) {
-            toast.error(error.response?.data?.error || 'Failed to generate visual');
-            if (!visualBuilderResult) setShowVisualBuilderModal(false);
+            if (error.name !== 'CanceledError' && error.code !== 'ERR_CANCELED') {
+                toast.error(error.response?.data?.error || 'Failed to generate visual');
+                if (!visualBuilderResult) setShowVisualBuilderModal(false);
+            }
         } finally {
-            setVisualBuilderLoading(false);
+            clearTimeout(timeout);
+            if (!controller.signal.aborted) {
+                setVisualBuilderLoading(false);
+            }
         }
     };
 
@@ -1079,11 +1095,31 @@ Create an engaging post that shares your perspective or key takeaway from this a
                             </button>
                         </div>
 
-                        {visualBuilderLoading ? (
+                        {visualBuilderTimedOut && !visualBuilderLoading ? (
+                            <div className="flex flex-col items-center justify-center py-16">
+                                <AlertCircle className="h-10 w-10 text-amber-500 mb-4" />
+                                <p className="text-muted-foreground font-medium">Generation timed out</p>
+                                <p className="text-xs text-muted-foreground mt-1">The visual took too long to generate. This can happen with complex content.</p>
+                                <div className="flex gap-2 mt-4">
+                                    <button
+                                        onClick={() => handleVisualBuilder()}
+                                        className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+                                    >
+                                        Retry
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowVisualBuilderModal(false); setVisualBuilderTimedOut(false); }}
+                                        className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        ) : visualBuilderLoading ? (
                             <div className="flex flex-col items-center justify-center py-16">
                                 <Loader2 className="h-10 w-10 animate-spin text-purple-500 mb-4" />
                                 <p className="text-muted-foreground">Generating visual...</p>
-                                <p className="text-xs text-muted-foreground mt-1">This may take 10-20 seconds</p>
+                                <p className="text-xs text-muted-foreground mt-1">This may take up to 2 minutes</p>
                             </div>
                         ) : visualBuilderResult ? (
                             <div className="space-y-4">
