@@ -8,21 +8,41 @@ import { useAuth } from "@/context/AuthContext";
 
 import { version } from "../../package.json";
 
-const navItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/ideas", label: "Idea Board", icon: Lightbulb },
-    { href: "/feeds", label: "RSS Feeds", icon: Rss },
-    { href: "/trends", label: "Trends", icon: TrendingUp },
-    { href: "/digest", label: "Weekly Digest", icon: Newspaper },
-    { href: "/agent", label: "AI Agent", icon: Bot },
-    { href: "/case-studies", label: "Case Studies", icon: BookOpen },
-    { href: "/wiki", label: "LLM Wiki", icon: Library },
-    { href: "/carousels", label: "Carousels", icon: Presentation },
-    { href: "/inspiration", label: "Inspiration", icon: Sparkles },
-    { href: "/calendar", label: "Calendar", icon: Calendar },
-    { href: "/create", label: "Create Post", icon: PenSquare },
-    { href: "/users", label: "Users", icon: UserIcon },
-    { href: "/settings", label: "Settings", icon: Settings },
+const navSections = [
+    {
+        label: "Primary",
+        items: [
+            { href: "/create", label: "Write", icon: PenSquare },
+            { href: "/ideas", label: "Ideas", icon: Lightbulb },
+            { href: "/calendar", label: "Calendar", icon: Calendar },
+            { href: "/", label: "Dashboard", icon: LayoutDashboard },
+        ],
+    },
+    {
+        label: "Sources",
+        items: [
+            { href: "/inspiration", label: "Inspiration", icon: Sparkles },
+            { href: "/feeds", label: "RSS Feeds", icon: Rss },
+            { href: "/trends", label: "Trends", icon: TrendingUp },
+            { href: "/wiki", label: "LLM Wiki", icon: Library },
+            { href: "/case-studies", label: "Case Studies", icon: BookOpen },
+        ],
+    },
+    {
+        label: "Assets",
+        items: [
+            { href: "/carousels", label: "Carousels", icon: Presentation },
+        ],
+    },
+    {
+        label: "Advanced",
+        items: [
+            { href: "/digest", label: "Weekly Digest", icon: Newspaper },
+            { href: "/agent", label: "AI Agent", icon: Bot },
+            { href: "/users", label: "Users", icon: UserIcon },
+            { href: "/settings", label: "Settings", icon: Settings },
+        ],
+    },
 ];
 
 export function Sidebar() {
@@ -63,26 +83,33 @@ export function Sidebar() {
                 </div>
             )}
 
-            <nav className="flex-1 space-y-1 p-4">
-                {navItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = pathname === item.href;
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                                isActive
-                                    ? "bg-slate-100 text-slate-900"
-                                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                            )}
-                        >
-                            <Icon className="h-5 w-5" />
-                            {item.label}
-                        </Link>
-                    );
-                })}
+            <nav className="flex-1 space-y-5 overflow-y-auto p-4">
+                {navSections.map((section) => (
+                    <div key={section.label} className="space-y-1">
+                        <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            {section.label}
+                        </div>
+                        {section.items.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = pathname === item.href;
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    className={cn(
+                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                        isActive
+                                            ? "bg-slate-100 text-slate-900"
+                                            : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                                    )}
+                                >
+                                    <Icon className="h-5 w-5" />
+                                    {item.label}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                ))}
             </nav>
             <div className="mt-auto border-t">
                 {user && (

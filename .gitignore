@@ -48,3 +48,6 @@ extra/
 # LLM Wiki
 
 /backend/wiki/
+
+# AI state
+/.omx

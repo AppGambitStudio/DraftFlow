@@ -7,8 +7,8 @@ import { ConfigWarningBanner } from "@/components/ConfigWarningBanner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-    title: "LinkedIn Post Scheduler",
-    description: "Schedule and publish LinkedIn posts",
+    title: "DraftFlow",
+    description: "Write, improve, and publish better LinkedIn posts consistently",
 };
 
 import { AuthorsProvider } from "@/contexts/AuthorsContext";

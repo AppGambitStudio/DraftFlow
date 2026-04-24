@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PostPreview } from "@/components/PostPreview";
 import toast, { Toaster } from "react-hot-toast";
 
-import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette, AlertCircle } from "lucide-react";
+import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -43,7 +43,6 @@ export default function CreatePostPage() {
     const directionDropdownRef = useRef<HTMLDivElement>(null);
     const [ideaId, setIdeaId] = useState<string | null>(null);
     const [ideaTitle, setIdeaTitle] = useState<string | null>(null);
-    const [showAIToolsDropdown, setShowAIToolsDropdown] = useState(false);
     const aiToolsDropdownRef = useRef<HTMLDivElement>(null);
     const [showRegenerateModal, setShowRegenerateModal] = useState(false);
     const [regenerateContext, setRegenerateContext] = useState('');
@@ -62,6 +61,7 @@ export default function CreatePostPage() {
     const [visualBuilderResult, setVisualBuilderResult] = useState<{ imageUrl: string; html: string; name: string; type: string; size: number } | null>(null);
     const [visualTemplate, setVisualTemplate] = useState('infographic');
     const [visualSize, setVisualSize] = useState('landscape');
+    const [showPreview, setShowPreview] = useState(true);
 
     const VISUAL_TEMPLATES = [
         { key: 'infographic', name: 'Infographic', description: 'Key points with icons and accent colors', icon: '📊' },
@@ -79,14 +79,18 @@ export default function CreatePostPage() {
         { key: 'auto', label: 'Auto-fit', desc: 'fits content' },
     ];
 
-    const DIRECTION_PRESETS = [
-        "Shorten",
-        "Stronger hook",
-        "Add CTA",
-        "Simplify",
-        "More data-driven",
-        "Make bolder",
+    const IMPROVEMENT_ACTIONS = [
+        { label: "Improve", direction: "" },
+        { label: "Stronger Hook", direction: "Stronger hook" },
+        { label: "Shorten", direction: "Shorten" },
+        { label: "Simplify", direction: "Simplify" },
+        { label: "Add CTA", direction: "Add CTA" },
+        { label: "Make Bolder", direction: "Make bolder" },
+        { label: "More Data-Driven", direction: "More data-driven" },
     ];
+    const DIRECTION_PRESETS = IMPROVEMENT_ACTIONS
+        .map((action) => action.direction)
+        .filter(Boolean);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(window.location.search);
@@ -256,9 +260,6 @@ Create an engaging post that shares your perspective or key takeaway from this a
             if (directionDropdownRef.current && !directionDropdownRef.current.contains(event.target as Node)) {
                 setShowDirectionDropdown(false);
             }
-            if (aiToolsDropdownRef.current && !aiToolsDropdownRef.current.contains(event.target as Node)) {
-                setShowAIToolsDropdown(false);
-            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -312,12 +313,13 @@ Create an engaging post that shares your perspective or key takeaway from this a
         toast.success("Reverted to previous version");
     };
 
-    const getActiveDirection = () => {
+    const getActiveDirection = (overrideDirection?: string) => {
+        if (overrideDirection !== undefined) return overrideDirection || undefined;
         if (improviseDirection === '__custom__') return customDirection || undefined;
         return improviseDirection || undefined;
     };
 
-    const handleAIImprovise = async () => {
+    const handleAIImprovise = async (overrideDirection?: string) => {
         if (!content) {
             toast.error("Please enter some content first");
             return;
@@ -329,11 +331,11 @@ Create an engaging post that shares your perspective or key takeaway from this a
                 content,
                 targetAudience: selectedAudience || undefined,
                 authorUrn: selectedAuthorUrn || undefined,
-                direction: getActiveDirection(),
+                direction: getActiveDirection(overrideDirection),
                 platform: platforms.length > 0 ? platforms.join(',') : undefined
             });
             setContent(res.data.content);
-            toast.success("Content improved by AI!");
+            toast.success(overrideDirection ? `${overrideDirection} applied` : "Draft improved");
         } catch (error: any) {
             // Revert the undo stack push on failure
             setContentHistory(prev => prev.slice(0, -1));
@@ -560,14 +562,36 @@ Create an engaging post that shares your perspective or key takeaway from this a
     return (
         <div className="flex h-full gap-8">
             <Toaster />
-            <div className="flex-1 space-y-6">
-                <h2 className="text-3xl font-bold tracking-tight">
-                    {loadingPost ? "Loading Post..." : editingPostId ? "Edit Post" : "Create Post"}
-                </h2>
+            <div className="min-w-0 flex-1 space-y-6">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h2 className="text-3xl font-bold tracking-tight">
+                            {loadingPost ? "Loading Post..." : editingPostId ? "Edit Draft" : "Write"}
+                        </h2>
+                        <p className="max-w-2xl text-sm text-muted-foreground">
+                            Shape rough notes into a stronger LinkedIn post, preview how it reads, then save or schedule it.
+                        </p>
+                    </div>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowPreview((visible) => !visible)}
+                        aria-pressed={showPreview}
+                        className="shrink-0"
+                    >
+                        {showPreview ? (
+                            <EyeOff className="mr-2 h-4 w-4" />
+                        ) : (
+                            <Eye className="mr-2 h-4 w-4" />
+                        )}
+                        {showPreview ? "Hide Preview" : "Show Preview"}
+                    </Button>
+                </div>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                            <Label htmlFor="content">Post Content</Label>
+                            <Label htmlFor="content">LinkedIn draft</Label>
                             <div className="flex items-center gap-2">
                                 {ideaId && (
                                     <Button
@@ -670,79 +694,90 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                         </div>
                                     )}
                                 </div>
-                                <div className="relative" ref={aiToolsDropdownRef}>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setShowAIToolsDropdown(!showAIToolsDropdown)}
-                                        className="text-primary border-primary/20 hover:bg-primary/5"
-                                    >
-                                        <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
-                                        AI Tools
-                                        <ChevronDown className="ml-2 h-4 w-4" />
-                                    </Button>
-                                    {showAIToolsDropdown && (
-                                        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-md border border-input bg-background shadow-lg py-1">
-                                            <button
-                                                type="button"
-                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                onClick={() => { setShowAIToolsDropdown(false); handleAIImprovise(); }}
-                                                disabled={aiLoading || variationsLoading || !content}
-                                            >
-                                                <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
-                                                {aiLoading ? "Improvising..." : "AImprovise"}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                onClick={() => { setShowAIToolsDropdown(false); handleGenerateVariations(); }}
-                                                disabled={!content || aiLoading || variationsLoading}
-                                            >
-                                                <GitBranch className="mr-2 h-4 w-4 text-blue-500" />
-                                                Variations
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                onClick={() => { setShowAIToolsDropdown(false); handleGenerateHooks(); }}
-                                                disabled={!content || aiLoading || hooksLoading}
-                                            >
-                                                <Zap className="mr-2 h-4 w-4 text-orange-500" />
-                                                Hooks
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                onClick={() => { setShowAIToolsDropdown(false); handleGenerateHashtags(); }}
-                                                disabled={!content || hashtagsLoading}
-                                            >
-                                                {hashtagsLoading ? (
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-green-500" />
-                                                ) : (
-                                                    <Hash className="mr-2 h-4 w-4 text-green-500" />
-                                                )}
-                                                Hashtags
-                                            </button>
-                                            <div className="border-t border-input my-1" />
-                                            <button
-                                                type="button"
-                                                className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                                                onClick={() => { setShowAIToolsDropdown(false); setShowVisualBuilderModal(true); setVisualBuilderResult(null); }}
-                                                disabled={!content || visualBuilderLoading}
-                                            >
-                                                <Palette className="mr-2 h-4 w-4 text-purple-500" />
-                                                Visual Builder
-                                            </button>
-                                        </div>
-                                    )}
+                            </div>
+                        </div>
+                        <div ref={aiToolsDropdownRef} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <div>
+                                    <div className="text-sm font-medium text-slate-900">One-click improvements</div>
+                                    <p className="text-xs text-muted-foreground">Apply a focused rewrite, then undo if it misses.</p>
                                 </div>
+                                {aiLoading && (
+                                    <span className="inline-flex items-center text-xs text-muted-foreground">
+                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                        Rewriting
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {IMPROVEMENT_ACTIONS.map((action) => (
+                                    <Button
+                                        key={action.label}
+                                        type="button"
+                                        variant={action.label === "Improve" ? "default" : "outline"}
+                                        size="sm"
+                                        onClick={() => handleAIImprovise(action.direction)}
+                                        disabled={!content || aiLoading || variationsLoading}
+                                        className="h-8"
+                                    >
+                                        {action.label === "Improve" && <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                                        {action.label}
+                                    </Button>
+                                ))}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleGenerateVariations}
+                                    disabled={!content || aiLoading || variationsLoading}
+                                    className="h-8"
+                                >
+                                    <GitBranch className="mr-1.5 h-3.5 w-3.5 text-blue-500" />
+                                    Variations
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleGenerateHooks}
+                                    disabled={!content || aiLoading || hooksLoading}
+                                    className="h-8"
+                                >
+                                    <Zap className="mr-1.5 h-3.5 w-3.5 text-orange-500" />
+                                    Hooks
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleGenerateHashtags}
+                                    disabled={!content || hashtagsLoading}
+                                    className="h-8"
+                                >
+                                    {hashtagsLoading ? (
+                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-green-500" />
+                                    ) : (
+                                        <Hash className="mr-1.5 h-3.5 w-3.5 text-green-500" />
+                                    )}
+                                    Hashtags
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => { setShowVisualBuilderModal(true); setVisualBuilderResult(null); }}
+                                    disabled={!content || visualBuilderLoading}
+                                    className="h-8"
+                                >
+                                    <Palette className="mr-1.5 h-3.5 w-3.5 text-purple-500" />
+                                    Visual
+                                </Button>
                             </div>
                         </div>
                         <Textarea
                             id="content"
-                            placeholder="What do you want to talk about?"
-                            className="min-h-[200px] resize-none text-base"
+                            placeholder="Paste a rough thought, outline, source note, or draft. DraftFlow will help turn it into a stronger LinkedIn post."
+                            className="min-h-[260px] resize-none text-base"
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                         />
@@ -752,6 +787,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                 : 'text-muted-foreground'
                                 }`}>
                                 {content.length} / {platforms.includes('TWITTER') ? 280 : 3000} characters
+                                {platforms.includes('TWITTER') ? ' for Twitter/X' : ' for LinkedIn'}
                             </span>
                         </div>
                     </div>
@@ -857,8 +893,8 @@ Create an engaging post that shares your perspective or key takeaway from this a
                     </div>
 
                     <div className="space-y-2">
-                        <Label>Publish to</Label>
-                        <div className="flex gap-4">
+                        <Label>Publishing target</Label>
+                        <div className="flex flex-wrap gap-4">
                             <div className="flex items-center space-x-2">
                                 <input
                                     type="checkbox"
@@ -875,7 +911,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                 />
                                 <Label htmlFor="linkedin">LinkedIn</Label>
                             </div>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 text-muted-foreground">
                                 <input
                                     type="checkbox"
                                     id="twitter"
@@ -889,7 +925,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                         }
                                     }}
                                 />
-                                <Label htmlFor="twitter">Twitter</Label>
+                                <Label htmlFor="twitter">Twitter/X <span className="text-xs">(secondary)</span></Label>
                             </div>
                         </div>
                     </div>
@@ -910,7 +946,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
                             e.preventDefault();
                             handleSubmit(e, 'SCHEDULED');
                         }}>
-                            {loading ? "Saving..." : editingPostId ? "Update & Schedule" : "Schedule Post"}
+                            {loading ? "Saving..." : editingPostId ? "Update & Schedule" : "Schedule LinkedIn Post"}
                         </Button>
                         <Button
                             type="button"
@@ -927,10 +963,26 @@ Create an engaging post that shares your perspective or key takeaway from this a
                 </form>
             </div >
 
-            <div className="w-[400px] space-y-6">
-                <h3 className="text-lg font-medium">Preview</h3>
-                <PostPreview content={content} attachments={attachments} />
-            </div>
+            {showPreview && (
+                <div className="w-[400px] shrink-0 space-y-6">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 className="text-lg font-medium">LinkedIn Preview</h3>
+                            <p className="text-sm text-muted-foreground">Check the reading experience before you publish.</p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowPreview(false)}
+                            aria-label="Hide LinkedIn preview"
+                        >
+                            <EyeOff className="h-4 w-4" />
+                        </Button>
+                    </div>
+                    <PostPreview content={content} attachments={attachments} />
+                </div>
+            )}
 
             {showRegenerateModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">

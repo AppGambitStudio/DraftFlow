@@ -160,10 +160,15 @@ export default function DashboardPage() {
             )}
 
             <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+                    <p className="text-sm text-muted-foreground">
+                        Track your LinkedIn writing pipeline, publishing cadence, and post performance.
+                    </p>
+                </div>
                 <Link href="/create">
                     <Button>
-                        <Plus className="mr-2 h-4 w-4" /> Create Post
+                        <Plus className="mr-2 h-4 w-4" /> Write
                     </Button>
                 </Link>
             </div>
