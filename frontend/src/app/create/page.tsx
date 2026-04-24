@@ -466,7 +466,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
             controller.abort();
             setVisualBuilderTimedOut(true);
             setVisualBuilderLoading(false);
-        }, 120000); // 2 minute timeout
+        }, 300000); // 5 minute timeout
 
         try {
             const res = await api.post('/ai/visual-builder', {
@@ -1119,7 +1119,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
                             <div className="flex flex-col items-center justify-center py-16">
                                 <Loader2 className="h-10 w-10 animate-spin text-purple-500 mb-4" />
                                 <p className="text-muted-foreground">Generating visual...</p>
-                                <p className="text-xs text-muted-foreground mt-1">This may take up to 2 minutes</p>
+                                <p className="text-xs text-muted-foreground mt-1">This may take up to 5 minutes</p>
                             </div>
                         ) : visualBuilderResult ? (
                             <div className="space-y-4">
