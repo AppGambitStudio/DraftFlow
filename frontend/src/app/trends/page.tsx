@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import toast, { Toaster } from "react-hot-toast";
+import { useSettings } from "@/contexts/SettingsContext";
 import {
     TrendingUp,
     Sparkles,
@@ -37,6 +38,7 @@ interface TrendingTopic {
 
 export default function TrendsPage() {
     const router = useRouter();
+    const { settings } = useSettings();
     const [industry, setIndustry] = useState("");
     const [topics, setTopics] = useState<TrendingTopic[]>([]);
     const [loading, setLoading] = useState(false);
@@ -112,7 +114,12 @@ export default function TrendsPage() {
         setLoading(true);
         try {
             const res = await api.post("/ai/trending-topics", {
-                industry: industry || undefined,
+                industry: industry || settings.industry || undefined,
+                companyName: settings.companyName || undefined,
+                companyDescription: settings.companyDescription || undefined,
+                expertiseAreas: settings.expertiseAreas,
+                contentPillars: settings.contentPillars,
+                targetAudience: settings.targetAudiences[0] || undefined,
             });
             if (res.data.topics && res.data.topics.length > 0) {
                 // Add fetchedAt to new topics for display
@@ -210,7 +217,7 @@ export default function TrendsPage() {
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Trending Topics</h2>
                     <p className="text-muted-foreground">
-                        Discover what's trending in your industry and turn insights into content ideas.
+                        Discover trends matched to your business context, content pillars, and audience.
                     </p>
                 </div>
             </div>
@@ -225,7 +232,7 @@ export default function TrendsPage() {
                         <div>
                             <CardTitle className="text-lg">Find Trending Topics</CardTitle>
                             <CardDescription>
-                                Enter your industry to discover relevant trends
+                                Use your saved strategy context, with an optional industry override
                             </CardDescription>
                         </div>
                     </div>
@@ -240,7 +247,7 @@ export default function TrendsPage() {
                                 id="industry"
                                 value={industry}
                                 onChange={(e) => setIndustry(e.target.value)}
-                                placeholder="e.g., SaaS, Fintech, Healthcare, AI/ML, DevOps..."
+                                placeholder={settings.industry || "e.g., SaaS, Fintech, Healthcare, AI/ML, DevOps..."}
                                 className="bg-slate-50/30"
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") {

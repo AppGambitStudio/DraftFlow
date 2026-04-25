@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PostPreview } from "@/components/PostPreview";
 import toast, { Toaster } from "react-hot-toast";
 
-import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Sparkles, Paperclip, X, FileText, Loader2, ArrowUp, ArrowDown, Undo2, RefreshCw, ChevronDown, GitBranch, Zap, Hash, Palette, AlertCircle, Eye, EyeOff, ShieldCheck, ExternalLink } from "lucide-react";
 
 import { useAuthors } from "@/contexts/AuthorsContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -20,6 +20,13 @@ interface Attachment {
     name: string;
     type: string;
     size: number;
+}
+
+interface FactSupportResult {
+    sources: Array<{ title: string; url: string; snippet: string }>;
+    checkedClaims: string[];
+    suggestions: string[];
+    warnings: string[];
 }
 
 export default function CreatePostPage() {
@@ -54,6 +61,8 @@ export default function CreatePostPage() {
     const [hooks, setHooks] = useState<Array<{ hook: string; style: string }>>([]);
     const [hooksLoading, setHooksLoading] = useState(false);
     const [hashtagsLoading, setHashtagsLoading] = useState(false);
+    const [factSupportLoading, setFactSupportLoading] = useState(false);
+    const [factSupportResult, setFactSupportResult] = useState<FactSupportResult | null>(null);
     const [editingPostId, setEditingPostId] = useState<string | null>(null);
     const [loadingPost, setLoadingPost] = useState(false);
     const [showVisualBuilderModal, setShowVisualBuilderModal] = useState(false);
@@ -61,7 +70,7 @@ export default function CreatePostPage() {
     const [visualBuilderResult, setVisualBuilderResult] = useState<{ imageUrl: string; html: string; name: string; type: string; size: number } | null>(null);
     const [visualTemplate, setVisualTemplate] = useState('infographic');
     const [visualSize, setVisualSize] = useState('landscape');
-    const [showPreview, setShowPreview] = useState(true);
+    const [showPreview, setShowPreview] = useState(false);
 
     const VISUAL_TEMPLATES = [
         { key: 'infographic', name: 'Infographic', description: 'Key points with icons and accent colors', icon: '📊' },
@@ -80,13 +89,13 @@ export default function CreatePostPage() {
     ];
 
     const IMPROVEMENT_ACTIONS = [
-        { label: "Improve", direction: "" },
-        { label: "Stronger Hook", direction: "Stronger hook" },
-        { label: "Shorten", direction: "Shorten" },
-        { label: "Simplify", direction: "Simplify" },
-        { label: "Add CTA", direction: "Add CTA" },
-        { label: "Make Bolder", direction: "Make bolder" },
-        { label: "More Data-Driven", direction: "More data-driven" },
+        { label: "Improve", mode: "improve", direction: "" },
+        { label: "Stronger Hook", mode: "stronger_hook", direction: "Stronger hook" },
+        { label: "Shorten", mode: "shorten", direction: "Shorten" },
+        { label: "Simplify", mode: "simplify", direction: "Simplify" },
+        { label: "Add CTA", mode: "add_cta", direction: "Add CTA" },
+        { label: "Make Bolder", mode: "make_bolder", direction: "Make bolder" },
+        { label: "More Data-Driven", mode: "data_driven", direction: "More data-driven" },
     ];
     const DIRECTION_PRESETS = IMPROVEMENT_ACTIONS
         .map((action) => action.direction)
@@ -313,13 +322,18 @@ Create an engaging post that shares your perspective or key takeaway from this a
         toast.success("Reverted to previous version");
     };
 
-    const getActiveDirection = (overrideDirection?: string) => {
-        if (overrideDirection !== undefined) return overrideDirection || undefined;
+    const getPrimaryPlatform = () => {
+        if (platforms.includes('LINKEDIN')) return 'LINKEDIN';
+        if (platforms.includes('TWITTER')) return 'TWITTER';
+        return 'LINKEDIN';
+    };
+
+    const getActiveDirection = () => {
         if (improviseDirection === '__custom__') return customDirection || undefined;
         return improviseDirection || undefined;
     };
 
-    const handleAIImprovise = async (overrideDirection?: string) => {
+    const handleAIImprovise = async (rewriteMode?: string) => {
         if (!content) {
             toast.error("Please enter some content first");
             return;
@@ -331,11 +345,12 @@ Create an engaging post that shares your perspective or key takeaway from this a
                 content,
                 targetAudience: selectedAudience || undefined,
                 authorUrn: selectedAuthorUrn || undefined,
-                direction: getActiveDirection(overrideDirection),
-                platform: platforms.length > 0 ? platforms.join(',') : undefined
+                direction: getActiveDirection(),
+                rewriteMode: rewriteMode || undefined,
+                platform: getPrimaryPlatform()
             });
             setContent(res.data.content);
-            toast.success(overrideDirection ? `${overrideDirection} applied` : "Draft improved");
+            toast.success(rewriteMode && rewriteMode !== 'improve' ? "Rewrite applied" : "Draft improved");
         } catch (error: any) {
             // Revert the undo stack push on failure
             setContentHistory(prev => prev.slice(0, -1));
@@ -449,6 +464,33 @@ Create an engaging post that shares your perspective or key takeaway from this a
             toast.error('Failed to generate hashtags');
         } finally {
             setHashtagsLoading(false);
+        }
+    };
+
+    const handleFactCheckSupport = async () => {
+        if (!content) return;
+        setFactSupportLoading(true);
+        setFactSupportResult(null);
+        try {
+            setContentHistory(prev => [...prev, content]);
+            const res = await api.post('/ai/fact-check-support', {
+                content,
+                authorUrn: selectedAuthorUrn || undefined,
+                targetAudience: selectedAudience || undefined,
+            });
+            setContent(res.data.content);
+            setFactSupportResult({
+                sources: res.data.sources || [],
+                checkedClaims: res.data.checkedClaims || [],
+                suggestions: res.data.suggestions || [],
+                warnings: res.data.warnings || [],
+            });
+            toast.success('Fact support added');
+        } catch (error: any) {
+            setContentHistory(prev => prev.slice(0, -1));
+            toast.error(error.response?.data?.error || 'Failed to fact-check draft');
+        } finally {
+            setFactSupportLoading(false);
         }
     };
 
@@ -716,7 +758,7 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                         type="button"
                                         variant={action.label === "Improve" ? "default" : "outline"}
                                         size="sm"
-                                        onClick={() => handleAIImprovise(action.direction)}
+                                        onClick={() => handleAIImprovise(action.mode === 'improve' ? undefined : action.mode)}
                                         disabled={!content || aiLoading || variationsLoading}
                                         className="h-8"
                                     >
@@ -765,6 +807,21 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                     type="button"
                                     variant="outline"
                                     size="sm"
+                                    onClick={handleFactCheckSupport}
+                                    disabled={!content || factSupportLoading || aiLoading}
+                                    className="h-8"
+                                >
+                                    {factSupportLoading ? (
+                                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-sky-500" />
+                                    ) : (
+                                        <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-sky-500" />
+                                    )}
+                                    Fact Check
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => { setShowVisualBuilderModal(true); setVisualBuilderResult(null); }}
                                     disabled={!content || visualBuilderLoading}
                                     className="h-8"
@@ -773,6 +830,36 @@ Create an engaging post that shares your perspective or key takeaway from this a
                                     Visual
                                 </Button>
                             </div>
+                            {factSupportResult && (
+                                <div className="mt-3 rounded-md border border-sky-100 bg-sky-50/70 p-3 text-xs text-slate-700">
+                                    <div className="mb-2 flex items-center gap-2 font-medium text-slate-900">
+                                        <ShieldCheck className="h-3.5 w-3.5 text-sky-600" />
+                                        Fact support
+                                    </div>
+                                    {factSupportResult.sources.length > 0 && (
+                                        <div className="space-y-1">
+                                            {factSupportResult.sources.slice(0, 3).map((source) => (
+                                                <a
+                                                    key={source.url}
+                                                    href={source.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="flex items-start gap-1.5 text-sky-700 hover:underline"
+                                                >
+                                                    <ExternalLink className="mt-0.5 h-3 w-3 shrink-0" />
+                                                    <span>{source.title || source.url}</span>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {factSupportResult.suggestions.length > 0 && (
+                                        <p className="mt-2 text-slate-600">{factSupportResult.suggestions[0]}</p>
+                                    )}
+                                    {factSupportResult.warnings.length > 0 && (
+                                        <p className="mt-2 text-amber-700">{factSupportResult.warnings[0]}</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <Textarea
                             id="content"
@@ -782,12 +869,12 @@ Create an engaging post that shares your perspective or key takeaway from this a
                             onChange={(e) => setContent(e.target.value)}
                         />
                         <div className="flex justify-end">
-                            <span className={`text-xs ${content.length > (platforms.includes('TWITTER') ? 280 : 3000)
+                            <span className={`text-xs ${content.length > (getPrimaryPlatform() === 'TWITTER' ? 280 : 3000)
                                 ? 'text-red-500 font-medium'
                                 : 'text-muted-foreground'
                                 }`}>
-                                {content.length} / {platforms.includes('TWITTER') ? 280 : 3000} characters
-                                {platforms.includes('TWITTER') ? ' for Twitter/X' : ' for LinkedIn'}
+                                {content.length} / {getPrimaryPlatform() === 'TWITTER' ? 280 : 3000} characters
+                                {getPrimaryPlatform() === 'TWITTER' ? ' for Twitter/X' : ' for LinkedIn'}
                             </span>
                         </div>
                     </div>

@@ -118,7 +118,7 @@ export default function WikiPage() {
             const res = await api.get("/wiki/pages");
             setPages(res.data.pages || []);
         } catch (error) {
-            console.error("Failed to fetch wiki pages:", error);
+            console.error("Failed to fetch knowledgebase pages:", error);
         } finally {
             setLoading(false);
         }
@@ -180,7 +180,7 @@ export default function WikiPage() {
     };
 
     const deletePage = async (slug: string) => {
-        if (!confirm("Delete this wiki page? This cannot be undone.")) return;
+        if (!confirm("Delete this knowledgebase page? This cannot be undone.")) return;
         try {
             await api.delete(`/wiki/pages/${slug}`);
             toast.success("Page deleted");
@@ -335,10 +335,10 @@ export default function WikiPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
                             <Library className="h-6 w-6" />
-                            LLM Wiki
+                            Knowledgebase
                         </h1>
                         <p className="text-sm text-slate-500 mt-1">
-                            Persistent knowledge base — ingest sources, browse insights, power your content
+                            Import articles, notes, and reference material so DraftFlow can ground better LinkedIn posts.
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -360,7 +360,7 @@ export default function WikiPage() {
                             onClick={() => setShowSearchModal(true)}
                         >
                             <Search className="h-4 w-4 mr-1" />
-                            Search Wiki
+                            Search Knowledgebase
                         </Button>
                         <Button
                             variant="outline"
@@ -391,8 +391,25 @@ export default function WikiPage() {
                 </div>
             </div>
 
+            <div className="border-b bg-sky-50/70 px-8 py-4">
+                <div className="grid gap-3 text-sm text-slate-700 md:grid-cols-3">
+                    <div>
+                        <p className="font-medium text-slate-900">Import sources</p>
+                        <p>Use <span className="font-medium">Ingest Source</span> for URLs, article text, research notes, customer insights, or saved feed items.</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-slate-900">Let AI organize</p>
+                        <p>DraftFlow extracts durable knowledge and creates or updates pages with source links for later reference.</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-slate-900">Use it while writing</p>
+                        <p>The writing assistant can search this knowledgebase before web search to add relevant proof and context.</p>
+                    </div>
+                </div>
+            </div>
+
             {/* Main content: two-column layout */}
-            <div className="flex h-[calc(100vh-140px)]">
+            <div className="flex h-[calc(100vh-220px)]">
                 {/* Left: Page list */}
                 <div className="w-80 border-r bg-white overflow-y-auto flex-shrink-0">
                     <div className="p-4 border-b">
@@ -412,7 +429,7 @@ export default function WikiPage() {
                     ) : filteredPages.length === 0 ? (
                         <div className="p-8 text-center text-slate-400">
                             <Library className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">No wiki pages yet</p>
+                            <p className="text-sm">No knowledgebase pages yet</p>
                             <p className="text-xs mt-1">Ingest a source or create a page</p>
                         </div>
                     ) : (
@@ -586,7 +603,7 @@ export default function WikiPage() {
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
                         <div className="flex items-center justify-between p-6 border-b">
-                            <h3 className="text-lg font-semibold">New Wiki Page</h3>
+                            <h3 className="text-lg font-semibold">New Knowledgebase Page</h3>
                             <button onClick={() => setShowNewPageModal(false)}>
                                 <X className="h-5 w-5 text-slate-400" />
                             </button>
@@ -665,9 +682,12 @@ export default function WikiPage() {
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <p className="text-sm text-slate-500">
-                                Feed a source into the wiki. The AI will extract knowledge and create or update wiki pages.
-                            </p>
+                            <div className="rounded-lg border border-sky-100 bg-sky-50 p-3 text-sm text-slate-700">
+                                <p className="font-medium text-slate-900">Import data into your knowledgebase</p>
+                                <p className="mt-1">
+                                    Add a public URL or paste raw notes, article excerpts, customer conversations, research summaries, or internal docs. The AI extracts reusable facts, patterns, and source links into organized pages.
+                                </p>
+                            </div>
 
                             {/* Source type toggle */}
                             <div className="flex gap-2">
@@ -710,14 +730,14 @@ export default function WikiPage() {
                                     <Input
                                         value={ingestContent}
                                         onChange={(e) => setIngestContent(e.target.value)}
-                                        placeholder="https://example.com/article"
+                                        placeholder="https://example.com/article-or-report"
                                         type="url"
                                     />
                                 ) : (
                                     <Textarea
                                         value={ingestContent}
                                         onChange={(e) => setIngestContent(e.target.value)}
-                                        placeholder="Paste article text, notes, or any content..."
+                                        placeholder="Paste article text, notes, customer insights, research summaries, or reusable context..."
                                         className="min-h-[200px] text-sm"
                                     />
                                 )}
@@ -781,7 +801,7 @@ export default function WikiPage() {
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
                         <div className="flex items-center justify-between p-6 border-b">
-                            <h3 className="text-lg font-semibold">Search Wiki</h3>
+                            <h3 className="text-lg font-semibold">Search Knowledgebase</h3>
                             <button onClick={() => setShowSearchModal(false)}>
                                 <X className="h-5 w-5 text-slate-400" />
                             </button>

@@ -98,7 +98,7 @@ export const improvisePostTool = createTool({
     }),
     execute: async (inputData) => {
         const { tenantId, content, authorUrn, targetAudience, direction, platform } = inputData;
-        const improvedContent = await AIService.improvise(
+        const improved = await AIService.improvise(
             tenantId!,
             content!,
             authorUrn,
@@ -107,7 +107,7 @@ export const improvisePostTool = createTool({
             direction,
             platform
         );
-        return { content: improvedContent };
+        return { content: improved.content };
     }
 });
 

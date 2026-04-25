@@ -66,15 +66,15 @@ async function extractUrlContent(content: string): Promise<string> {
 router.post('/improvise', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
-        const { content, targetAudience, authorUrn, direction, platform } = req.body;
+        const { content, targetAudience, authorUrn, direction, platform, rewriteMode } = req.body;
 
         if (!content) {
             res.status(400).json({ error: 'Content is required' });
             return;
         }
 
-        const improvedContent = await AIService.improvise(tenantId, content, authorUrn, targetAudience, undefined, direction, platform);
-        res.json({ content: improvedContent });
+        const result = await AIService.improvise(tenantId, content, authorUrn, targetAudience, undefined, direction, platform, rewriteMode);
+        res.json(result);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -186,6 +186,23 @@ router.post('/hashtags', authMiddleware, async (req: AuthRequest, res: Response)
     }
 });
 
+router.post('/fact-check-support', authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+        const tenantId = req.tenantId!;
+        const { content, authorUrn, targetAudience } = req.body;
+
+        if (!content) {
+            res.status(400).json({ error: 'Content is required' });
+            return;
+        }
+
+        const result = await AIService.factCheckAndSupport(tenantId, content, authorUrn, targetAudience);
+        res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get saved trending topics
 router.get('/saved-trends', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
@@ -253,12 +270,15 @@ router.delete('/saved-trends/:id', authMiddleware, async (req: AuthRequest, res:
 router.post('/trending-topics', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
         const tenantId = req.tenantId!;
-        const { industry, contentPillars, targetAudience, count } = req.body;
+        const { industry, contentPillars, targetAudience, companyName, companyDescription, expertiseAreas, count } = req.body;
 
         const topics = await AIService.getTrendingTopics(tenantId, {
             industry,
             contentPillars,
             targetAudience,
+            companyName,
+            companyDescription,
+            expertiseAreas,
             count
         });
 
@@ -464,7 +484,7 @@ router.post('/generate-from-context', authMiddleware, async (req: AuthRequest, r
             return res.status(500).json({ error: 'AI returned empty content. Please try again.' });
         }
 
-        res.json({ content: result.content });
+        res.json({ content: result.content, summary: result.summary, sources: result.sources || [] });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

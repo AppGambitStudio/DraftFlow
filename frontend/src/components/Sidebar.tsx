@@ -24,7 +24,7 @@ const navSections = [
             { href: "/inspiration", label: "Inspiration", icon: Sparkles },
             { href: "/feeds", label: "RSS Feeds", icon: Rss },
             { href: "/trends", label: "Trends", icon: TrendingUp },
-            { href: "/wiki", label: "LLM Wiki", icon: Library },
+            { href: "/wiki", label: "Knowledgebase", icon: Library },
             { href: "/case-studies", label: "Case Studies", icon: BookOpen },
         ],
     },
