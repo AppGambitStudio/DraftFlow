@@ -207,23 +207,34 @@ export default function CreatePostPage() {
         }
     }, []);
 
-    const generatePostFromTrend = async (trend: { topic: string; description: string; relevance: string; suggestedAngles: string[]; trendType: string }) => {
+    const generatePostFromTrend = async (trend: { topic: string; description: string; relevance: string; suggestedAngles: string[]; sources?: string[]; trendType: string }) => {
         setAiLoading(true);
         toast.loading('Generating post from trend...', { id: 'trend-post' });
         try {
+            let contextStr = `=== REFERENCE MATERIAL (USE AS PRIMARY SOURCE) ===
+
+TRENDING TOPIC: ${trend.topic}
+TREND TYPE: ${trend.trendType}
+
+FACTUAL CONTEXT (ground your post in these specifics):
+${trend.description}
+
+WHY THIS MATTERS TO THE AUDIENCE:
+${trend.relevance}
+
+SUGGESTED ANGLES:
+${trend.suggestedAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}`;
+
+            if (trend.sources && trend.sources.length > 0) {
+                contextStr += `\n\nSOURCE URLs (cite these in the post where relevant):
+${trend.sources.map(s => `- ${s}`).join('\n')}`;
+            }
+
+            contextStr += `\n\n=== INSTRUCTIONS ===
+Write a LinkedIn post grounded in the factual context above. Use specific details, names, and data points from the reference material — do NOT generalize or water down the trend into generic advice. Pick one angle and go deep.`;
+
             const res = await api.post("/ai/generate-from-context", {
-                context: `Write a professional LinkedIn post about this trending topic:
-
-TOPIC: ${trend.topic}
-
-WHAT'S HAPPENING: ${trend.description}
-
-WHY IT MATTERS: ${trend.relevance}
-
-SUGGESTED ANGLES TO CONSIDER:
-${trend.suggestedAngles.map((a, i) => `${i + 1}. ${a}`).join('\n')}
-
-Create an engaging post that provides value to the reader. Pick one of the suggested angles or combine them creatively.`,
+                context: contextStr,
                 authorUrn: selectedAuthorUrn || undefined,
                 platform: platforms[0] || 'LINKEDIN'
             });

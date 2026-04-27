@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2, Undo2, ChevronDown, GitBranch, Zap, Hash, Palette, RefreshCw } from 'lucide-react';
+import { X, Trash2, Save, Sparkles, Send, Repeat, FileText, ArrowUp, ArrowDown, Paperclip, Loader2, Undo2, ChevronDown, GitBranch, Zap, Hash, Palette, RefreshCw, ShieldCheck, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -60,6 +60,8 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     const [hooks, setHooks] = useState<Array<{ hook: string; style: string }>>([]);
     const [hooksLoading, setHooksLoading] = useState(false);
     const [hashtagsLoading, setHashtagsLoading] = useState(false);
+    const [factCheckLoading, setFactCheckLoading] = useState(false);
+    const [factSupportResult, setFactSupportResult] = useState<{ sources: Array<{ title: string; url: string; snippet?: string }>; checkedClaims: string[]; suggestions: string[]; warnings: string[] } | null>(null);
     const [showVisualBuilderModal, setShowVisualBuilderModal] = useState(false);
     const [visualBuilderLoading, setVisualBuilderLoading] = useState(false);
     const [visualBuilderResult, setVisualBuilderResult] = useState<{ imageUrl: string; html: string; name: string; type: string; size: number } | null>(null);
@@ -132,10 +134,11 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
             if (!post?.authorUrn && authors.length > 0) {
                 setSelectedAuthorUrn(authors[0].urn);
             }
-            // Reset undo history and direction when opening a new post
+            // Reset undo history, direction, and fact check when opening a new post
             setContentHistory([]);
             setImproviseDirection('');
             setCustomDirection('');
+            setFactSupportResult(null);
         }
     }, [isOpen, authors, post]);
 
@@ -272,6 +275,33 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
             toast.error('Failed to generate hashtags');
         } finally {
             setHashtagsLoading(false);
+        }
+    };
+
+    const handleFactCheck = async () => {
+        if (!content) return;
+        setFactCheckLoading(true);
+        setFactSupportResult(null);
+        try {
+            setContentHistory(prev => [...prev, content]);
+            const res = await api.post('/ai/fact-check-support', {
+                content,
+                authorUrn: selectedAuthorUrn || undefined,
+                targetAudience: selectedAudience || undefined,
+            });
+            setContent(res.data.content);
+            setFactSupportResult({
+                sources: res.data.sources || [],
+                checkedClaims: res.data.checkedClaims || [],
+                suggestions: res.data.suggestions || [],
+                warnings: res.data.warnings || [],
+            });
+            toast.success('Fact check complete');
+        } catch (error: any) {
+            setContentHistory(prev => prev.slice(0, -1));
+            toast.error(error.response?.data?.error || 'Failed to fact-check draft');
+        } finally {
+            setFactCheckLoading(false);
         }
     };
 
@@ -464,7 +494,7 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
     return (
         <>
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                <div className="w-full max-w-3xl rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+                <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl bg-background p-6 shadow-2xl border border-border animate-in zoom-in-95 duration-200">
                     <div className="mb-6 flex items-center justify-between">
                         <h2 className="text-xl font-bold text-foreground">Post Details</h2>
                         <div className="flex items-center gap-2">
@@ -672,6 +702,19 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                                         )}
                                                         Hashtags
                                                     </button>
+                                                    <button
+                                                        type="button"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        onClick={() => { setShowAIToolsDropdown(false); handleFactCheck(); }}
+                                                        disabled={!content || factCheckLoading}
+                                                    >
+                                                        {factCheckLoading ? (
+                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-sky-500" />
+                                                        ) : (
+                                                            <ShieldCheck className="mr-2 h-4 w-4 text-sky-500" />
+                                                        )}
+                                                        Fact Check
+                                                    </button>
                                                     <div className="border-t border-input my-1" />
                                                     <button
                                                         type="button"
@@ -688,6 +731,48 @@ export function PostDetailsModal({ post, isOpen, onClose, onSave, onDelete }: Po
                                     </div>
                                 )}
                             </div>
+                            {factSupportResult && (
+                                <div className="rounded-md border border-sky-100 bg-sky-50/70 p-3 text-xs text-slate-700">
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <div className="flex items-center gap-2 font-medium text-slate-900">
+                                            <ShieldCheck className="h-3.5 w-3.5 text-sky-600" />
+                                            Fact check results
+                                        </div>
+                                        <button onClick={() => setFactSupportResult(null)} className="text-slate-400 hover:text-slate-600">
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                    {factSupportResult.warnings.length > 0 && (
+                                        <p className="mb-2 text-amber-700">{factSupportResult.warnings[0]}</p>
+                                    )}
+                                    {factSupportResult.checkedClaims.length > 0 && (
+                                        <ul className="mb-2 space-y-1">
+                                            {factSupportResult.checkedClaims.map((claim, i) => (
+                                                <li key={i} className="text-slate-600">• {claim}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    {factSupportResult.sources.length > 0 && (
+                                        <div className="space-y-1">
+                                            {factSupportResult.sources.slice(0, 3).map((source) => (
+                                                <a
+                                                    key={source.url}
+                                                    href={source.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="flex items-start gap-1.5 text-sky-700 hover:underline"
+                                                >
+                                                    <ExternalLink className="mt-0.5 h-3 w-3 shrink-0" />
+                                                    <span>{source.title || source.url}</span>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {factSupportResult.suggestions.length > 0 && (
+                                        <p className="mt-2 text-slate-600">{factSupportResult.suggestions[0]}</p>
+                                    )}
+                                </div>
+                            )}
                             <Textarea
                                 id="content"
                                 value={content}
