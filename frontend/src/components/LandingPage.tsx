@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,94 @@ import {
     Users,
     ArrowRight,
     ChevronRight,
-    Zap,
-    Shield,
     Check,
+    Clock,
+    CheckCircle2,
+    Eye,
+    ThumbsUp,
+    MessageSquare,
+    Share2,
 } from "lucide-react";
+
+// Real APPGAMBIT posts from the database to use as showcase references
+const SHOWCASE_POSTS = [
+    {
+        id: "post-1",
+        title: "Cron Jobs vs Event-Driven Architecture",
+        status: "SCHEDULED",
+        statusText: "Scheduled for Jun 12, 2026 • 5:45 AM",
+        category: "Cloud Architecture",
+        content: `Cron jobs persist in modern stacks because a crontab entry is easy to read. But time-based scheduling assumes upstream systems always deliver on time.
+
+A 2 AM batch job processes whatever arrived by 1:59 AM. If an upstream feed delays by 15 minutes, the job processes incomplete data. The failure doesn't surface until a dashboard looks wrong three days later.
+
+Switching to event-driven triggers like EventBridge, S3 notifications, or SQS fixes this by tying execution to actual state changes. The pipeline runs when the data lands.
+
+But replacing a schedule with a causal chain introduces a stricter engineering constraint: idempotency. A daily cron job that overwrites a partition is naturally idempotent. Event-driven consumers will inevitably receive duplicate or out-of-order messages. If your processing logic isn't strictly idempotent, swapping cron for SQS just trades missing data for corrupted data.
+
+Make your consumers idempotent before you rip out the scheduler.
+
+#EventDrivenArchitecture #CloudModernization #Serverless #SystemArchitecture #AWSEventBridge`,
+    },
+    {
+        id: "post-2",
+        title: "AWS Bedrock Quotas vs Budgets",
+        status: "PUBLISHED",
+        statusText: "Published to LinkedIn",
+        category: "Generative AI",
+        content: `Ever hit a brick wall with Amazon Bedrock before you even shipped a single line of code? We are talking about the dreaded ThrottlingException on a fresh dev account.
+
+I was recently experimenting with Bedrock Agents and Knowledge Bases. No production traffic. Just simple testing. Suddenly, everything stopped.
+
+The errors? "Request rate is too high" and "Too many tokens today."
+
+It didn't make sense. I knew I hadn't spent any real money yet. But here is the hard truth I learned about managed AI services:
+
+Your Budget is not your Quota.
+
+You might have plenty of credits or budget alerts set up, but AWS enforces distinct limits on TPM (Tokens Per Minute) and RPM (Requests Per Minute).
+
+For new accounts (or specific regions), these default quotas are often much tighter than you expect.
+
+How to unblock yourself:
+1️⃣ Don't guess, check. Go to the actual Service Quotas console. Amazon Bedrock limits are model-specific and region-specific.
+2️⃣ Monitor the Throttle. You can't just watch the bill. You need to look at ThrottledRequests in AWS CloudWatch to see real-time blocks.
+3️⃣ Tooling. There are community tools that allow you to fetch quota limits across regions via CloudShell to see where you actually have capacity.
+
+#AWS #AmazonBedrock #Serverless #GenAI #CloudArchitecture #DevOps`,
+    },
+    {
+        id: "post-3",
+        title: "SecOps 'Guardian' Agent on AWS",
+        status: "PUBLISHED",
+        statusText: "Published to LinkedIn",
+        category: "Security & Ops",
+        content: `For founders, this means you can stop building chatbots and start building digital employees.
+
+Here is a blueprint for a automated SecOps Agent—the "Guardian" workflow—that handles compliance so your engineers can focus on shipping product.
+
+The "Guardian" Architecture on AWS:
+📌 The Trigger: An anomaly is detected through Config (e.g., an S3 bucket is accidentally made public).
+Service: AWS Security Hub → EventBridge
+
+🧠 The Brain (Reasoning): The event wakes up the agent. It reviews the finding against your corporate policy (RAG) to decide if it's a feature or a bug.
+Service: Amazon Bedrock Agents (using Anthropic Claude)
+
+🛠 The Tooling (MCP): This is the game changer. Instead of hard-coding integration logic, the agent connects to a remote MCP Server running on serverless compute. This decouples the AI from the tools, creating a secure, standard interface for action.
+Service: AWS Lambda (hosting the MCP server)
+
+⚡ The Action: The agent safely executes the fix via the MCP tool set—encrypting the bucket or stripping public access.
+Service: AWS Systems Manager (SSM)
+
+#AIAgents #AWS #Startups #DevSecOps #CloudArchitecture #ModelContextProtocol`,
+    }
+];
 
 export function LandingPage() {
     const { user } = useAuth();
+    const [selectedPostId, setSelectedPostId] = useState(SHOWCASE_POSTS[0].id);
+
+    const activePost = SHOWCASE_POSTS.find((p) => p.id === selectedPostId) || SHOWCASE_POSTS[0];
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white font-sans overflow-x-hidden">
@@ -41,6 +122,7 @@ export function LandingPage() {
                     </div>
 
                     <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+                        <a href="#showcase" className="hover:text-white transition-colors">Showcase Reference</a>
                         <a href="#features" className="hover:text-white transition-colors">Features</a>
                         <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
                         <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
@@ -107,9 +189,9 @@ export function LandingPage() {
                             </Button>
                         </Link>
                     )}
-                    <a href="#features">
+                    <a href="#showcase">
                         <Button size="lg" variant="outline" className="border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-base rounded-xl px-8 py-6">
-                            Explore Key Features
+                            View Showcase Reference
                         </Button>
                     </a>
                 </div>
@@ -171,6 +253,125 @@ export function LandingPage() {
                                         <div className="h-8 w-16 bg-slate-800 rounded-md" />
                                         <div className="h-8 w-24 bg-indigo-600 rounded-md" />
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Showcase Reference Section */}
+            <section id="showcase" className="py-24 border-y border-slate-800 bg-slate-950/30 relative">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="text-center max-w-3xl mx-auto mb-16">
+                        <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-4">
+                            Real Content, Scheduled & Published
+                        </h2>
+                        <p className="text-slate-400 text-lg">
+                            Review live posts managed directly through DraftFlow. These are real architectural insights scheduled and published to the **APPGAMBIT** page.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+                        {/* Selector Sidebar */}
+                        <div className="lg:col-span-4 space-y-4 flex flex-col justify-start">
+                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+                                <h3 className="text-sm font-semibold uppercase tracking-wider text-indigo-400 mb-2">
+                                    Select Reference Post
+                                </h3>
+
+                                <div className="space-y-2.5">
+                                    {SHOWCASE_POSTS.map((post) => (
+                                        <button
+                                            key={post.id}
+                                            onClick={() => setSelectedPostId(post.id)}
+                                            className={`w-full text-left p-3.5 rounded-lg border text-sm font-medium transition-all ${
+                                                selectedPostId === post.id
+                                                    ? "bg-indigo-600/10 border-indigo-500/40 text-white"
+                                                    : "bg-transparent border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                    post.status === "PUBLISHED"
+                                                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                                        : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                                }`}>
+                                                    {post.status}
+                                                </span>
+                                                <span className="text-[10px] text-slate-500">{post.category}</span>
+                                            </div>
+                                            <span className="font-semibold block truncate">{post.title}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-4 text-xs text-slate-500 space-y-2">
+                                <p className="font-semibold text-slate-400">Content Enforcements Applied:</p>
+                                <ul className="space-y-1.5 list-disc pl-4">
+                                    <li>Strict Banned-Words audit (clean of typical AI jargon).</li>
+                                    <li>Technical Depth Bar verification (explicit cost/constraint ratios).</li>
+                                    <li>Voice analysis matched precisely to current style corpus.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        {/* LinkedIn Card Showcase */}
+                        <div className="lg:col-span-8 flex flex-col">
+                            <div className="flex-1 bg-white text-slate-900 border border-slate-200 rounded-xl overflow-hidden shadow-2xl flex flex-col justify-between">
+                                {/* LinkedIn Header */}
+                                <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-11 w-11 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-lg text-white shadow-md">
+                                            AG
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-slate-900 text-base">APPGAMBIT</span>
+                                                <span className="text-xs text-slate-400">• 1st</span>
+                                            </div>
+                                            <span className="text-xs text-slate-500 block leading-tight">
+                                                AWS Cloud & Serverless Modernization Advisors
+                                            </span>
+                                            <div className="flex items-center gap-1 mt-1 text-[11px] text-slate-400">
+                                                {activePost.status === "PUBLISHED" ? (
+                                                    <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                                                        <CheckCircle2 className="h-3 w-3" /> Published via DraftFlow
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-amber-600 font-semibold flex items-center gap-1">
+                                                        <Clock className="h-3 w-3" /> {activePost.statusText}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="h-8 px-3 rounded-full border border-indigo-600/30 bg-indigo-50 text-indigo-700 text-xs font-semibold flex items-center gap-1">
+                                        <Eye className="h-3.5 w-3.5" />
+                                        <span>DraftFlow Preview</span>
+                                    </div>
+                                </div>
+
+                                {/* Post Text Area */}
+                                <div className="p-6 font-sans text-base leading-relaxed text-slate-800 whitespace-pre-wrap min-h-[260px] bg-slate-50/30">
+                                    {activePost.content}
+                                </div>
+
+                                {/* LinkedIn Engagement Bar */}
+                                <div className="border-t border-slate-100 p-3 bg-white flex items-center justify-around text-slate-500 text-xs font-semibold">
+                                    <button className="flex items-center gap-2 hover:bg-slate-100 py-1.5 px-3 rounded-lg transition-colors">
+                                        <ThumbsUp className="h-4 w-4" />
+                                        <span>Like</span>
+                                    </button>
+                                    <button className="flex items-center gap-2 hover:bg-slate-100 py-1.5 px-3 rounded-lg transition-colors">
+                                        <MessageSquare className="h-4 w-4" />
+                                        <span>Comment</span>
+                                    </button>
+                                    <button className="flex items-center gap-2 hover:bg-slate-100 py-1.5 px-3 rounded-lg transition-colors">
+                                        <Share2 className="h-4 w-4" />
+                                        <span>Share</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -478,6 +679,7 @@ export function LandingPage() {
                         &copy; {new Date().getFullYear()} APPGAMBiT. All rights reserved.
                     </div>
                     <div className="flex gap-4">
+                        <a href="#showcase" className="hover:text-slate-300">Showcase</a>
                         <a href="#features" className="hover:text-slate-300">Features</a>
                         <a href="#pricing" className="hover:text-slate-300">Pricing</a>
                     </div>
