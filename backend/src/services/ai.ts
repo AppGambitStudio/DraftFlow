@@ -144,14 +144,22 @@ export class AIService {
         const reviewPrompt = `You are an editor. Read this draft and ask: "Would a real engineer/founder actually post this, or does it sound like AI content?"
 
 FIX these if present:
-- Opens with "Your X is broken/wrong" or "Most teams do X wrong" → rewrite the opener with something specific and concrete
-- Follows the template: provocative claim → bullet list → "the real issue" → CTA question → hashtags → BREAK this structure
+- Opens with "Your X is broken/wrong" or "Most teams do X wrong" or "Most CTOs/engineers can [do X] today" → rewrite the opener with something specific and concrete
+- Uses the contrarian-one-liner template "X isn't a Y problem; it's a Z problem" / "X aren't a Y problem, they're a Z problem" → REWRITE with a real argument, not a rhetorical flip
+- Follows the template: provocative claim → bullet/directive list of services → "anyone can wire this" → CTA question or hashtags → BREAK this structure
+- Vendor-soup posts that just stitch product/service names together with no specific tradeoff or failure mode → either name a concrete tradeoff/constraint or delete the directives and write an opinion-driven post instead
 - Too long (over 200 words) without a compelling story → CUT aggressively
 - Fabricated anecdotes ("I watched a team...") → remove or replace with the user's actual context
 - Generic advice anyone could give → sharpen to something only someone with real experience would say
 - Over-formatted (bold + bullets + arrows everywhere) → simplify, use plain paragraphs
 - Dramatic framing ("silent killer", "ticking time bomb") → tone it down to normal human language
-- Generic CTA ("What's your experience?") → either cut or replace with something specific
+- Generic close ("Your team will thank you", "Trust me", "Game changer") → CUT it
+- Generic CTA ("What's your experience?", "Thoughts?") → either cut or replace with something specific
+
+DEPTH BAR: The revised post must clear at least ONE of these, or it has failed:
+- A specific tradeoff or failure mode the reader will actually hit
+- A non-obvious mechanism or constraint that explains *why* the prescription works
+- A concrete observation tied to source material or public knowledge — not a generic capability claim
 ${voiceSamples ? `
 **THE AUTHOR'S ACTUAL VOICE — match this:**
 ${voiceSamples}
@@ -286,6 +294,8 @@ Return ONLY the revised post. No explanations.`;
             });
 
             // Sort by engagement score: likes + comments*3 + reposts*2
+            // Note: zero-engagement posts are NOT filtered out — every published post is
+            // treated as a winning signal of the author's voice, even before metrics arrive.
             const scored = posts.map(p => ({
                 content: p.content,
                 score: (p.likesCount || 0) + (p.commentsCount || 0) * 3 + (p.repostsCount || 0) * 2,
@@ -293,13 +303,85 @@ Return ONLY the revised post. No explanations.`;
             scored.sort((a, b) => b.score - a.score);
 
             return scored
-                .filter(p => p.score > 0)
                 .slice(0, limit)
                 .map(p => p.content);
         } catch (e: any) {
             console.error('[AIService] Failed to fetch top posts:', e.message);
             return [];
         }
+    }
+
+    /**
+     * Pull the most recent PUBLISHED posts in time order (newest first).
+     * Treats every published post as a winning voice signal regardless of engagement —
+     * this is the corpus the author is actively writing in right now.
+     */
+    private static async getRecentPublishedPosts(
+        tenantId: string,
+        authorUrn?: string | null,
+        limit: number = 8
+    ): Promise<string[]> {
+        try {
+            const where: any = { tenantId, status: 'PUBLISHED' };
+            if (authorUrn) {
+                where.authorUrn = authorUrn;
+            }
+            const posts = await Post.findAll({
+                where,
+                order: [['scheduledTime', 'DESC'], ['createdAt', 'DESC']],
+                limit,
+            });
+            return posts.map(p => p.content).filter(Boolean);
+        } catch (e: any) {
+            console.error('[AIService] Failed to fetch recent published posts:', e.message);
+            return [];
+        }
+    }
+
+    /**
+     * Build a deduped voice corpus from BOTH top-performing and recently-published posts.
+     * Recent posts come first (current voice), then top performers fill in (winning hooks).
+     */
+    private static async getPublishedVoiceCorpus(
+        tenantId: string,
+        authorUrn?: string | null,
+        opts: { recentLimit?: number; topLimit?: number } = {}
+    ): Promise<{ recent: string[]; top: string[]; combined: string[] }> {
+        const recentLimit = opts.recentLimit ?? 8;
+        const topLimit = opts.topLimit ?? 3;
+        const [recent, top] = await Promise.all([
+            this.getRecentPublishedPosts(tenantId, authorUrn, recentLimit),
+            this.getTopPerformingPosts(tenantId, authorUrn, topLimit),
+        ]);
+        // Dedupe by content while preserving order: recent first, then top performers
+        // not already covered by recent.
+        const seen = new Set<string>();
+        const combined: string[] = [];
+        for (const c of [...recent, ...top]) {
+            const key = c.trim().slice(0, 200);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            combined.push(c);
+        }
+        return { recent, top, combined };
+    }
+
+    /**
+     * Extract the first meaningful line of each published post to use as a
+     * "recently covered" signal for idea-generation deduplication.
+     */
+    private static async getRecentPublishedTopicLines(
+        tenantId: string,
+        authorUrn?: string | null,
+        limit: number = 12
+    ): Promise<string[]> {
+        const recent = await this.getRecentPublishedPosts(tenantId, authorUrn, limit);
+        return recent
+            .map(content => {
+                const firstLine = content.split('\n').map(l => l.trim()).find(Boolean) || '';
+                return firstLine.length > 140 ? firstLine.slice(0, 140) + '…' : firstLine;
+            })
+            .filter(Boolean);
     }
 
     private static normalizePlatform(platform?: string): 'LINKEDIN' | 'TWITTER' {
@@ -535,25 +617,28 @@ Return ONLY the refined post. No explanations.
             }
         }
 
-        // Top-performing posts as style reference (STYLE ONLY, NOT TOPIC)
-        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
-        if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n**STYLE REFERENCE (DO NOT COPY TOPICS):**
-⚠️ IMPORTANT: These are style examples ONLY. Study the WRITING STYLE (tone, structure, hooks, formatting) but DO NOT copy or reference their TOPICS.
-- DO study: sentence structure, hook style, formatting, tone, call-to-action style
-- DO NOT use: the same topics, technologies, or subject matter from these examples
-Your post must be about the PROMPT TOPIC, not about what these examples discuss.\n`;
-            topPosts.forEach((post, i) => {
-                SYSTEM_PROMPT += `[Style Example ${i + 1}]: ${post}\n`;
+        // Voice corpus — every published post is treated as a winning signal of the
+        // author's voice. Recent posts (current voice) + top performers (winning hooks).
+        const voiceCorpus = await this.getPublishedVoiceCorpus(tenantId, authorUrn, { recentLimit: 8, topLimit: 3 });
+        if (voiceCorpus.combined.length > 0) {
+            SYSTEM_PROMPT += `\n**PUBLISHED-POST VOICE CORPUS — THE AUTHOR'S ACTUAL WRITING (HIGHEST PRIORITY FOR STYLE):**
+⚠️ Every post below was published by this author and represents their proven voice.
+- DO study: sentence cadence, hook patterns, paragraph rhythm, vocabulary, formatting habits, level of directness, how they open and close.
+- DO NOT copy: the topics, examples, technologies, or subject matter — your post is about the PROMPT TOPIC, not what these discuss.
+- The generated post MUST sound like it was written by the same person who wrote these.\n`;
+            voiceCorpus.recent.forEach((post, i) => {
+                SYSTEM_PROMPT += `[Recent Post ${i + 1}]: ${post}\n`;
+            });
+            const topOnlyExtras = voiceCorpus.top.filter(t => !voiceCorpus.recent.includes(t));
+            topOnlyExtras.forEach((post, i) => {
+                SYSTEM_PROMPT += `[Top-Engaged Post ${i + 1}]: ${post}\n`;
             });
         }
 
-        // Voice samples — the author's actual writing for style matching
+        // Voice samples — manually-set style override from Settings (still respected when configured)
         const voiceSamples = await this.getVoiceSamples(tenantId);
         if (voiceSamples) {
-            SYSTEM_PROMPT += `\n**VOICE SAMPLES — THE AUTHOR'S ACTUAL WRITING (HIGHEST PRIORITY FOR STYLE):**
-These are real posts written by the author. Your generated post MUST match this voice — the rhythm, personality, argument style, hook patterns, and level of directness. This is MORE important than any generic style guideline below.
-${voiceSamples}\n`;
+            SYSTEM_PROMPT += `\n**ADDITIONAL VOICE SAMPLES (manually configured):**\n${voiceSamples}\n`;
         }
 
         SYSTEM_PROMPT += `\n### CONTENT STRATEGY ###\n`;
@@ -696,14 +781,25 @@ ${(effectiveTone?.toLowerCase().includes('use "we"') || effectiveTone?.toLowerCa
 **BANNED PATTERNS — your post will be REJECTED if it contains any of these:**
 - Opening with "Your [X] is [negative adjective]" (e.g., "Your API is a ticking time bomb")
 - Opening with "Most [teams/CTOs/engineers] [do X wrong]"
+- "X isn't a [Y] problem; it's a [Z] problem" or "X aren't a Y problem, they're a Z problem" — overused contrarian-one-liner template
+- "Most [CTOs/teams/engineers] can [do X] today" — generic capability flex; replace with a specific tradeoff or constraint
 - The skeleton: provocative claim → "here's what's wrong" → bullet list → "the real issue" → CTA question
+- The skeleton: contrarian one-liner → directive list of services/steps → "anyone can wire this" → hashtags
+- Vendor-soup posts: stitching together product/service names (e.g., "Pipe via X to Y with Z access") without naming a specific tradeoff, failure mode, or non-obvious constraint
 - Filler openings: "Here's the thing:", "Let me explain:", "The truth is:", "Hot take:", "Unpopular opinion:"
+- Generic closes: "Your team will thank you.", "Trust me.", "You'll thank me later.", "Game changer."
 - Generic CTAs: "What's your experience with X?", "How do you handle Y?", "Agree or disagree?"
 - Dramatic framing: "silent killer", "ticking time bomb", "gaslighting you", "holding it hostage"
 - Fabricated anecdotes: "I watched a team...", "A company I know...", "Six months ago, I watched...", "Last week our team..."
 - Fabricated metrics: "reduced X by 40%", "saved us 340ms", "cut costs by 60%" — unless from source material
 - Starting with "Stop [doing X]" or "Nobody talks about [X]"
 - Arrow bullet points (→) in every post — use them rarely if at all
+
+**DEPTH BAR — every post must clear at least ONE of these:**
+- A specific tradeoff or failure mode the reader will actually hit
+- A non-obvious mechanism or constraint that explains *why* the prescription works
+- A concrete observation tied to the source material or public knowledge — not a generic capability claim
+If the post can be summarized as "use [vendor stack] to do [task], it's easy", it has FAILED the depth bar — rewrite it.
 
 **LENGTH:**
 - Default target: 80-200 words. Quality over quantity.
@@ -761,6 +857,31 @@ Return a JSON object:
             finalContent = await this.reformatAsPost(config, finalContent, tenantId);
         }
 
+        // Editor pass: run the self-review-and-revise loop on every generation, anchored
+        // to the author's published-post voice corpus. This catches banned-pattern relapses
+        // and shallowness that the primary model talked itself into despite the system prompt.
+        try {
+            const corpusForReview = [
+                voiceCorpus.combined.length > 0 ? voiceCorpus.combined.join('\n\n---\n\n') : null,
+                voiceSamples,
+            ].filter(Boolean).join('\n\n');
+            const bannedHits = this.detectBannedPatterns(finalContent);
+            const reviewGoal = bannedHits.length > 0
+                ? `The current draft hits these banned/shallow patterns — fix them: ${bannedHits.join('; ')}.`
+                : undefined;
+            const revised = await this.selfReviewAndRevise(
+                config,
+                finalContent,
+                corpusForReview || null,
+                reviewGoal,
+            );
+            if (revised && revised.trim().length > 30) {
+                finalContent = revised.trim();
+            }
+        } catch (err: any) {
+            console.warn('[AIService] Editor pass failed (non-fatal):', err.message);
+        }
+
         if (sources.length > 0) {
             console.log(`[AIService] Post sources: ${sources.join(', ')}`);
         }
@@ -770,6 +891,58 @@ Return a JSON object:
             summary,
             sources,
         };
+    }
+
+    /**
+     * Detect specific banned-pattern relapses in a generated draft.
+     * These are the patterns we explicitly told the model to avoid — but which still
+     * leak through. Returning a non-empty list signals the editor pass to rewrite them.
+     */
+    private static detectBannedPatterns(content: string): string[] {
+        const hits: string[] = [];
+        const text = content.trim();
+
+        // Contrarian one-liner template
+        if (/\bisn'?t a .{1,30}\bproblem[;,]?\s*it'?s a .{1,40}\bproblem\b/i.test(text)
+            || /\baren'?t a .{1,30}\bproblem[;,]?\s*they'?re a .{1,40}\bproblem\b/i.test(text)) {
+            hits.push('contrarian one-liner: "X isn\'t a Y problem; it\'s a Z problem"');
+        }
+
+        // "Most CTOs/teams/engineers can do X today"
+        if (/\bMost (CTOs?|teams?|engineers?|developers?|companies|founders?) can .{1,80}\b(today|now)\b/i.test(text)) {
+            hits.push('generic capability flex: "Most CTOs/teams can X today"');
+        }
+        if (/\bMost (CTOs?|teams?|engineers?|developers?)\b/i.test(text.split('\n')[0] || '')) {
+            hits.push('opening with "Most [role]…"');
+        }
+
+        // Generic close
+        if (/\b(your team will thank you|you'?ll thank me later|trust me\.|game changer)\b/i.test(text)) {
+            hits.push('generic close ("Your team will thank you" / similar)');
+        }
+
+        // Generic CTA
+        if (/(what'?s your experience\b|how do you handle\b|agree or disagree\b|thoughts\?\s*$)/i.test(text)) {
+            hits.push('generic CTA ("What\'s your experience" / "How do you handle" / "Thoughts?")');
+        }
+
+        // Dramatic framing
+        if (/\b(silent killer|ticking time bomb|gaslighting you|holding it hostage)\b/i.test(text)) {
+            hits.push('dramatic framing ("silent killer" / "ticking time bomb" / etc.)');
+        }
+
+        // Filler openings
+        const firstLine = (text.split('\n').find(l => l.trim()) || '').trim();
+        if (/^(Here'?s the thing|Let me explain|The truth is|Hot take|Unpopular opinion)[:.]?/i.test(firstLine)) {
+            hits.push('filler opening');
+        }
+
+        // "Stop X" / "Nobody talks about X"
+        if (/^(Stop \w+ing\b|Nobody talks about\b)/i.test(firstLine)) {
+            hits.push('"Stop X" or "Nobody talks about X" opener');
+        }
+
+        return hits;
     }
 
     /**
@@ -1078,16 +1251,30 @@ ${audiencePainPoints ? `Their pain points: ${audiencePainPoints}` : ''}`;
             SYSTEM_PROMPT += `\nTRENDING CONTEXT: Consider these current events/trends: "${trendingTopics}"`;
         }
 
-        // Add top performing posts as style reference (STYLE ONLY, NOT TOPICS)
-        const topPosts = await this.getTopPerformingPosts(tenantId, authorUrn);
-        if (topPosts.length > 0) {
-            SYSTEM_PROMPT += `\n\n**STYLE REFERENCE (DO NOT COPY TOPICS):**
-Study the WRITING STYLE only (tone, structure, formatting) - generate ideas on DIFFERENT topics than these examples:`;
-            topPosts.forEach((post, i) => { SYSTEM_PROMPT += `\n[Style Example ${i + 1}]: ${post}`; });
+        // Use the full published-post voice corpus (recent + top-engaged) for style reference.
+        // Every published post is treated as a winning signal of how this author writes.
+        const ideaVoiceCorpus = await this.getPublishedVoiceCorpus(tenantId, authorUrn, { recentLimit: 6, topLimit: 3 });
+        if (ideaVoiceCorpus.combined.length > 0) {
+            SYSTEM_PROMPT += `\n\n**PUBLISHED-POST VOICE CORPUS (study WRITING STYLE only — generate ideas on DIFFERENT topics):**`;
+            ideaVoiceCorpus.recent.forEach((post, i) => {
+                SYSTEM_PROMPT += `\n[Recent Post ${i + 1}]: ${post}`;
+            });
+            const topOnlyExtras = ideaVoiceCorpus.top.filter(t => !ideaVoiceCorpus.recent.includes(t));
+            topOnlyExtras.forEach((post, i) => {
+                SYSTEM_PROMPT += `\n[Top-Engaged Post ${i + 1}]: ${post}`;
+            });
         }
 
-        if (excludeTitles && excludeTitles.length > 0) {
-            SYSTEM_PROMPT += `\n\nALREADY GENERATED (DO NOT REPEAT):\n${excludeTitles.map(t => `- ${t}`).join('\n')}`;
+        // Auto-derive "recently covered" topics from published-post first lines so the
+        // model doesn't propose ideas the author already shipped, even when the caller
+        // forgot to pass excludeTitles.
+        const recentlyCoveredLines = await this.getRecentPublishedTopicLines(tenantId, authorUrn, 12);
+        const mergedExcludes = [
+            ...(excludeTitles && excludeTitles.length > 0 ? excludeTitles : []),
+            ...recentlyCoveredLines,
+        ];
+        if (mergedExcludes.length > 0) {
+            SYSTEM_PROMPT += `\n\nALREADY COVERED — DO NOT REPEAT THESE ANGLES OR TOPICS:\n${mergedExcludes.map(t => `- ${t}`).join('\n')}`;
         }
 
         SYSTEM_PROMPT += `\n\nYOUR TASK: Generate exactly ${count} unique content idea concepts.
