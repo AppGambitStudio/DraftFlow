@@ -113,12 +113,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Protect routes
     useEffect(() => {
         if (!loading) {
-            const publicRoutes = ['/login', '/signup', '/accept-invite']; // Added /accept-invite
+            const publicRoutes = ['/login', '/signup', '/accept-invite', '/landing'];
             // Check if path starts with public route
             const isPublic = publicRoutes.some(route => pathname.startsWith(route));
 
             if (!user && !isPublic) {
-                router.push('/login');
+                router.push('/landing');
             }
         }
     }, [user, loading, pathname, router]);

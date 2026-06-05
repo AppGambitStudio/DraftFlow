@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
-import { ConfigWarningBanner } from "@/components/ConfigWarningBanner";
+import { ClientLayout } from "@/components/ClientLayout";
+import { AuthorsProvider } from "@/contexts/AuthorsContext";
+import { SettingsProvider } from "@/contexts/SettingsContext";
+import { AuthProvider } from "@/context/AuthContext";
+import { Toaster } from "react-hot-toast";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -10,11 +13,6 @@ export const metadata: Metadata = {
     title: "DraftFlow",
     description: "Write, improve, and publish better LinkedIn posts consistently",
 };
-
-import { AuthorsProvider } from "@/contexts/AuthorsContext";
-import { SettingsProvider } from "@/contexts/SettingsContext";
-import { AuthProvider } from "@/context/AuthContext";
-import { Toaster } from "react-hot-toast";
 
 export default function RootLayout({
     children,
@@ -27,15 +25,7 @@ export default function RootLayout({
                 <AuthProvider>
                     <SettingsProvider>
                         <AuthorsProvider>
-                            <div className="flex h-screen overflow-hidden bg-slate-50">
-                                <Sidebar />
-                                <div className="flex-1 flex flex-col overflow-hidden">
-                                    <ConfigWarningBanner />
-                                    <main className="flex-1 overflow-y-auto p-8">
-                                        {children}
-                                    </main>
-                                </div>
-                            </div>
+                            <ClientLayout>{children}</ClientLayout>
                             <Toaster
                                 position="bottom-right"
                                 toastOptions={{
