@@ -21,6 +21,11 @@ import {
     ThumbsUp,
     MessageSquare,
     Share2,
+    Search,
+    Filter,
+    PenSquare,
+    Zap,
+    Shield,
 } from "lucide-react";
 
 // Real APPGAMBIT posts from the database to use as showcase references
@@ -100,11 +105,12 @@ Service: AWS Systems Manager (SSM)
 export function LandingPage() {
     const { user } = useAuth();
     const [selectedPostId, setSelectedPostId] = useState(SHOWCASE_POSTS[0].id);
+    const [activeAiTab, setActiveAiTab] = useState<"search" | "filter" | "write">("write");
 
     const activePost = SHOWCASE_POSTS.find((p) => p.id === selectedPostId) || SHOWCASE_POSTS[0];
 
     return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white font-sans overflow-x-hidden">
+        <div className="min-h-screen bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white font-sans overflow-x-hidden font-normal">
             {/* Background Glows */}
             <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
             <div className="absolute top-[600px] right-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[140px] pointer-events-none" />
@@ -122,10 +128,10 @@ export function LandingPage() {
                     </div>
 
                     <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+                        <a href="#ai-engine" className="hover:text-white transition-colors">AI Engine</a>
                         <a href="#showcase" className="hover:text-white transition-colors">Showcase Reference</a>
                         <a href="#features" className="hover:text-white transition-colors">Features</a>
                         <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
-                        <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
                     </nav>
 
                     <div className="flex items-center gap-4">
@@ -189,9 +195,9 @@ export function LandingPage() {
                             </Button>
                         </Link>
                     )}
-                    <a href="#showcase">
+                    <a href="#ai-engine">
                         <Button size="lg" variant="outline" className="border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-base rounded-xl px-8 py-6">
-                            View Showcase Reference
+                            Explore AI Engine
                         </Button>
                     </a>
                 </div>
@@ -260,8 +266,197 @@ export function LandingPage() {
                 </div>
             </section>
 
+            {/* AI Engine Section (Search, Filter, Write) */}
+            <section id="ai-engine" className="py-24 border-t border-slate-800 bg-slate-950/20 relative">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="text-center max-w-3xl mx-auto mb-16">
+                        <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">The Multi-Agent Framework</span>
+                        <h2 className="text-3xl md:text-5xl font-extrabold text-white mt-2 mb-4">
+                            Exposing DraftFlow's AI Core
+                        </h2>
+                        <p className="text-slate-400 text-lg">
+                            We don't just layer single text boxes on Claude. DraftFlow runs a coordinate sequence of agents configured to research, structure, and verify your drafts.
+                        </p>
+                    </div>
+
+                    {/* AI Tab Selector */}
+                    <div className="flex justify-center mb-12">
+                        <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-xl flex gap-2">
+                            <button
+                                onClick={() => setActiveAiTab("write")}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                                    activeAiTab === "write"
+                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/15"
+                                        : "text-slate-400 hover:text-white"
+                                }`}
+                            >
+                                <PenSquare className="h-4 w-4" />
+                                <span>AI Write</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveAiTab("search")}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                                    activeAiTab === "search"
+                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/15"
+                                        : "text-slate-400 hover:text-white"
+                                }`}
+                            >
+                                <Search className="h-4 w-4" />
+                                <span>AI Search</span>
+                            </button>
+                            <button
+                                onClick={() => setActiveAiTab("filter")}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                                    activeAiTab === "filter"
+                                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/15"
+                                        : "text-slate-400 hover:text-white"
+                                }`}
+                            >
+                                <Filter className="h-4 w-4" />
+                                <span>AI Filter</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* AI Content Display */}
+                    <div className="max-w-5xl mx-auto bg-slate-900/60 border border-slate-800 rounded-2xl p-8 md:p-12 shadow-2xl relative">
+                        {activeAiTab === "write" && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                                <div className="space-y-5">
+                                    <div className="h-10 w-10 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center border border-indigo-500/20">
+                                        <PenSquare className="h-5 w-5" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white">The Writer Agent & Style Corpus</h3>
+                                    <p className="text-slate-300 text-sm leading-relaxed">
+                                        DraftFlow uses a dedicated writing model that ingests your historical LinkedIn publications (your <strong>Personal Voice Corpus</strong>). Instead of returning standard AI essays, it maps your structural style:
+                                    </p>
+                                    <ul className="space-y-2.5 text-xs text-slate-400">
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            Adopts your spacing density and paragraph styles.
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            Matches standard vocabulary choices and capitalization logic.
+                                            </li>
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            Anchors generation to your specific core themes automatically.
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div className="bg-slate-950/80 rounded-xl p-6 border border-slate-800 font-mono text-xs text-slate-400 space-y-3">
+                                    <div className="text-indigo-400 font-bold border-b border-slate-800 pb-2 flex items-center justify-between">
+                                        <span>[Mastra] writerAgent.run()</span>
+                                        <span className="text-[9px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded">Active</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 leading-tight">// Inputting voice parameters...</p>
+                                    <div className="bg-slate-900/60 p-3 rounded border border-slate-850">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-wider block text-[9px] mb-1">Tone Config</span>
+                                        <span className="text-slate-300">Tone: "Tech Authority" | Format: "Bullet-Dense"</span>
+                                    </div>
+                                    <div className="bg-slate-900/60 p-3 rounded border border-slate-850">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-wider block text-[9px] mb-1">Generated Output</span>
+                                        <span className="text-slate-300">"API thread exhaustion cascades outages. Drop payload to SQS and continue."</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeAiTab === "search" && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                                <div className="space-y-5">
+                                    <div className="h-10 w-10 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center border border-indigo-500/20">
+                                        <Search className="h-5 w-5" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white">The Researcher Agent & LLM Wiki</h3>
+                                    <p className="text-slate-300 text-sm leading-relaxed">
+                                        Before drafting, the <strong>Researcher Agent</strong> scans all previously curated sources in your LLM Wiki knowledge base (RSS Feeds, Case Studies, and articles) using semantic lookup. If the local knowledge base needs support, it executes Tavily web searches to:
+                                    </p>
+                                    <ul className="space-y-2.5 text-xs text-slate-400">
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            Retrieve accurate, real-world statistics to anchor assertions.
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            Expose fresh angles by scanning current announcements.
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            Auto-exclude concepts or topics the author has covered recently.
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div className="bg-slate-950/80 rounded-xl p-6 border border-slate-800 font-mono text-xs text-slate-400 space-y-3">
+                                    <div className="text-indigo-400 font-bold border-b border-slate-800 pb-2 flex items-center justify-between">
+                                        <span>[Mastra] researcherAgent.run()</span>
+                                        <span className="text-[9px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded">Active</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 leading-tight">// Semantic retrieval trigger...</p>
+                                    <div className="bg-slate-900/60 p-3 rounded border border-slate-850">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-wider block text-[9px] mb-1">Tool execution</span>
+                                        <span className="text-indigo-300">searchWikiTool(query: "serverless streaming")</span>
+                                        <span className="text-slate-400 block mt-1 text-[10px]">Found 2 documents in knowledge base</span>
+                                    </div>
+                                    <div className="bg-slate-900/60 p-3 rounded border border-slate-850">
+                                        <span className="text-slate-500 font-semibold uppercase tracking-wider block text-[9px] mb-1">Web Search plugin</span>
+                                        <span className="text-indigo-300">webSearchTool(query: "AppSync Event limits")</span>
+                                        <span className="text-slate-400 block mt-1 text-[10px]">Returned current limits from AWS Compute Blog</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeAiTab === "filter" && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                                <div className="space-y-5">
+                                    <div className="h-10 w-10 bg-indigo-500/10 text-indigo-400 rounded-lg flex items-center justify-center border border-indigo-500/20">
+                                        <Filter className="h-5 w-5" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white">The Editor Agent & Depth Bar</h3>
+                                    <p className="text-slate-300 text-sm leading-relaxed">
+                                        The final gatekeeper is the <strong>Editor Agent</strong>. It scans the generated content against structural and formatting rules, ensuring it passes our strict **Depth Bar** policy before scheduling:
+                                    </p>
+                                    <ul className="space-y-2.5 text-xs text-slate-400">
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            <strong>No Clichés</strong>: Scrubs buzzwords like "game changer", "synergy", or "double down".
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            <strong>Trade-off Constraint</strong>: Rewrites posts that only make simple claims, forcing the inclusion of clear engineering drawbacks.
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <Check className="h-4 w-4 text-indigo-400" />
+                                            <strong>Audit loop</strong>: Compares the resulting draft directly against the author's published-post voice corpus.
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div className="bg-slate-950/80 rounded-xl p-6 border border-slate-800 font-mono text-xs text-slate-400 space-y-3">
+                                    <div className="text-indigo-400 font-bold border-b border-slate-800 pb-2 flex items-center justify-between">
+                                        <span>[Mastra] editorAgent.run()</span>
+                                        <span className="text-[9px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded">Active</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 leading-tight">// Quality audits running...</p>
+                                    <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded text-red-400 text-[10px]">
+                                        <span className="font-bold">WARN:</span> Hit banned cliché pattern ("total game changer").
+                                    </div>
+                                    <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded text-amber-400 text-[10px]">
+                                        <span className="font-bold">WARN:</span> Post lacks trade-off depth. Proposing rewrite query.
+                                    </div>
+                                    <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded text-emerald-400 text-[10px]">
+                                        <span className="font-bold">SUCCESS:</span> Self-review loop complete. Post published.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </section>
+
             {/* Showcase Reference Section */}
-            <section id="showcase" className="py-24 border-y border-slate-800 bg-slate-950/30 relative">
+            <section id="showcase" className="py-24 border-b border-slate-800 bg-slate-950/30 relative">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="text-center max-w-3xl mx-auto mb-16">
                         <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-4">
@@ -679,6 +874,7 @@ export function LandingPage() {
                         &copy; {new Date().getFullYear()} APPGAMBiT. All rights reserved.
                     </div>
                     <div className="flex gap-4">
+                        <a href="#ai-engine" className="hover:text-slate-300">AI Core</a>
                         <a href="#showcase" className="hover:text-slate-300">Showcase</a>
                         <a href="#features" className="hover:text-slate-300">Features</a>
                         <a href="#pricing" className="hover:text-slate-300">Pricing</a>
