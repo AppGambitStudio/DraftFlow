@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -15,64 +15,12 @@ import {
     ArrowRight,
     ChevronRight,
     Zap,
-    Play,
-    RefreshCw,
     Shield,
-    FileText,
     Check,
 } from "lucide-react";
 
-// Mock drafts for the Interactive Simulator
-const INITIAL_DRAFT = `In today's fast-paced digital landscape, it's absolutely critical to double down on your marketing synergy. Trust me, it's a total game changer! 🚀
-
-Leveraging cutting-edge AI technologies will allow you to scale your operations and drive unparalleled efficiency.
-
-What is your experience with this? How do you handle it in your team? Thoughts? Agree or disagree?`;
-
-const CLICHE_CLEANED_DRAFT = `Stop writing generic posts about "synergy" and "game changers".
-
-Most teams don't need to scale their tools — they need to simplify them. Leverage is about focus, not volume.
-
-Here is the simple checklist we use to audit our stack:
-1. One tool per department.
-2. Direct integration or get rid of it.
-3. No licenses for features we "might" use.`;
-
-const DEPTH_ADDED_DRAFT = `Most engineering leaders talk about "adopting AI" without discussing the infrastructure trade-offs.
-
-Here is the real cost breakdown of fine-tuning vs. RAG in production:
-• Fine-tuning: High capital cost ($10k+ training runs), static knowledge, but latency is cut by 40%.
-• RAG: Low upfront cost, dynamic context, but API round-trip latency increases by 250ms.
-
-If your use case requires sub-100ms response times, RAG alone will fail. You have to hybridize or cache heavily.`;
-
-const HOOKS = [
-    "Most startups are wasting $5,000/month on tools they don't use. Here is how to audit your SaaS stack in 10 minutes:",
-    "If your response latency is over 200ms, you aren't ready for production AI. Let's talk about the hard trade-offs:",
-    "We audits 15 workspaces this quarter. The biggest productivity killer? It wasn't bad code, it was meeting synergy."
-];
-
 export function LandingPage() {
     const { user } = useAuth();
-
-    // Simulator State
-    const [simulatorText, setSimulatorText] = useState(INITIAL_DRAFT);
-    const [activeTab, setActiveTab] = useState<"cliche" | "depth" | "hook" | "original">("original");
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [progressLabel, setProgressLabel] = useState("");
-
-    // Simulate AI processing
-    const runAIAction = (tab: "cliche" | "depth" | "hook" | "original", targetText: string, label: string) => {
-        if (activeTab === tab) return;
-        setIsProcessing(true);
-        setProgressLabel(label);
-
-        setTimeout(() => {
-            setSimulatorText(targetText);
-            setActiveTab(tab);
-            setIsProcessing(false);
-        }, 1200);
-    };
 
     return (
         <div className="min-h-screen bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white font-sans overflow-x-hidden">
@@ -94,7 +42,6 @@ export function LandingPage() {
 
                     <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
                         <a href="#features" className="hover:text-white transition-colors">Features</a>
-                        <a href="#simulator" className="hover:text-white transition-colors">Interactive Demo</a>
                         <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
                         <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
                     </nav>
@@ -160,10 +107,9 @@ export function LandingPage() {
                             </Button>
                         </Link>
                     )}
-                    <a href="#simulator">
+                    <a href="#features">
                         <Button size="lg" variant="outline" className="border-slate-700 hover:bg-slate-800 text-slate-200 font-semibold text-base rounded-xl px-8 py-6">
-                            <Play className="mr-2 h-4 w-4 text-indigo-400 fill-indigo-400" />
-                            Try Interactive Simulator
+                            Explore Key Features
                         </Button>
                     </a>
                 </div>
@@ -225,160 +171,6 @@ export function LandingPage() {
                                         <div className="h-8 w-16 bg-slate-800 rounded-md" />
                                         <div className="h-8 w-24 bg-indigo-600 rounded-md" />
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Interactive Simulator Section */}
-            <section id="simulator" className="py-24 border-y border-slate-800 bg-slate-950/30 relative">
-                <div className="max-w-7xl mx-auto px-6">
-                    <div className="text-center max-w-3xl mx-auto mb-16">
-                        <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-4">
-                            Interactive Content Simulator
-                        </h2>
-                        <p className="text-slate-400 text-lg">
-                            Experience DraftFlow's intelligent editing engine. Click any helper below to see the AI automatically rewrite boring drafts into high-authority publications.
-                        </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-                        {/* Editor Controls */}
-                        <div className="lg:col-span-4 space-y-4 flex flex-col justify-start">
-                            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-6">
-                                <h3 className="text-sm font-semibold uppercase tracking-wider text-indigo-400">
-                                    AI Refinement Tools
-                                </h3>
-
-                                <div className="space-y-3">
-                                    <button
-                                        onClick={() => runAIAction("original", INITIAL_DRAFT, "Restoring original draft...")}
-                                        className={`w-full flex items-center justify-between p-3 rounded-lg border text-left text-sm font-medium transition-all ${
-                                            activeTab === "original"
-                                                ? "bg-slate-800 border-slate-700 text-white"
-                                                : "bg-transparent border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
-                                        }`}
-                                    >
-                                        <span>Show Default Draft</span>
-                                        <FileText className="h-4.5 w-4.5 text-slate-500" />
-                                    </button>
-
-                                    <button
-                                        onClick={() => runAIAction("cliche", CLICHE_CLEANED_DRAFT, "Scanning for cliches and fluff...")}
-                                        className={`w-full flex items-center justify-between p-3 rounded-lg border text-left text-sm font-medium transition-all ${
-                                            activeTab === "cliche"
-                                                ? "bg-indigo-600/10 border-indigo-500/40 text-indigo-300"
-                                                : "bg-transparent border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
-                                        }`}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span>Clean Buzzwords</span>
-                                            <span className="text-[10px] text-slate-500 font-normal">Remove "Game Changer", "Synergy", etc.</span>
-                                        </div>
-                                        <Zap className="h-4.5 w-4.5 text-indigo-400" />
-                                    </button>
-
-                                    <button
-                                        onClick={() => runAIAction("depth", DEPTH_ADDED_DRAFT, "Analyzing architectural constraints & costs...")}
-                                        className={`w-full flex items-center justify-between p-3 rounded-lg border text-left text-sm font-medium transition-all ${
-                                            activeTab === "depth"
-                                                ? "bg-indigo-600/10 border-indigo-500/40 text-indigo-300"
-                                                : "bg-transparent border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
-                                        }`}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span>Pass The Depth Bar</span>
-                                            <span className="text-[10px] text-slate-500 font-normal">Inject engineering trade-offs</span>
-                                        </div>
-                                        <Shield className="h-4.5 w-4.5 text-indigo-400" />
-                                    </button>
-
-                                    <button
-                                        onClick={() => {
-                                            const randomHook = HOOKS[Math.floor(Math.random() * HOOKS.length)];
-                                            runAIAction("hook", `${randomHook}\n\n${simulatorText.split("\n\n").slice(1).join("\n\n")}`, "Crafting hook templates...");
-                                        }}
-                                        className={`w-full flex items-center justify-between p-3 rounded-lg border text-left text-sm font-medium transition-all ${
-                                            activeTab === "hook"
-                                                ? "bg-indigo-600/10 border-indigo-500/40 text-indigo-300"
-                                                : "bg-transparent border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white"
-                                        }`}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span>Optimize Hook</span>
-                                            <span className="text-[10px] text-slate-500 font-normal">Create pattern-interrupt opening</span>
-                                        </div>
-                                        <Sparkles className="h-4.5 w-4.5 text-indigo-400" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-900/40 border border-slate-800/80 rounded-xl p-4 text-xs text-slate-500">
-                                <p className="font-semibold text-slate-400 mb-1">How this works in DraftFlow:</p>
-                                When writing inside our editor, the agent runs background audits to catch shallow advice. Your published voice corpus acts as an anchor to keep it sounding exactly like you.
-                            </div>
-                        </div>
-
-                        {/* Interactive Editor Mock */}
-                        <div className="lg:col-span-8 flex flex-col">
-                            <div className="flex-1 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col min-h-[350px]">
-                                {/* Editor Header */}
-                                <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between text-xs text-slate-400 font-mono">
-                                    <div className="flex items-center gap-2">
-                                        <span className="h-2 w-2 rounded-full bg-indigo-500" />
-                                        <span>active_writer.ts</span>
-                                    </div>
-                                    <div className="flex items-center gap-4">
-                                        {isProcessing ? (
-                                            <span className="text-indigo-400 flex items-center gap-1.5 animate-pulse">
-                                                <RefreshCw className="h-3 w-3 animate-spin" />
-                                                {progressLabel}
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-500">Editor Ready</span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Editor Text Area */}
-                                <div className="flex-1 p-6 font-mono text-sm leading-relaxed text-slate-300 relative select-none">
-                                    {isProcessing && (
-                                        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[1px] flex items-center justify-center z-10">
-                                            <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 px-5 py-3 rounded-xl shadow-lg">
-                                                <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-500" />
-                                                <span className="text-sm font-semibold text-slate-300">Auditing draft quality...</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="whitespace-pre-wrap font-sans text-base min-h-[220px]">
-                                        {simulatorText}
-                                    </div>
-                                </div>
-
-                                {/* Editor Actions Bar */}
-                                <div className="bg-slate-900/60 border-t border-slate-800 px-5 py-3.5 flex items-center justify-between">
-                                    <div className="flex gap-2">
-                                        <span className="px-2.5 py-1 rounded bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300">
-                                            Word Count: {simulatorText.split(/\s+/).filter(Boolean).length}
-                                        </span>
-                                        <span className={`px-2.5 py-1 rounded border text-xs font-semibold ${
-                                            activeTab === "depth"
-                                                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                                                : activeTab === "original"
-                                                ? "bg-red-500/10 border-red-500/20 text-red-400"
-                                                : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                                        }`}>
-                                            Quality Score: {activeTab === "original" ? "D+" : activeTab === "cliche" ? "B" : "A+"}
-                                        </span>
-                                    </div>
-
-                                    <Link href="/signup">
-                                        <Button className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-1.5 px-4 rounded-lg shadow-md">
-                                            Save Draft
-                                        </Button>
-                                    </Link>
                                 </div>
                             </div>
                         </div>
@@ -687,7 +479,6 @@ export function LandingPage() {
                     </div>
                     <div className="flex gap-4">
                         <a href="#features" className="hover:text-slate-300">Features</a>
-                        <a href="#simulator" className="hover:text-slate-300">Simulator</a>
                         <a href="#pricing" className="hover:text-slate-300">Pricing</a>
                     </div>
                 </div>
