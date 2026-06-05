@@ -23,7 +23,19 @@ interface Post {
     isFavorited?: boolean;
 }
 
+import { LandingPage } from "@/components/LandingPage";
+
 export default function DashboardPage() {
+    const { user } = useAuth();
+
+    if (!user) {
+        return <LandingPage />;
+    }
+
+    return <DashboardContent />;
+}
+
+function DashboardContent() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [invitations, setInvitations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);

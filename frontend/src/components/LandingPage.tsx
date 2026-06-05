@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,15 +13,12 @@ import {
     Newspaper,
     Users,
     ArrowRight,
-    CheckCircle2,
     ChevronRight,
     Zap,
     Play,
     RefreshCw,
-    Smile,
     Shield,
     FileText,
-    Share2,
     Check,
 } from "lucide-react";
 
@@ -56,9 +52,8 @@ const HOOKS = [
     "We audits 15 workspaces this quarter. The biggest productivity killer? It wasn't bad code, it was meeting synergy."
 ];
 
-export default function LandingPage() {
+export function LandingPage() {
     const { user } = useAuth();
-    const router = useRouter();
 
     // Simulator State
     const [simulatorText, setSimulatorText] = useState(INITIAL_DRAFT);
@@ -133,7 +128,7 @@ export default function LandingPage() {
             {/* Hero Section */}
             <section className="relative max-w-7xl mx-auto px-6 pt-24 pb-20 text-center flex flex-col items-center">
                 {/* Promo Badge */}
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/5 text-indigo-300 text-xs font-semibold mb-8 animate-fade-in">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/5 text-indigo-300 text-xs font-semibold mb-8">
                     <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
                     DraftFlow v1.0 is Live
                 </div>

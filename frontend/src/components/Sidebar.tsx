@@ -49,7 +49,11 @@ export function Sidebar() {
     const pathname = usePathname();
     const { user, logout, tenants, currentTenant, switchTenant } = useAuth();
 
-    const isPublicPage = pathname === '/login' || pathname === '/signup' || pathname === '/accept-invite' || pathname === '/landing';
+    const isPublicPage =
+        (pathname === '/' && !user) ||
+        pathname === '/login' ||
+        pathname === '/signup' ||
+        pathname === '/accept-invite';
 
     if (isPublicPage) return null;
 

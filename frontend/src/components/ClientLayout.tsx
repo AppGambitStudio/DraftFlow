@@ -12,10 +12,10 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
     // Check if the current page should use a clean public layout
     const isPublicLayout =
+        (pathname === "/" && !user) ||
         pathname === "/login" ||
         pathname === "/signup" ||
-        pathname === "/accept-invite" ||
-        pathname === "/landing";
+        pathname === "/accept-invite";
 
     // Show loading state while auth initializes to prevent screen flicker/flashes
     if (loading) {
